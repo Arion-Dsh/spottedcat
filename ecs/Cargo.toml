@@ -1,0 +1,8 @@
+[package]
+name = "ecs"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+macros = { path = "macros" }

@@ -1,0 +1,49 @@
+[package]
+name = "spottedcat"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [
+    "ecs",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[dependencies]
+ecs = { path = "ecs" }
+futures = "0.3"
+async-std = "1.12"
+env_logger = "0.10"
+log = "0.4"
+cfg-if = "1"
+anyhow = "1.0"
+
+[dependencies.winit]
+version = "0.30"
+features = ["rwh_05"]
+
+[dependencies.wgpu]
+version = "23"
+
+[dependencies.image]
+version = "0.24"
+default-features = false
+features = ["png", "jpeg"]
+
+
+[dependencies.bytemuck]
+version = "1.23"
+features = ["derive"]
+
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+    "Location",
+]}
+
+[[example]]
+name = "window"
+path = "example/window.rs"
