@@ -1,22 +1,26 @@
 use std::sync::Arc;
 
-use super::{ImageState, Texture};
+use super::{ImageState, Texture, TextureUniformState};
 
 #[derive(Clone)]
 pub(crate) struct DrawItem {
+    pub(crate) size: [f32; 3],
     pub(crate) state: Arc<ImageState>,
+    #[allow(dead_code)]
     pub(crate) texture: Arc<Texture>,
+    #[allow(dead_code)]
+    pub(crate) texture_uniform_state: Arc<TextureUniformState>,
     pub(crate) options: DrawOptions,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct DrawOptions {
     pub(crate) gmo_matrix: GeoMartrix,
     pub(crate) color_matrix: ColorMatrix,
     pub(crate) need_update_color_matrix: bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct GeoMartrix {
     pub(crate) pos: [f32; 3],
     pub(crate) scale: [f32; 3],
@@ -63,10 +67,10 @@ impl DrawOptions {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct ColorMatrix {
-    matrix: [[f32; 4]; 4],
-    transform: [f32; 4],
+    pub matrix: [[f32; 4]; 4],
+    pub transform: [f32; 4],
 }
 
 impl Default for ColorMatrix {
@@ -98,7 +102,7 @@ impl DrawOptions {
     pub fn reset_color_matrix(&mut self) {
         self.color_matrix = ColorMatrix::default();
         self.need_update_color_matrix = true;
-        }
+    }
 
     pub fn apply_color(&self, color: [f32; 4]) -> [f32; 4] {
         let mut result = [0.0; 4];

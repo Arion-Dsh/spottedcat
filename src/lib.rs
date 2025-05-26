@@ -5,7 +5,7 @@ mod drawable;
 use winit::{event_loop::EventLoop, window::Window};
 use std::sync::Mutex;
 use std::sync::Arc;
-pub use graphics::DrawOptions;
+pub use graphics::DrawOptions as DrawOpt;
 
 static mut RUNTIME:  Option<Context> = None;
 static MUTEX: Mutex<()> = Mutex::new(());

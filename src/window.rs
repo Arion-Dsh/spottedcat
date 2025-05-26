@@ -89,7 +89,7 @@ impl<T> ApplicationHandler for SpottedCat<T>
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
-        let graphic = crate::graphics::Graphics::new(device.clone(), queue.clone(), &config);
+        let graphic = crate::graphics::Graphics::new(device.clone(), queue.clone(), &config, window.scale_factor() as f32);
 
         unsafe { RUNTIME = Some(crate::Context {
             window: window,
@@ -124,12 +124,13 @@ impl<T> ApplicationHandler for SpottedCat<T>
               
             }
             winit::event::WindowEvent::Resized(size) => {
+                
                 unsafe {
                     let ctx = RUNTIME.as_mut().unwrap();
                     ctx.config.width = size.width;
                     ctx.config.height = size.height;
                     ctx.surface.configure(&ctx.device, &ctx.config);
-                    ctx.graphic.resize(&ctx.config);
+                    ctx.graphic.resize(&ctx.config, ctx.window.scale_factor() as f32);
                 }
             }
             _ => {

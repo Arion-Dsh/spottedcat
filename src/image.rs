@@ -1,113 +1,231 @@
+use winit::window;
 
-use std::{cell::RefCell, path, sync::{atomic::{AtomicUsize, Ordering}, Arc}, result::Result};
-use crate::{graphics::{DrawItem, ImageState, Texture}, DrawOptions, RUNTIME};
+use crate::{
+    graphics::{DrawItem, ImageState, Texture, TextureUniformState},
+    DrawOpt, RUNTIME,
+};
+use std::{
+    cell::RefCell,
+    path,
+    result::Result,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
-
+/// Global counter for generating unique image IDs
 static GLOBAL_THREAD_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) static mut DRAW_QUEUE: Vec<DrawItem> = Vec::new();
 
 #[derive(Clone)]
 pub struct Image {
-    pub(crate)id :usize,
+    pub(crate) id: usize,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    /// Texture size in floating point
+    pub(crate) t_size: [f32; 2],
+    /// Bounds of the image within its parent (for sub-images)
     pub(crate) bounds: (u32, u32, u32, u32),
-    pub(crate) img:    Option<image::DynamicImage>,
+    /// The actual image data
+    pub(crate) img: Option<image::DynamicImage>,
+    /// GPU texture representation
     pub(crate) texture: Arc<RefCell<Option<Texture>>>,
+    /// Graphics state for rendering
     pub(crate) image_state: Arc<RefCell<Option<ImageState>>>,
+    /// Texture uniform state for shader parameters
+    pub(crate) texture_uniform_state: Arc<RefCell<Option<TextureUniformState>>>,
+    /// Reference to the original image if this is a sub-image
     pub(crate) original_image: Option<Box<Image>>,
-} 
+}
 
 impl Image {
-    pub fn new(w:u32, h:u32) -> Image {
+    /// Create a new empty image with specified dimensions
+    ///
+    /// # Arguments
+    /// * `w` - Width of the image
+    /// * `h` - Height of the image
+    ///
+    /// # Returns
+    /// A new empty image with the specified dimensions
+    pub fn new(w: u32, h: u32) -> Image {
         let id = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::Relaxed);
         let img = Some(image::DynamicImage::new_rgba8(w, h));
         let texture = Arc::new(RefCell::new(None));
         Image {
             id,
+            width: w,
+            height: h,
+            t_size: [w as f32, h as f32],
             bounds: (0, 0, w, h),
-            img ,
+            img,
             texture: texture.clone(),
             image_state: Arc::new(RefCell::new(None)),
-            original_image: None,
-        }
-    }
-    pub fn new_from_path(p: &str) -> Image {
-        let id = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::Relaxed);
-        let img = image::open(path::Path::new(p)).unwrap();
-        let texture = Arc::new(RefCell::new(None));
-        Image {
-            id,
-            bounds: (0, 0, img.width(), img.height()),
-            img: Some(img),
-            texture: texture.clone(),
-            image_state: Arc::new(RefCell::new(None)),
+            texture_uniform_state: Arc::new(RefCell::new(None)),
             original_image: None,
         }
     }
 
-    pub fn load(&mut self) -> Result<(), String> {
-        // Get runtime references once
+    /// Create a new image from a file path
+    ///
+    /// # Arguments
+    /// * `path` - Path to the image file
+    ///
+    /// # Returns
+    /// A Result containing the new Image or an error string
+    pub fn new_from_path(path: &str) -> Result<Image, String> {
+        match image::open(path) {
+            Ok(img) => {
+                let texture = Arc::new(RefCell::new(None));
+                let id = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::Relaxed);
+                Ok(Image {
+                    id,
+                    width: img.width(),
+                    height: img.height(),
+                    t_size: [img.width() as f32, img.height() as f32],
+                    bounds: (0, 0, img.width(), img.height()),
+                    img: Some(img),
+                    texture: texture.clone(),
+                    image_state: Arc::new(RefCell::new(None)),
+                    texture_uniform_state: Arc::new(RefCell::new(None)),
+                    original_image: None,
+                })
+            }
+            Err(e) => Err(format!("Failed to load image from {}: {}", path, e)),
+        }
+    }
+
+    /// Load the image into GPU memory
+    ///
+    /// This method creates GPU resources for the image if they haven't been created yet.
+    /// It also handles sub-images by loading their parent image first.
+    ///
+    /// # Returns
+    /// A Result indicating success or an error message
+    pub(crate) fn load(&mut self) -> Result<(), String> {
+        // 如果纹理和所有相关的 Uniform 状态都已加载，则直接返回
+        if self.texture.borrow().is_some()
+            && self.image_state.borrow().is_some()
+            && self.texture_uniform_state.borrow().is_some()
+        {
+            return Ok(());
+        }
+
+        // 如果是子图像，先加载父图像
+        if let Some(original) = self.original_image.as_mut() {
+            original.load()?; // 使用 ? 传播错误
+        }
+
+        // 运行时获取
         let runtime = unsafe { RUNTIME.as_ref().ok_or("Runtime not initialized")? };
         let device = &runtime.device;
         let queue = &runtime.queue;
         let config = &runtime.config;
 
-        // Create texture if we have an image
-        if let Some(img) = self.img.take() {
-            let texture = Texture::from_image(device, queue, &img, Some("Image Texture"))
-                .map_err(|e| format!("Failed to create texture: {}", e))?;
-            *self.texture.borrow_mut() = Some(texture);
+        // 加载纹理 (如果尚未加载)
+        if self.texture.borrow().is_none() {
+            // 注意：img.take() 会消耗掉 self.img，所以必须在 if 块内部处理
+            if let Some(img_data) = self.img.take() {
+                let texture = Texture::from_image(device, queue, &img_data, Some("Image Texture"))
+                    .map_err(|e| format!("Failed to create texture: {}", e))?;
+                *self.texture.borrow_mut() = Some(texture);
+            } else if self.original_image.is_none() {
+                // 如果没有原始图像数据，也不是子图像，则可能是一个错误情况
+                return Err("Image data or original_image missing for texture creation".to_string());
+            }
+            // 如果是子图像且没有 img 数据，则 texture 应该从 original_image 处共享，
+            // 确保 original_image.load() 已经将纹理设置好了。
+        }
+        // 初始化 TextureUniformState (如果尚未初始化)
+        if self.texture_uniform_state.borrow().is_none() {
+            let mut state = TextureUniformState::new(device);
+            let t_size = [self.t_size[0], self.t_size[1]];
+            let uv_offset = [self.bounds.0 as f32, self.bounds.1 as f32];
+            let uv_size = [self.bounds.2 as f32, self.bounds.3 as f32];
+            state.write_texture_uniform(queue, t_size, uv_offset, uv_size);
+            *self.texture_uniform_state.borrow_mut() = Some(state);
         }
 
-        // Initialize image state if not already initialized
-        let mut image_state = self.image_state.borrow_mut();
-        if image_state.is_none() {
-            let state = ImageState::new(device, config);
-            // Get texture reference
-            let texture = self.texture.borrow();
-            let texture = texture.as_ref().ok_or("Texture not initialized")?;
-            
-            // Write texture uniform
-            state.write_texture_uniform(
-                queue,
-                [texture.width as f32, texture.height as f32],
-                [self.bounds.0 as f32, self.bounds.1 as f32],
-                [self.bounds.2 as f32, self.bounds.3 as f32]
-            );
-            
-            *image_state = Some(state);
+        // 初始化 ImageState (如果尚未初始化)
+        if self.image_state.borrow().is_none() {
+            let texture = self.texture.borrow().clone().unwrap();
+            let ustate = self.texture_uniform_state.borrow().clone().unwrap();
+            let state = ImageState::new(device, config, texture.into(), ustate.into());
+            *self.image_state.borrow_mut() = Some(state);
         }
 
         Ok(())
     }
 
-    pub fn sub_image(&mut self, x:u32, y:u32, w:u32, h:u32) -> Image {
+    /// Create a sub-image from this image
+    ///
+    /// # Arguments
+    /// * `x` - X coordinate of the sub-image
+    /// * `y` - Y coordinate of the sub-image
+    /// * `w` - Width of the sub-image
+    /// * `h` - Height of the sub-image
+    ///
+    /// # Returns
+    /// A new Image representing the sub-region
+    pub fn sub_image(&mut self, x: u32, y: u32, w: u32, h: u32) -> Image {
         let id = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::Relaxed);
-        let image = Image {
+        Image {
             id,
+            width: w,
+            height: h,
+            t_size: [self.t_size[0], self.t_size[1]],
             bounds: (self.bounds.0 + x, self.bounds.1 + y, w, h),
             img: None,
             texture: self.texture.clone(),
             image_state: self.image_state.clone(),
+            texture_uniform_state: Arc::new(RefCell::new(None)),
             original_image: Some(Box::new(self.clone())),
-        };
-        
-        image
+        }
     }
 
-
-    pub fn draw(&mut self, img: Image) {
-        if let Some(state) = img.image_state.borrow().as_ref() {
-            let texture = img.texture.borrow().as_ref().unwrap().clone();
-            unsafe {
-                DRAW_QUEUE.push(DrawItem {
-                    state: state.clone().into(),
-                    texture: texture.clone().into(),
-                    options: DrawOptions::default(),
-                });
-            }
-        } else {
-            eprintln!("Warning: Attempted to draw image without initialized image_state");
+    /// Draw this image onto another image
+    ///
+    /// # Arguments
+    /// * `img` - The target image to draw onto
+    ///
+    /// # Returns
+    /// A Result indicating success or an error message
+    pub fn draw(&mut self, mut img: Image, mut options: DrawOpt) {
+        if let Err(e) = img.load() {
+            eprintln!("Error loading image for drawing: {}", e);
+            return; // 无法加载，所以跳过绘制
         }
+
+        // Get required components
+        let texture = img.texture.borrow().clone().unwrap();
+        let state = img.image_state.borrow().clone().unwrap();
+        let ustate = img.texture_uniform_state.borrow().clone().unwrap();
+        let ctx = unsafe { RUNTIME.as_ref().unwrap() };
+        let win = &ctx.window;
+        unsafe {
+            DRAW_QUEUE.push(DrawItem {
+                state: state.clone().into(),
+                texture_uniform_state: ustate.clone().into(),
+                size: [img.width as f32, img.height as f32, 0.0],
+                texture: texture.clone().into(),
+                options: options.into(),
+            });
+        }
+    }
+
+    /// Get the width of the image
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Get the height of the image
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// Get the dimensions of the image as a tuple (width, height)
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 }

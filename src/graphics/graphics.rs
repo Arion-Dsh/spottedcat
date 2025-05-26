@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue};
 
 pub(crate) use super::texture::Texture;
-use super::{ColorUniform, DrawItem, ImageBaseUniform};
+use super::{ColorUniform, DrawItem, ImageBaseUniform, ImageState};
 
 pub struct Graphics {
     pub device: Arc<Device>,
@@ -14,6 +14,7 @@ pub struct Graphics {
     depth_stencil: Texture,
     msaa_texture_view: wgpu::TextureView,
     screen_size: [f32; 2],
+    screen_scale: f32,
 }
 
 impl Graphics {
@@ -21,6 +22,7 @@ impl Graphics {
         device: Arc<Device>,
         queue: Arc<Queue>,
         config: &wgpu::SurfaceConfiguration,
+        screen_scale: f32,
     ) -> Graphics {
         // Create vertex buffer
 
@@ -39,6 +41,7 @@ impl Graphics {
         let depth_stencil = Texture::create_depth_texture(&device, config, "DepthStencil");
         let msaa_texture_view = Texture::msaa_texture_view(&device, config);
 
+
         Graphics {
             device,
             queue,
@@ -47,11 +50,23 @@ impl Graphics {
             depth_stencil,
             msaa_texture_view,
             screen_size: [config.width as f32, config.height as f32],
+            screen_scale,
         }
     }
 
     pub fn draw(&self, surface: &wgpu::Surface, imgs: Vec<DrawItem>) {
-        let output = surface.get_current_texture().unwrap();
+        let output = match surface.get_current_texture() {
+            Ok(output) => output,
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::OutOfMemory) => {
+                // 处理 surface 丢失或内存不足的情况，通常需要重新配置 surface
+                eprintln!("Surface error: {:?} or {:?}", wgpu::SurfaceError::Lost, wgpu::SurfaceError::OutOfMemory);
+                return;
+            },
+            Err(e) => {
+                eprintln!("Failed to get current surface texture: {:?}", e);
+                panic!("{}", e); // 其他严重错误可以选择 panic 或其他处理
+            }
+        };
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -62,7 +77,6 @@ impl Graphics {
             });
         // Add rendering code here
         {
-
             let color_attachment = wgpu::RenderPassColorAttachment {
                 view: &self.msaa_texture_view,
                 resolve_target: Some(&view),
@@ -89,41 +103,44 @@ impl Graphics {
             });
 
             for item in imgs {
-               
-
                 let options = item.options;
                 //TODO: 判断是否需要更新uniform
                 let mvp_uniform = ImageBaseUniform::new(
                     self.screen_size,
                     [options.gmo_matrix.pos[0], options.gmo_matrix.pos[1]],
-                    [item.texture.width as f32, item.texture.height as f32],
+                    [item.size[0], item.size[1]],
                     [options.gmo_matrix.scale[0], options.gmo_matrix.scale[1]],
                     options.gmo_matrix.rotation_angle,
                     options.gmo_matrix.opacity,
                     options.gmo_matrix.z_index,
+                    self.screen_scale,
                 );
-                let color_uniform = ColorUniform::default();
 
                 self.queue.write_buffer(
                     &item.state.uniform_buffer,
                     0,
                     bytemuck::cast_slice(&[mvp_uniform]),
                 );
-                self.queue.write_buffer(
-                    &item.state.color_uniform_buffer,
-                    0,
-                    bytemuck::cast_slice(&[color_uniform]),
-                );
 
-                let texture_uniform_group = item.state.texture_bind_group(
-                    &self.device,
-                    &item.texture.view,
-                    &item.texture.sampler,
-                );
+                let need_update_color_matrix = options.need_update_color_matrix;
+                if need_update_color_matrix {
+                    let use_uniform = if need_update_color_matrix { 1.0 } else { 0.0 };
+                    let color_uniform = ColorUniform::new(
+                        options.color_matrix.matrix,
+                        options.color_matrix.transform,
+                        use_uniform,
+                    );
+                    self.queue.write_buffer(
+                        &item.state.color_uniform_buffer,
+                        0,
+                        bytemuck::cast_slice(&[color_uniform]),
+                    );
+                }
+               
 
                 render_pass.set_pipeline(&item.state.pipeline);
                 render_pass.set_bind_group(0, &*item.state.uniform_bind_group, &[]);
-                render_pass.set_bind_group(1, &texture_uniform_group, &[]);
+                render_pass.set_bind_group(1, &*item.state.texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
@@ -135,7 +152,8 @@ impl Graphics {
         output.present();
     }
 
-    pub(crate) fn resize(&mut self, config: &wgpu::SurfaceConfiguration) {
+    pub(crate) fn resize(&mut self, config: &wgpu::SurfaceConfiguration, screen_scale: f32) {
+        self.screen_scale = screen_scale;
         self.depth_stencil = Texture::create_depth_texture(&self.device, config, "DepthStencil");
         self.msaa_texture_view = Texture::msaa_texture_view(&self.device, config);
     }
