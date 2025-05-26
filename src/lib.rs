@@ -3,13 +3,12 @@ pub use image::Image;
 mod window;
 mod drawable;
 use winit::{event_loop::EventLoop, window::Window};
-use std::sync::Mutex;
 use std::sync::Arc;
 pub use graphics::DrawOptions as DrawOpt;
 
 static mut RUNTIME:  Option<Context> = None;
-static MUTEX: Mutex<()> = Mutex::new(());
 
+#[allow(dead_code)]
 type WindowID = winit::window::WindowId;
 
 mod graphics;
@@ -41,7 +40,7 @@ where
 
     let event_loop = EventLoop::new().unwrap();
     let mut sp = SpottedCat { spot, screen: None };
-    let _ = event_loop.run_app(&mut sp);
+        let _ = event_loop.run_app(&mut sp);
 }
 
 pub trait Spot {

@@ -1,4 +1,3 @@
-use winit::window;
 
 use crate::{
     graphics::{DrawItem, ImageState, Texture, TextureUniformState},
@@ -6,7 +5,6 @@ use crate::{
 };
 use std::{
     cell::RefCell,
-    path,
     result::Result,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -21,6 +19,7 @@ pub(crate) static mut DRAW_QUEUE: Vec<DrawItem> = Vec::new();
 
 #[derive(Clone)]
 pub struct Image {
+    #[allow(dead_code)]
     pub(crate) id: usize,
     pub(crate) width: u32,
     pub(crate) height: u32,
@@ -114,30 +113,24 @@ impl Image {
 
         // 如果是子图像，先加载父图像
         if let Some(original) = self.original_image.as_mut() {
-            original.load()?; // 使用 ? 传播错误
+            original.load()?; 
         }
 
-        // 运行时获取
+        #[allow(static_mut_refs)]
         let runtime = unsafe { RUNTIME.as_ref().ok_or("Runtime not initialized")? };
         let device = &runtime.device;
         let queue = &runtime.queue;
         let config = &runtime.config;
 
-        // 加载纹理 (如果尚未加载)
         if self.texture.borrow().is_none() {
-            // 注意：img.take() 会消耗掉 self.img，所以必须在 if 块内部处理
             if let Some(img_data) = self.img.take() {
                 let texture = Texture::from_image(device, queue, &img_data, Some("Image Texture"))
                     .map_err(|e| format!("Failed to create texture: {}", e))?;
                 *self.texture.borrow_mut() = Some(texture);
             } else if self.original_image.is_none() {
-                // 如果没有原始图像数据，也不是子图像，则可能是一个错误情况
                 return Err("Image data or original_image missing for texture creation".to_string());
             }
-            // 如果是子图像且没有 img 数据，则 texture 应该从 original_image 处共享，
-            // 确保 original_image.load() 已经将纹理设置好了。
         }
-        // 初始化 TextureUniformState (如果尚未初始化)
         if self.texture_uniform_state.borrow().is_none() {
             let mut state = TextureUniformState::new(device);
             let t_size = [self.t_size[0], self.t_size[1]];
@@ -146,8 +139,6 @@ impl Image {
             state.write_texture_uniform(queue, t_size, uv_offset, uv_size);
             *self.texture_uniform_state.borrow_mut() = Some(state);
         }
-
-        // 初始化 ImageState (如果尚未初始化)
         if self.image_state.borrow().is_none() {
             let texture = self.texture.borrow().clone().unwrap();
             let ustate = self.texture_uniform_state.borrow().clone().unwrap();
@@ -191,18 +182,16 @@ impl Image {
     ///
     /// # Returns
     /// A Result indicating success or an error message
-    pub fn draw(&mut self, mut img: Image, mut options: DrawOpt) {
+    pub fn draw(&mut self, mut img: Image, options: DrawOpt) {
         if let Err(e) = img.load() {
             eprintln!("Error loading image for drawing: {}", e);
-            return; // 无法加载，所以跳过绘制
+            return; 
         }
 
-        // Get required components
         let texture = img.texture.borrow().clone().unwrap();
         let state = img.image_state.borrow().clone().unwrap();
         let ustate = img.texture_uniform_state.borrow().clone().unwrap();
-        let ctx = unsafe { RUNTIME.as_ref().unwrap() };
-        let win = &ctx.window;
+        #[allow(static_mut_refs)]
         unsafe {
             DRAW_QUEUE.push(DrawItem {
                 state: state.clone().into(),

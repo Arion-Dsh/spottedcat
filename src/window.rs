@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::Arc};
+use std::{sync::Arc};
 use wgpu;
 
 use futures::executor::block_on;
@@ -109,7 +109,7 @@ impl<T> ApplicationHandler for SpottedCat<T>
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
 
@@ -118,13 +118,15 @@ impl<T> ApplicationHandler for SpottedCat<T>
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
+                #[allow(static_mut_refs)]
                 let ctx = unsafe { RUNTIME.as_ref().unwrap() };
+                #[allow(static_mut_refs)]
                 let images = unsafe { std::mem::take(&mut DRAW_QUEUE) };
                 ctx.graphic.draw(&ctx.surface, images);
               
             }
             winit::event::WindowEvent::Resized(size) => {
-                
+                #[allow(static_mut_refs)]
                 unsafe {
                     let ctx = RUNTIME.as_mut().unwrap();
                     ctx.config.width = size.width;
@@ -136,6 +138,7 @@ impl<T> ApplicationHandler for SpottedCat<T>
             _ => {
                 let _ = self.spot.update(0.0);
                 let _ = self.spot.draw(&mut self.screen.as_mut().unwrap()); 
+                #[allow(static_mut_refs)]
                 unsafe {
                     RUNTIME.as_ref().unwrap().window.request_redraw();
                 }

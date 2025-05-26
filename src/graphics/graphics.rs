@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue};
 
 pub(crate) use super::texture::Texture;
-use super::{ColorUniform, DrawItem, ImageBaseUniform, ImageState};
+use super::{ColorUniform, DrawItem, ImageBaseUniform};
 
 pub struct Graphics {
     pub device: Arc<Device>,
@@ -41,7 +41,6 @@ impl Graphics {
         let depth_stencil = Texture::create_depth_texture(&device, config, "DepthStencil");
         let msaa_texture_view = Texture::msaa_texture_view(&device, config);
 
-
         Graphics {
             device,
             queue,
@@ -59,9 +58,13 @@ impl Graphics {
             Ok(output) => output,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::OutOfMemory) => {
                 // 处理 surface 丢失或内存不足的情况，通常需要重新配置 surface
-                eprintln!("Surface error: {:?} or {:?}", wgpu::SurfaceError::Lost, wgpu::SurfaceError::OutOfMemory);
+                eprintln!(
+                    "Surface error: {:?} or {:?}",
+                    wgpu::SurfaceError::Lost,
+                    wgpu::SurfaceError::OutOfMemory
+                );
                 return;
-            },
+            }
             Err(e) => {
                 eprintln!("Failed to get current surface texture: {:?}", e);
                 panic!("{}", e); // 其他严重错误可以选择 panic 或其他处理
@@ -136,7 +139,6 @@ impl Graphics {
                         bytemuck::cast_slice(&[color_uniform]),
                     );
                 }
-               
 
                 render_pass.set_pipeline(&item.state.pipeline);
                 render_pass.set_bind_group(0, &*item.state.uniform_bind_group, &[]);
@@ -151,7 +153,6 @@ impl Graphics {
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
     }
-
     pub(crate) fn resize(&mut self, config: &wgpu::SurfaceConfiguration, screen_scale: f32) {
         self.screen_scale = screen_scale;
         self.depth_stencil = Texture::create_depth_texture(&self.device, config, "DepthStencil");

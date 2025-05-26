@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cmp;
-use std::num::NonZeroU32;
 use std::{fmt::Debug, sync::Arc};
 use anyhow::*;
 use image::GenericImageView;
@@ -102,7 +101,7 @@ impl Texture {
             depth_or_array_layers: 1,
         };
         let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-        let mip_level_count = Self::mip_level_count(dimensions.0, dimensions.1);
+        //let mip_level_count = Self::mip_level_count(dimensions.0, dimensions.1);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label,
             size,
@@ -156,7 +155,7 @@ impl Texture {
             sampler: Arc::new(sampler),
         })
     }
-
+    #[allow(dead_code)]
     fn mip_level_count(width: u32, height: u32) -> u32 {
         let max_dim = cmp::max(width, height) as f32; // 将最大维度转换为 f32
         if max_dim == 0.0 {
@@ -171,7 +170,7 @@ impl Texture {
         // log2(4) = 2, +1 = 3 (对于 4x4 纹理，有级别 0, 1, 2)
         (max_dim.log2().floor() as u32) + 1
     }
-
+    #[allow(dead_code)]
     pub fn generate_mipmaps(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -367,6 +366,7 @@ impl  Debug for Texture{
 
 struct QuerySets {
     timestamp: wgpu::QuerySet,
+    #[allow(dead_code)]
     timestamp_period: f32,
     pipeline_statistics: wgpu::QuerySet,
     data_buffer: wgpu::Buffer,

@@ -7,7 +7,6 @@ use super::{Texture, Vertex};
 #[derive(Clone)]
 pub struct ImageState {
     pub(crate) pipeline: Arc<wgpu::RenderPipeline>,
-    pub(crate) texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
     pub(crate) texture_bind_group: Arc<wgpu::BindGroup>,
     pub(crate) uniform_bind_group: Arc<wgpu::BindGroup>,
     pub(crate) uniform_buffer: Arc<wgpu::Buffer>,
@@ -202,42 +201,11 @@ impl ImageState {
 
         Self {
             pipeline: pipeline.into(),
-            texture_bind_group_layout: texture_bind_group_layout.into(),
             texture_bind_group: texture_bind_group.into(),
             uniform_bind_group: uniform_bind_group.into(),
             uniform_buffer: uniform_buffer.into(),
             color_uniform_buffer: color_uniform_buffer.into(),
         }
-    }
-    pub fn texture_bind_group(
-        &self,
-        device: &wgpu::Device,
-        texture_view: &wgpu::TextureView,
-        sampler: &wgpu::Sampler,
-        texture_uniform_buffer: &wgpu::Buffer,
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: texture_uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.color_uniform_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("diffuse_bind_group"),
-        })
     }
 }
 
@@ -314,17 +282,6 @@ impl ColorUniform {
             _padding: [0.0, 0.0, 0.0],
         }
     }
-    pub(crate) fn is_default(&self) -> bool {
-        self.use_uniform == 0.0
-            && self.matrix
-                == [
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ]
-            && self.transform == [0.0, 0.0, 0.0, 1.0]
-    }
 }
 
 // struct TextureUniform {
@@ -354,7 +311,6 @@ impl TextureUniform {
 #[derive(Clone)]
 pub(crate) struct TextureUniformState {
     pub(crate) texture_uniform_buffer: Arc<wgpu::Buffer>,
-    pub(crate) uploaded: bool,
 }
 impl TextureUniformState {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
@@ -366,7 +322,6 @@ impl TextureUniformState {
         });
         Self {
             texture_uniform_buffer: texture_uniform_buffer.into(),
-            uploaded: false,
         }
     }
     pub(crate) fn write_texture_uniform(
