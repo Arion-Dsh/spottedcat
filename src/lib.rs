@@ -1,10 +1,11 @@
 mod image;
 pub use image::Image;
 mod window;
-mod  drawable;
+mod drawable;
 use winit::{event_loop::EventLoop, window::Window};
 use std::sync::Mutex;
 use std::sync::Arc;
+pub use graphics::DrawOptions;
 
 static mut RUNTIME:  Option<Context> = None;
 static MUTEX: Mutex<()> = Mutex::new(());
@@ -46,6 +47,6 @@ where
 pub trait Spot {
     fn preload(&mut self);
     fn update(&mut self, dt: f32);
-    fn draw(&self, screen: &mut Image);
-    fn release(&self);
+    fn draw(&mut self, screen: &mut Image);
+    fn release(&mut self);
 }

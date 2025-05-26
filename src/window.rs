@@ -3,9 +3,8 @@ use wgpu;
 
 use futures::executor::block_on;
 use winit::{application::ApplicationHandler, window::Window};
-use crate::graphics::ImageState;
 
-use crate::{Image, SpottedCat, MUTEX, RUNTIME};
+use crate::{Image, SpottedCat, RUNTIME};
 use crate::image::DRAW_QUEUE;
 
 
@@ -100,8 +99,9 @@ impl<T> ApplicationHandler for SpottedCat<T>
             config,
             graphic,
         }) };
-        self.screen = Some(Image::new(size.width, size.height));
-        self.screen.as_mut().unwrap().load();
+        let mut screen = Image::new(size.width, size.height);
+        let _ = screen.load();
+        self.screen = Some(screen);
         self.spot.preload();
 
     }
@@ -129,12 +129,12 @@ impl<T> ApplicationHandler for SpottedCat<T>
                     ctx.config.width = size.width;
                     ctx.config.height = size.height;
                     ctx.surface.configure(&ctx.device, &ctx.config);
+                    ctx.graphic.resize(&ctx.config);
                 }
             }
             _ => {
-                self.spot.update(0.0);
-                self.screen.as_mut().unwrap().load();  
-                self.spot.draw(&mut self.screen.as_mut().unwrap()); 
+                let _ = self.spot.update(0.0);
+                let _ = self.spot.draw(&mut self.screen.as_mut().unwrap()); 
                 unsafe {
                     RUNTIME.as_ref().unwrap().window.request_redraw();
                 }

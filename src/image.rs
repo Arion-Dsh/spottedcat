@@ -1,11 +1,11 @@
 
-use std::{cell::RefCell, path, sync::{atomic::{AtomicUsize, Ordering}, Arc}};
-use crate::{graphics::{ImageState, Texture}, RUNTIME};
+use std::{cell::RefCell, path, sync::{atomic::{AtomicUsize, Ordering}, Arc}, result::Result};
+use crate::{graphics::{DrawItem, ImageState, Texture}, DrawOptions, RUNTIME};
 
 
 static GLOBAL_THREAD_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-pub(crate) static mut DRAW_QUEUE: Vec<(Arc<ImageState>, Arc<Texture>, bool)> = Vec::new();
+pub(crate) static mut DRAW_QUEUE: Vec<DrawItem> = Vec::new();
 
 #[derive(Clone)]
 pub struct Image {
@@ -14,6 +14,7 @@ pub struct Image {
     pub(crate) img:    Option<image::DynamicImage>,
     pub(crate) texture: Arc<RefCell<Option<Texture>>>,
     pub(crate) image_state: Arc<RefCell<Option<ImageState>>>,
+    pub(crate) original_image: Option<Box<Image>>,
 } 
 
 impl Image {
@@ -26,7 +27,8 @@ impl Image {
             bounds: (0, 0, w, h),
             img ,
             texture: texture.clone(),
-            image_state: Arc::new(RefCell::new(None))
+            image_state: Arc::new(RefCell::new(None)),
+            original_image: None,
         }
     }
     pub fn new_from_path(p: &str) -> Image {
@@ -38,27 +40,45 @@ impl Image {
             bounds: (0, 0, img.width(), img.height()),
             img: Some(img),
             texture: texture.clone(),
-            image_state: Arc::new(RefCell::new(None))
+            image_state: Arc::new(RefCell::new(None)),
+            original_image: None,
         }
     }
 
-    pub fn load(&mut self){
+    pub fn load(&mut self) -> Result<(), String> {
+        // Get runtime references once
+        let runtime = unsafe { RUNTIME.as_ref().ok_or("Runtime not initialized")? };
+        let device = &runtime.device;
+        let queue = &runtime.queue;
+        let config = &runtime.config;
+
+        // Create texture if we have an image
         if let Some(img) = self.img.take() {
-            let texture = Texture::from_image(
-                &unsafe { RUNTIME.as_ref().unwrap() }.device,
-                &unsafe { RUNTIME.as_ref().unwrap() }.queue,
-                &img,
-                Some("Image Texture"),  
+            let texture = Texture::from_image(device, queue, &img, Some("Image Texture"))
+                .map_err(|e| format!("Failed to create texture: {}", e))?;
+            *self.texture.borrow_mut() = Some(texture);
+        }
+
+        // Initialize image state if not already initialized
+        let mut image_state = self.image_state.borrow_mut();
+        if image_state.is_none() {
+            let state = ImageState::new(device, config);
+            // Get texture reference
+            let texture = self.texture.borrow();
+            let texture = texture.as_ref().ok_or("Texture not initialized")?;
+            
+            // Write texture uniform
+            state.write_texture_uniform(
+                queue,
+                [texture.width as f32, texture.height as f32],
+                [self.bounds.0 as f32, self.bounds.1 as f32],
+                [self.bounds.2 as f32, self.bounds.3 as f32]
             );
-            self.texture.borrow_mut().replace(texture.unwrap());
+            
+            *image_state = Some(state);
         }
-        {
-            let mut image_state = self.image_state.borrow_mut();
-            if image_state.is_none() {
-                let state = ImageState::new(&unsafe { RUNTIME.as_ref().unwrap() }.device, &unsafe { RUNTIME.as_ref().unwrap() }.config);
-                *image_state = Some(state);
-            }
-        }
+
+        Ok(())
     }
 
     pub fn sub_image(&mut self, x:u32, y:u32, w:u32, h:u32) -> Image {
@@ -68,21 +88,23 @@ impl Image {
             bounds: (self.bounds.0 + x, self.bounds.1 + y, w, h),
             img: None,
             texture: self.texture.clone(),
-            image_state: self.image_state.clone()
+            image_state: self.image_state.clone(),
+            original_image: Some(Box::new(self.clone())),
         };
         
         image
     }
 
-    /// Draws the given image onto the current image. The given image must have been previously loaded with the `load` method.
-    /// 
-    /// # Example
-    /// 
+
     pub fn draw(&mut self, img: Image) {
         if let Some(state) = img.image_state.borrow().as_ref() {
             let texture = img.texture.borrow().as_ref().unwrap().clone();
             unsafe {
-                DRAW_QUEUE.push((Arc::new(state.clone()), Arc::new(texture), false));
+                DRAW_QUEUE.push(DrawItem {
+                    state: state.clone().into(),
+                    texture: texture.clone().into(),
+                    options: DrawOptions::default(),
+                });
             }
         } else {
             eprintln!("Warning: Attempted to draw image without initialized image_state");

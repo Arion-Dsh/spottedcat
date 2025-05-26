@@ -1,13 +1,13 @@
-// Uniform 结构体，需要与 Rust 中的 ScreenAndPQRSUniform 匹配
-struct ScreenAndPQRSUniform {
-    screen_size: vec2<f32>,         // 屏幕的尺寸 (像素)
-    position: vec2<f32>,           // 矩形左上角的位置 (像素坐标)
-    size: vec2<f32>,          // 矩形的大小 (像素坐标)
-    scale: vec2<f32>,         // 缩放因子
-    rotation_angle: f32,      // 旋转角度 (弧度)
-    overall_alpha: f32,              // 整体的透明度
-    z_index: f32,                   // Z 深度值 (影响绘制顺序和深度测试)
-    _padding: f32,                  // 填充（为了内存对齐）
+// Uniform 结构体，需要与 Rust 中的 ImageBaseUniform 匹配
+struct ImageBaseUniform {
+    screen_size: vec2<f32>,         // 窗口的像素尺寸 (width, height)
+    position: vec2<f32>,                 // 位置 (几何空间像素坐标)
+    size: vec2<f32>,
+    scale: vec2<f32>,               // 缩放因子
+    rotation_angle: f32,            // 旋转角度
+    overall_alpha: f32,                   // 透明度
+    z_index: f32,                   // z 索引
+    use_color_uniform: f32,         // 是否使用颜色变换
 };
 
 // 统一声明 TextureUniform 和 ColorTransform 结构体，因为它们在这里被绑定
@@ -26,8 +26,8 @@ struct ColorUniform {
 };
 
 // 绑定组 1，绑定点 0：用于屏幕和矩形参数
-@group(1) @binding(0)
-var<uniform> u_screen_and_pqrs: ScreenAndPQRSUniform;
+@group(0) @binding(0)
+var<uniform> u_screen_and_pqrs: ImageBaseUniform;
 
 // 顶点输入结构：定义了从 CPU 传入的每个顶点的属性
 struct VertexInput {
@@ -42,6 +42,7 @@ struct VertexOutput {
     @location(1) alpha: f32, // 将整体透明度传递给片元着色器
     @location(2) screen_size: vec2<f32>, // 屏幕尺寸
     @location(7) overall_alpha: f32, // 整体透明度
+    @location(8) use_color_uniform: f32, // 是否使用颜色变换
 };
 
 
@@ -86,21 +87,22 @@ fn vs_main(
     out.tex_coords = in.tex_coords;
     out.overall_alpha = u_screen_and_pqrs.overall_alpha;
     out.screen_size = u_screen_and_pqrs.screen_size;
+    out.use_color_uniform = u_screen_and_pqrs.use_color_uniform;
 
     return out;
 }
 
 // 绑定组 0，绑定点 0：纹理
-@group(0) @binding(0)
+@group(1) @binding(0)
 var t_texture: texture_2d<f32>;
 // 绑定组 0，绑定点 1：采样器
-@group(0) @binding(1)
+@group(1) @binding(1)
 var s_texture_sampler: sampler;
 // 绑定组 0，绑定点 2：纹理参数 Uniform
-@group(0) @binding(2)
+@group(1) @binding(2)
 var<uniform>u_texture_params: TextureUniform;
 // 绑定组 0，绑定点 3：颜色变换参数 Uniform
-@group(0) @binding(3)
+@group(1) @binding(3)
 var<uniform>u_color_uniform: ColorUniform;
 
 @fragment
@@ -114,7 +116,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let adjusted_uv = normalized_uv_offset + (in.tex_coords * normalized_uv_size);
     var color = textureSample(t_texture, s_texture_sampler, adjusted_uv);
 
-    if (u_color_uniform.use_uniform == 1.0) {
+    if (in.use_color_uniform == 1.0) {
         color = u_color_uniform.matrix * color;
         let normalized_color_add = u_color_uniform.transform / 255.0;
         color = color + normalized_color_add;

@@ -22,7 +22,7 @@ impl ImageState {
 
     let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("uniform_buffer"),
-        size: std::mem::size_of::<ScreenAndPQRSUniform>() as wgpu::BufferAddress,
+        size: std::mem::size_of::<ImageBaseUniform>() as wgpu::BufferAddress,
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -117,7 +117,7 @@ impl ImageState {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("pipeline_layout"),
-            bind_group_layouts: &[ &texture_bind_group_layout,  &uniform_bind_group_layout],
+            bind_group_layouts: &[ &uniform_bind_group_layout, &texture_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -172,7 +172,7 @@ impl ImageState {
                 bias: wgpu::DepthBiasState::default(),
             })  ,
             multisample: wgpu::MultisampleState {
-                count: 1,
+                count: 4,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
@@ -217,22 +217,26 @@ impl ImageState {
             label: Some("diffuse_bind_group"),
         })
     }
+    
+    pub(crate) fn write_texture_uniform(&self, queue: &wgpu::Queue, tsize: [f32; 2], uv_offset: [f32; 2], uv_size: [f32; 2]) {
+        let texture_uniform = TextureUniform::new(tsize, uv_offset, uv_size);
+        queue.write_buffer(&self.texture_uniform_buffer, 0, bytemuck::cast_slice(&[texture_uniform]));
+    }
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub(crate) struct ScreenAndPQRSUniform {
+pub(crate) struct ImageBaseUniform {
     screen_size: [f32; 2], // 窗口的像素尺寸 (width, height)
-    pos: [f32; 2],      // PQRS 的 P 点 (几何空间像素坐标)
+    pos: [f32; 2],      // 位置 (几何空间像素坐标)
     size: [f32; 2],
     scale: [f32; 2],        // 缩放因子
     rotation_angle: f32, // 旋转角度
     opacity: f32, // 透明度
     z_index: f32, // z 索引
-    _padding: f32, // 填充
-    
+    use_color_uniform: f32, // 是否使用颜色变换
 }
-impl ScreenAndPQRSUniform {
+impl ImageBaseUniform {
     pub(crate) fn new(screen_size: [f32; 2], pos: [f32; 2], size: [f32; 2], scale: [f32; 2], rotation_angle: f32, opacity: f32, z_index: f32) -> Self {
         Self {
             screen_size,
@@ -242,20 +246,8 @@ impl ScreenAndPQRSUniform {
             rotation_angle,
             opacity,
             z_index,
-            _padding: 0.0,
+            use_color_uniform: 0.0,
             }
-    }
-    pub(crate) fn new_a() -> Self {
-        Self {
-            screen_size: [1600.0/2.0, 1200.0/2.0],
-            pos: [50.0, 50.0],
-            size: [200.0, 200.0],
-            scale: [1.0, 1.0],
-            rotation_angle: 0.2,
-            opacity: 1.0,
-            z_index: 0.23,
-            _padding: 0.0,
-        }
     }
 }
 
@@ -328,14 +320,6 @@ impl TextureUniform {
             uv_size,
             _padding: [0.0, 0.0],
             }
-    }
-    pub(crate) fn new_a() -> Self {
-        Self {
-            t_size: [200.0, 200.0],
-            uv_offset: [50.0, 50.0],
-            uv_size: [100.0, 100.0],
-            _padding: [0.0, 0.0],
-        }
     }
 }
 
