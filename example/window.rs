@@ -1,4 +1,3 @@
-
 use spottedcat::{DrawOpt, Image, Spot};
 
 struct MySpot {
