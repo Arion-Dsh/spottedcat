@@ -17,6 +17,8 @@ env_logger = "0.10"
 log = "0.4"
 cfg-if = "1"
 anyhow = "1.0"
+cpal = "0.15"
+symphonia = "0.5.4"
 
 [dependencies.winit]
 version = "0.30"

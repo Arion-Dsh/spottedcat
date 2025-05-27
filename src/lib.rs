@@ -3,6 +3,7 @@ mod image;
 mod window;
 mod keycode;
 mod events;
+mod audio;
 use std::sync::{Arc, Mutex};
 use winit::{event_loop::EventLoop, window::Window};
 pub use keycode::Keycode;
