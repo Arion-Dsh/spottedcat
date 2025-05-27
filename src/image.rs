@@ -1,7 +1,6 @@
 
 use crate::{
-    graphics::{DrawItem, ImageState, Texture, TextureUniformState},
-    DrawOpt, RUNTIME,
+    graphics::{DrawItem, ImageState, Texture, TextureUniformState}, Context, DrawOpt
 };
 use std::{
     cell::RefCell,
@@ -16,6 +15,7 @@ use std::{
 static GLOBAL_THREAD_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 pub(crate) static mut DRAW_QUEUE: Vec<DrawItem> = Vec::new();
+pub(crate) static mut LOAD_QUEUE: Vec<Image> = Vec::new();
 
 #[derive(Clone)]
 pub struct Image {
@@ -52,7 +52,7 @@ impl Image {
         let id = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::Relaxed);
         let img = Some(image::DynamicImage::new_rgba8(w, h));
         let texture = Arc::new(RefCell::new(None));
-        Image {
+        let image = Image {
             id,
             width: w,
             height: h,
@@ -63,7 +63,12 @@ impl Image {
             image_state: Arc::new(RefCell::new(None)),
             texture_uniform_state: Arc::new(RefCell::new(None)),
             original_image: None,
+        };
+        #[allow(static_mut_refs)]
+        unsafe {
+            LOAD_QUEUE.push(image.clone());
         }
+        image
     }
 
     /// Create a new image from a file path
@@ -78,7 +83,7 @@ impl Image {
             Ok(img) => {
                 let texture = Arc::new(RefCell::new(None));
                 let id = GLOBAL_THREAD_COUNT.fetch_add(1, Ordering::Relaxed);
-                Ok(Image {
+                let image = Image {
                     id,
                     width: img.width(),
                     height: img.height(),
@@ -89,7 +94,12 @@ impl Image {
                     image_state: Arc::new(RefCell::new(None)),
                     texture_uniform_state: Arc::new(RefCell::new(None)),
                     original_image: None,
-                })
+                };
+                #[allow(static_mut_refs)]
+                unsafe {
+                    LOAD_QUEUE.push(image.clone());
+                }
+                Ok(image)
             }
             Err(e) => Err(format!("Failed to load image from {}: {}", path, e)),
         }
@@ -102,7 +112,7 @@ impl Image {
     ///
     /// # Returns
     /// A Result indicating success or an error message
-    pub(crate) fn load(&mut self) -> Result<(), String> {
+    pub(crate) fn load(&mut self, ctx: &Context) -> Result<(), String> {
         // 如果纹理和所有相关的 Uniform 状态都已加载，则直接返回
         if self.texture.borrow().is_some()
             && self.image_state.borrow().is_some()
@@ -113,18 +123,12 @@ impl Image {
 
         // 如果是子图像，先加载父图像
         if let Some(original) = self.original_image.as_mut() {
-            original.load()?; 
+            original.load(ctx)?; 
         }
-
-        #[allow(static_mut_refs)]
-        let runtime = unsafe { RUNTIME.as_ref().ok_or("Runtime not initialized")? };
-        let device = &runtime.device;
-        let queue = &runtime.queue;
-        let config = &runtime.config;
 
         if self.texture.borrow().is_none() {
             if let Some(img_data) = self.img.take() {
-                let texture = Texture::from_image(device, queue, &img_data, Some("Image Texture"))
+                let texture = Texture::from_image(&ctx.device, &ctx.queue, &img_data, Some("Image Texture"))
                     .map_err(|e| format!("Failed to create texture: {}", e))?;
                 *self.texture.borrow_mut() = Some(texture);
             } else if self.original_image.is_none() {
@@ -132,17 +136,17 @@ impl Image {
             }
         }
         if self.texture_uniform_state.borrow().is_none() {
-            let mut state = TextureUniformState::new(device);
+            let mut state = TextureUniformState::new(&ctx.device);
             let t_size = [self.t_size[0], self.t_size[1]];
             let uv_offset = [self.bounds.0 as f32, self.bounds.1 as f32];
             let uv_size = [self.bounds.2 as f32, self.bounds.3 as f32];
-            state.write_texture_uniform(queue, t_size, uv_offset, uv_size);
+            state.write_texture_uniform(&ctx.queue, t_size, uv_offset, uv_size);
             *self.texture_uniform_state.borrow_mut() = Some(state);
         }
         if self.image_state.borrow().is_none() {
             let texture = self.texture.borrow().clone().unwrap();
             let ustate = self.texture_uniform_state.borrow().clone().unwrap();
-            let state = ImageState::new(device, config, texture.into(), ustate.into());
+            let state = ImageState::new(&ctx.device, &ctx.config, texture.into(), ustate.into());
             *self.image_state.borrow_mut() = Some(state);
         }
 
@@ -182,11 +186,7 @@ impl Image {
     ///
     /// # Returns
     /// A Result indicating success or an error message
-    pub fn draw(&mut self, mut img: Image, options: DrawOpt) {
-        if let Err(e) = img.load() {
-            eprintln!("Error loading image for drawing: {}", e);
-            return; 
-        }
+    pub fn draw(&mut self, img: Image, options: DrawOpt) {
 
         let texture = img.texture.borrow().clone().unwrap();
         let state = img.image_state.borrow().clone().unwrap();

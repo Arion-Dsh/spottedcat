@@ -1,18 +1,23 @@
-mod image;
-pub use image::Image;
-mod window;
 mod drawable;
+mod image;
+mod window;
+mod keycode;
+mod events;
+use std::sync::{Arc, Mutex};
 use winit::{event_loop::EventLoop, window::Window};
-use std::sync::Arc;
+pub use keycode::Keycode;
 pub use graphics::DrawOptions as DrawOpt;
+pub use image::Image;
+pub use events::*;
 
-static mut RUNTIME:  Option<Context> = None;
+
+static mut CAT: Mutex<Option<SpottedCat>> = Mutex::new(None);
 
 #[allow(dead_code)]
 type WindowID = winit::window::WindowId;
 
 mod graphics;
-use crate::graphics::Graphics;  
+use crate::graphics::Graphics;
 
 struct Context<'a> {
     window: Arc<Window>,
@@ -23,12 +28,11 @@ struct Context<'a> {
     graphic: Graphics,
 }
 
-struct SpottedCat<T>
-where
-    T: Spot,
+struct SpottedCat
 {
-    spot: T,
+    spot: Box<dyn Spot>,
     screen: Option<Image>,
+    context: Option<Context<'static>>,
 }
 
 #[warn(unreachable_code)]
@@ -36,11 +40,16 @@ pub fn run<T>(spot: T)
 where
     T: Spot + 'static,
 {
-    env_logger::init();
-
     let event_loop = EventLoop::new().unwrap();
-    let mut sp = SpottedCat { spot, screen: None };
-        let _ = event_loop.run_app(&mut sp);
+    let cat = SpottedCat { 
+        spot: Box::new(spot), 
+        screen: None, 
+        context: None,
+    };
+    #[allow(static_mut_refs)]
+        let mut cat_lock = unsafe { CAT.lock().unwrap() };
+    *cat_lock = Some(cat);
+    let _ = event_loop.run_app(cat_lock.as_mut().unwrap());
 }
 
 pub trait Spot {
