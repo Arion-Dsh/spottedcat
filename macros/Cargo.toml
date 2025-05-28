@@ -3,7 +3,9 @@ name = "spottedcat_ecs_macro"
 version = "0.0.1"
 edition = "2021"
 authors = ["Arion <arion.dsh@gmail.com>"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
+description = "SpottedCat ECS macro"
+repository = "https://github.com/arion-dsh/spottedcat"
 
 [lib]
 proc-macro = true
