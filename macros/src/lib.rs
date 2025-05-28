@@ -3,11 +3,8 @@ use proc_macro::TokenStream;
 use quote::{quote};
 use syn::{
     DeriveInput, 
-    Data, 
     Ident,
     Field,
-    FieldsNamed,
-    DataStruct,
 };
 
 #[proc_macro_attribute]
