@@ -2,15 +2,22 @@
 name = "spottedcat"
 version = "0.0.1"
 edition = "2021"
+authors = ["Arion <arion.dsh@gmail.com>"]
+license = "MIT"
 
 [workspace]
 members = [
-    "ecs",
+    "spottedcat_ecs",
+    "macros"
 ]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace.dependencies]
+spottedcat_ecs = { version = "0.0.1", path = "spottedcat_ecs" }
+spottedcat_ecs_macro = { version = "0.0.1", path = "macros" }
+
 [dependencies]
-ecs = { path = "ecs", version = "^0.0.1" }
+spottedcat_ecs = { workspace = true }
+spottedcat_ecs_macro = { workspace = true }
 futures = "0.3"
 async-std = "1.12"
 env_logger = "0.10"

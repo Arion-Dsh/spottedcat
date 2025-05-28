@@ -1,5 +1,4 @@
 use spottedcat::{DrawOpt, Image, Spot};
-
 struct MySpot {
     tree: Image,
     track: Image,

@@ -1,7 +1,9 @@
 [package]
-name = "macros"
-version = "0.1.0"
+name = "spottedcat_ecs_macro"
+version = "0.0.1"
 edition = "2021"
+authors = ["Arion <arion.dsh@gmail.com>"]
+license = "MIT"
 
 [lib]
 proc-macro = true

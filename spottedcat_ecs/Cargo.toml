@@ -1,0 +1,7 @@
+[package]
+name = "spottedcat_ecs"
+version = "0.0.1"
+edition = "2021"
+authors = ["Arion <arion.dsh@gmail.com>"]
+license = "MIT"
+
