@@ -3,7 +3,8 @@ name = "spottedcat"
 version = "0.0.1"
 edition = "2021"
 authors = ["Arion <arion.dsh@gmail.com>"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/arion-dsh/spottedcat"
 
 [workspace]
 members = [
