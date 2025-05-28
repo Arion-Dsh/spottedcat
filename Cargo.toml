@@ -18,7 +18,8 @@ log = "0.4"
 cfg-if = "1"
 anyhow = "1.0"
 cpal = "0.15"
-symphonia = "0.5.4"
+symphonia = { version = "0.5", features = ["mp3", "flac", "wav", "ogg"] }
+crossbeam-channel = "0.5.15"
 
 [dependencies.winit]
 version = "0.30"
@@ -49,3 +50,8 @@ web-sys = { version = "0.3", features = [
 [[example]]
 name = "window"
 path = "example/window.rs"
+
+[[example]]
+name = "audio"
+path = "example/audio.rs"
+

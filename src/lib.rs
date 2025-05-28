@@ -10,7 +10,7 @@ pub use keycode::Keycode;
 pub use graphics::DrawOptions as DrawOpt;
 pub use image::Image;
 pub use events::*;
-
+pub use audio::*;
 
 static mut CAT: Mutex<Option<SpottedCat>> = Mutex::new(None);
 
