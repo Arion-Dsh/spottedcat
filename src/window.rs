@@ -131,9 +131,22 @@ impl ApplicationHandler for SpottedCat
             winit::event::WindowEvent::RedrawRequested => {
                 #[allow(static_mut_refs)]
                 let ctx = self.context.as_ref().unwrap() ;
+                ctx.window.request_redraw();
+
+                let current_time = std::time::SystemTime::now();
+                let elapsed = current_time.duration_since(self.previous).unwrap();
+                let dt = elapsed.as_secs_f32();
+                self.previous = current_time;
+                self.lag += dt;
+                let per_frame = 1.0 / self.frames;
+                while self.lag >= per_frame {
+                    self.lag -= per_frame;
+                    let _ = self.spot.update(per_frame);
+                }
+                 let _ = self.spot.draw(&mut self.screen.as_mut().unwrap()); 
+                 
                 #[allow(static_mut_refs)]
                 let images = unsafe { std::mem::take(&mut DRAW_QUEUE) };
-                
                 ctx.graphic.draw(&ctx.surface, images);
               
             }
@@ -146,9 +159,8 @@ impl ApplicationHandler for SpottedCat
                 ctx.graphic.resize(&ctx.config, ctx.window.scale_factor() as f32);
             }
             _ => {
-                let _ = self.spot.update(0.0);
-                let _ = self.spot.draw(&mut self.screen.as_mut().unwrap()); 
-                self.context.as_ref().unwrap().window.request_redraw();
+               
+               
             }
         }
     }

@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/arion-dsh/spottedcat"
 description = "SpottedCat simple game engine"
 
+
 [workspace]
 members = [
     "spottedcat_ecs",

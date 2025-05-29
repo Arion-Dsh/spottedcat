@@ -34,6 +34,9 @@ struct SpottedCat
     spot: Box<dyn Spot>,
     screen: Option<Image>,
     context: Option<Context<'static>>,
+    previous: std::time::SystemTime,
+    lag: f32,
+    frames: f32,
 }
 
 #[warn(unreachable_code)]
@@ -46,6 +49,9 @@ where
         spot: Box::new(spot), 
         screen: None, 
         context: None,
+        previous: std::time::SystemTime::now(),
+        lag: 0.0,
+        frames: 60.0,
     };
     #[allow(static_mut_refs)]
         let mut cat_lock = unsafe { CAT.lock().unwrap() };
