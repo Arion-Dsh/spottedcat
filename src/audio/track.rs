@@ -14,12 +14,15 @@ use symphonia::core::probe::Hint;
 use super::PlaybackCommand;
 
 
+// static GLOBAL_THREAD_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+
 #[derive(Debug, Clone)]
 pub struct Track {
     pub id: u32, // Unique ID for the track
     pub data: Arc<Vec<f32>>,
     pub duration: Duration,
-    pub current_sample_index: Arc<Mutex<usize>>,
+    pub current_sample_index: Arc<Mutex<u32>>,
     pub playback_state: Arc<Mutex<PlaybackCommand>>,
     pub channels: u16,
     pub rate: u32,
@@ -166,8 +169,8 @@ impl Track {
         let mut state_guard = self.playback_state.lock().unwrap();
 
         if *state_guard == PlaybackCommand::Play {
-            if *index_guard < self.data.len() {
-                let sample_value = self.data[*index_guard];
+            if *index_guard < self.data.len() as u32 {
+                let sample_value = self.data[*index_guard as usize];
                 *index_guard += 1;
                 // Optional: apply volume here if you added a volume field
                 // sample_value * (*self.volume.lock().unwrap())
@@ -198,7 +201,7 @@ impl Track {
                 *index_guard = 0; // Reset index on stop
             }
             PlaybackCommand::Seek(idx) => {
-                *index_guard = idx.min(self.data.len()); // Ensure index is within bounds
+                *index_guard = idx.min(self.data.len() as u32); // Ensure index is within bounds
             }
         }
         println!("Track {} received command: {:?}", self.id, command);
