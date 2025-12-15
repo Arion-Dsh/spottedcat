@@ -49,7 +49,7 @@ fn main() {
             self.image_clone.draw(context, opts);
         }
 
-        fn update(&self, _event: spot::Event) {}
+        fn update(&mut self, _dt: std::time::Duration) {}
 
         fn remove(&self) {}
     }

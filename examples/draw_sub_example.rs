@@ -2,6 +2,8 @@ fn main() {
     struct DrawSubDemo {
         canvas: spot::Image,
         sprite: spot::Image,
+        font_data: Vec<u8>,
+        rng_state: u32,
     }
 
     impl spot::Spot for DrawSubDemo {
@@ -28,10 +30,22 @@ fn main() {
             let sprite = spot::Image::new_from_rgba8(20, 20, &sprite_rgba)
                 .expect("failed to create sprite");
 
-            Self { canvas, sprite }
+            let font_data = spot::load_font_from_file("assets/DejaVuSans.ttf")
+                .expect("failed to load font");
+
+            Self {
+                canvas,
+                sprite,
+                font_data,
+                rng_state: 1,
+            }
         }
 
         fn draw(&mut self, context: &mut spot::Context) {
+            self.canvas
+                .clear([50.0 / 255.0, 50.0 / 255.0, 200.0 / 255.0, 1.0])
+                .expect("failed to clear canvas");
+
             // Compose B onto A.
             // In sub-canvas coordinates, (0,0) is A's top-left corner.
             let mut sub_opts = spot::ImageDrawOptions::default();
@@ -42,20 +56,25 @@ fn main() {
                 .draw_sub(sprite_drawable, sub_opt)
                 .expect("failed to draw sprite onto canvas");
 
-            let font_data = spot::load_font_from_file("assets/DejaVuSans.ttf")
-                .expect("failed to load font");
-            let mut text_opts = spot::TextOptions::new(font_data);
-            text_opts.font_size = 32.0;
-            text_opts.color = [1.0, 1.0, 1.0, 1.0];
-            let text_drawable = spot::DrawAble::Text("Hello".to_string(), text_opts);
-            let mut text_draw_opts = spot::ImageDrawOptions::default();
-            text_draw_opts.position = [20.0, 50.0];
-            let text_draw_opt = spot::DrawOption {
-                options: text_draw_opts,
-            };
-            self.canvas
-                .draw_sub(text_drawable, text_draw_opt)
-                .expect("failed to draw text onto canvas");
+            self.rng_state = self
+                .rng_state
+                .wrapping_mul(1664525)
+                .wrapping_add(1013904223);
+            let r = (self.rng_state % 11) as u32;
+            if r > 8 {
+                let mut text_opts = spot::TextOptions::new(self.font_data.clone());
+                text_opts.font_size = 32.0;
+                text_opts.color = [1.0, 1.0, 1.0, 1.0];
+                let text_drawable = spot::DrawAble::Text(format!("Hello ({})", r), text_opts);
+                let mut text_draw_opts = spot::ImageDrawOptions::default();
+                text_draw_opts.position = [20.0, 50.0];
+                let text_draw_opt = spot::DrawOption {
+                    options: text_draw_opts,
+                };
+                self.canvas
+                    .draw_sub(text_drawable, text_draw_opt)
+                    .expect("failed to draw text onto canvas");
+            }
 
             // Draw the composited canvas to screen
             let canvas_screen_pos = [10.0, 10.0];
@@ -77,7 +96,7 @@ fn main() {
             self.sprite.draw(context, opts);
         }
 
-        fn update(&self, _event: spot::Event) {}
+        fn update(&mut self, _dt: std::time::Duration) {}
 
         fn remove(&self) {}
     }

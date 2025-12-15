@@ -70,7 +70,7 @@ impl Spot for TextApp {
         Text::new("大字体 - Large Font").draw(context, large_opts);
     }
 
-    fn update(&self, _event: spot::Event) {}
+    fn update(&mut self, _dt: std::time::Duration) {}
     fn remove(&self) {}
 }
 

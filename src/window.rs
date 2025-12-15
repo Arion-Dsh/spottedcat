@@ -9,6 +9,7 @@ use crate::graphics::Graphics;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
+use std::time::{Duration, Instant};
 
 pub(crate) struct App {
     window: Option<Window>,
@@ -18,6 +19,9 @@ pub(crate) struct App {
     context: Context,
     spot: Option<Box<dyn Spot>>,
     scene_factory: Box<dyn Fn() -> Box<dyn Spot> + Send>,
+    previous: Option<Instant>,
+    lag: Duration,
+    fixed_dt: Duration,
 }
 
 fn block_on<F: Future>(mut future: F) -> F::Output {
@@ -54,6 +58,9 @@ impl App {
             context: Context::new(),
             spot: None,
             scene_factory: Box::new(|| Box::new(T::initialize(Context::new()))),
+            previous: None,
+            lag: Duration::ZERO,
+            fixed_dt: Duration::from_millis(16),
         }
     }
 }
@@ -61,6 +68,8 @@ impl App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         event_loop.set_control_flow(ControlFlow::Poll);
+        self.previous = Some(Instant::now());
+        self.lag = Duration::ZERO;
 
         let window = event_loop
             .create_window(Window::default_attributes().with_title("spot"))
@@ -91,7 +100,6 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        event_loop.set_control_flow(ControlFlow::Poll);
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(new_size) => {
@@ -121,7 +129,22 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let now = Instant::now();
+        if let Some(previous) = self.previous.replace(now) {
+            let elapsed = now.duration_since(previous);
+            self.lag = self.lag.saturating_add(elapsed);
+
+            while self.lag >= self.fixed_dt {
+                if let Some(spot) = self.spot.as_mut() {
+                    spot.update(self.fixed_dt);
+                }
+                self.lag = self.lag.saturating_sub(self.fixed_dt);
+            }
+        }
+
+        event_loop.set_control_flow(ControlFlow::Poll);
+
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
         }

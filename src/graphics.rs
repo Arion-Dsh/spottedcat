@@ -365,6 +365,48 @@ impl Graphics {
         Ok(())
     }
 
+    pub(crate) fn clear_image(&mut self, target: Image, color: [f32; 4]) -> anyhow::Result<()> {
+        let target_view = {
+            let Some(Some(target_entry)) = self.images.get(target.0) else {
+                return Err(anyhow::anyhow!("invalid target image"));
+            };
+
+            target_entry.texture.0.view.clone()
+        };
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("graphics_clear_image_encoder"),
+            });
+
+        {
+            let _rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("graphics_clear_image_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target_view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: color[0] as f64,
+                            g: color[1] as f64,
+                            b: color[2] as f64,
+                            a: color[3] as f64,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+        }
+
+        self.queue.submit(Some(encoder.finish()));
+        Ok(())
+    }
+
     pub(crate) fn draw_drawables_to_image(
         &mut self,
         target: Image,

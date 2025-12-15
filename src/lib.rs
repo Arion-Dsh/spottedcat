@@ -22,7 +22,7 @@
 //!         self.image.draw(context, opts);
 //!     }
 //!
-//!     fn update(&self, _event: spot::Event) {}
+//!     fn update(&mut self, _dt: std::time::Duration) {}
 //!     fn remove(&self) {}
 //! }
 //!
@@ -45,6 +45,7 @@ mod text;
 mod text_renderer;
 
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 use winit::event_loop::EventLoop;
 
 pub use image::{Bounds, Image};
@@ -158,7 +159,7 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
 /// # impl Spot for MyApp {
 /// #     fn initialize(_: Context) -> Self { MyApp }
 /// #     fn draw(&mut self, _: &mut Context) {}
-/// #     fn update(&self, _: spot::Event) {}
+/// #     fn update(&mut self, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// spot::run::<MyApp>();
@@ -187,13 +188,13 @@ pub fn run<T: Spot + 'static>() {
 /// # impl Spot for MenuScene {
 /// #     fn initialize(_: spot::Context) -> Self { MenuScene }
 /// #     fn draw(&mut self, _: &mut spot::Context) {}
-/// #     fn update(&self, _: spot::Event) {}
+/// #     fn update(&mut self, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// # impl Spot for GameScene {
 /// #     fn initialize(_: spot::Context) -> Self { GameScene }
 /// #     fn draw(&mut self, _: &mut spot::Context) {}
-/// #     fn update(&self, _: spot::Event) {}
+/// #     fn update(&mut self, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// // In your scene's draw or update method:
@@ -204,11 +205,6 @@ pub fn run<T: Spot + 'static>() {
 pub fn switch_scene<T: Spot + 'static>() {
     request_scene_switch(|| Box::new(T::initialize(Context::new())));
 }
-
-/// Events that can be received by the application.
-///
-/// Currently empty, but will be extended with input events in the future.
-pub enum Event {}
 
 /// Main application trait that must be implemented by your application.
 ///
@@ -233,13 +229,7 @@ pub trait Spot {
     /// * `context` - Drawing context to add render commands to
     fn draw(&mut self, context: &mut Context);
     
-    /// Handles events.
-    ///
-    /// Called when events occur (currently unused, reserved for future input events).
-    ///
-    /// # Arguments
-    /// * `event` - The event to handle
-    fn update(&self, event: Event);
+    fn update(&mut self, dt: Duration);
     
     /// Cleanup when the application is shutting down.
     fn remove(&self);

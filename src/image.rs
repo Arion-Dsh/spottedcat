@@ -94,7 +94,8 @@ impl Image {
     /// ```no_run
     /// # use spot::{Context, Image, ImageDrawOptions};
     /// # let mut context = Context::new();
-    /// # let image = Image::new_from_file("test.png").unwrap();
+    /// # let rgba = vec![255u8; 2 * 2 * 4];
+    /// # let image = Image::new_from_rgba8(2, 2, &rgba).unwrap();
     /// let mut opts = ImageDrawOptions::default();
     /// opts.position = [100.0, 100.0];
     /// opts.scale = [2.0, 2.0];
@@ -119,8 +120,9 @@ impl Image {
     /// use spot::{Image, DrawAble, DrawOption, ImageDrawOptions};
     ///
     /// // Load two images
-    /// let canvas = Image::new_from_file("canvas.png").unwrap();
-    /// let sprite = Image::new_from_file("sprite.png").unwrap();
+    /// let rgba = vec![255u8; 2 * 2 * 4];
+    /// let canvas = Image::new_from_rgba8(2, 2, &rgba).unwrap();
+    /// let sprite = Image::new_from_rgba8(2, 2, &rgba).unwrap();
     ///
     /// // Create draw options for positioning sprite on canvas
     /// let option = DrawOption {
@@ -163,6 +165,10 @@ impl Image {
         option: crate::drawable::DrawOption,
     ) -> anyhow::Result<()> {
         self.draw_sub(drawable, option)
+    }
+
+    pub fn clear(self, color: [f32; 4]) -> anyhow::Result<()> {
+        with_graphics(|g| g.clear_image(self, color))
     }
 
     pub fn copy_from(self, src: Image) -> anyhow::Result<()> {
