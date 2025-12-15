@@ -12,7 +12,7 @@ fn mvp_from_draw_options(
     opts: ImageDrawOptions,
 ) -> [[f32; 4]; 4] {
     // `position` is the desired top-left corner in screen pixels (origin at top-left).
-    let (px, py) = (opts.position[0], opts.position[1]);
+    let (px, py) = (opts.position[0].as_f32(), opts.position[1].as_f32());
     let (w_px, h_px) = (
         base_w_px * opts.scale[0],
         base_h_px * opts.scale[1],

@@ -17,17 +17,17 @@
 //!
 //!     fn draw(&mut self, context: &mut Context) {
 //!         let mut opts = ImageDrawOptions::default();
-//!         opts.position = [100.0, 100.0];
+//!         opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
 //!         opts.scale = [0.78125, 0.78125];
 //!         self.image.draw(context, opts);
 //!     }
 //!
-//!     fn update(&mut self, _dt: std::time::Duration) {}
+//!     fn update(&mut self, _context: &mut Context, _dt: std::time::Duration) {}
 //!     fn remove(&self) {}
 //! }
 //!
 //! fn main() {
-//!     spot::run::<MyApp>();
+//!     spot::run::<MyApp>(spot::WindowConfig::default());
 //! }
 //!
 //! // Scene switching example:
@@ -43,6 +43,10 @@ mod drawable;
 mod font;
 mod text;
 mod text_renderer;
+mod input;
+mod key;
+mod mouse;
+mod pt;
 
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -52,6 +56,29 @@ pub use image::{Bounds, Image};
 pub use drawable::{DrawAble, DrawOption, ImageDrawOptions, TextOptions};
 pub use font::{load_font_from_file, load_font_from_bytes};
 pub use text::Text;
+pub use input::InputManager;
+pub use key::Key;
+pub use mouse::MouseButton;
+pub use pt::Pt;
+
+#[derive(Debug, Clone)]
+pub struct WindowConfig {
+    pub title: String,
+    pub width: Pt,
+    pub height: Pt,
+    pub resizable: bool,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            title: "spot".to_string(),
+            width: Pt(800.0),
+            height: Pt(600.0),
+            resizable: true,
+        }
+    }
+}
 
 use crate::graphics::Graphics;
 
@@ -63,6 +90,8 @@ use crate::graphics::Graphics;
 #[derive(Debug, Clone)]
 pub struct Context {
     draw_list: Vec<DrawAble>,
+    input: InputManager,
+    scale_factor: f64,
 }
 
 impl Context {
@@ -73,6 +102,8 @@ impl Context {
     pub fn new() -> Self {
         Self {
             draw_list: Vec::new(),
+            input: InputManager::new(),
+            scale_factor: 1.0,
         }
     }
 
@@ -80,8 +111,24 @@ impl Context {
     ///
     /// This is called automatically at the start of each frame, but can be used
     /// manually if needed.
-    pub fn begin_frame(&mut self) {
+    pub(crate) fn begin_frame(&mut self) {
         self.draw_list.clear();
+    }
+
+    pub(crate) fn input(&self) -> &InputManager {
+        &self.input
+    }
+
+    pub(crate) fn input_mut(&mut self) -> &mut InputManager {
+        &mut self.input
+    }
+
+    pub(crate) fn set_scale_factor(&mut self, scale_factor: f64) {
+        self.scale_factor = scale_factor;
+    }
+
+    pub(crate) fn scale_factor(&self) -> f64 {
+        self.scale_factor
     }
 
     /// Adds a drawable item to the draw list.
@@ -101,6 +148,22 @@ impl Context {
     pub(crate) fn push_text(&mut self, text: String, options: TextOptions) {
         self.push(DrawAble::Text(text, options));
     }
+}
+
+pub fn key_down(context: &Context, key: Key) -> bool {
+    context.input().key_down(key)
+}
+
+pub fn key_pressed(context: &Context, key: Key) -> bool {
+    context.input().key_pressed(key)
+}
+
+pub fn key_released(context: &Context, key: Key) -> bool {
+    context.input().key_released(key)
+}
+
+pub fn cursor_position(context: &Context) -> Option<(Pt, Pt)> {
+    context.input().cursor_position()
 }
 
 type SceneFactory = Box<dyn FnOnce() -> Box<dyn Spot> + Send>;
@@ -159,15 +222,15 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
 /// # impl Spot for MyApp {
 /// #     fn initialize(_: Context) -> Self { MyApp }
 /// #     fn draw(&mut self, _: &mut Context) {}
-/// #     fn update(&mut self, _dt: std::time::Duration) {}
+/// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
-/// spot::run::<MyApp>();
+/// spot::run::<MyApp>(spot::WindowConfig::default());
 /// ```
-pub fn run<T: Spot + 'static>() {
+pub fn run<T: Spot + 'static>(window: WindowConfig) {
     init_scene_switch();
     let event_loop = EventLoop::new().expect("failed to create winit EventLoop");
-    let mut app = window::App::new::<T>();
+    let mut app = window::App::new::<T>(window);
     event_loop.run_app(&mut app).expect("event loop error");
 }
 
@@ -188,13 +251,13 @@ pub fn run<T: Spot + 'static>() {
 /// # impl Spot for MenuScene {
 /// #     fn initialize(_: spot::Context) -> Self { MenuScene }
 /// #     fn draw(&mut self, _: &mut spot::Context) {}
-/// #     fn update(&mut self, _dt: std::time::Duration) {}
+/// #     fn update(&mut self, _: &mut spot::Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// # impl Spot for GameScene {
 /// #     fn initialize(_: spot::Context) -> Self { GameScene }
 /// #     fn draw(&mut self, _: &mut spot::Context) {}
-/// #     fn update(&mut self, _dt: std::time::Duration) {}
+/// #     fn update(&mut self, _: &mut spot::Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// // In your scene's draw or update method:
@@ -229,7 +292,7 @@ pub trait Spot {
     /// * `context` - Drawing context to add render commands to
     fn draw(&mut self, context: &mut Context);
     
-    fn update(&mut self, dt: Duration);
+    fn update(&mut self, context: &mut Context, dt: Duration);
     
     /// Cleanup when the application is shutting down.
     fn remove(&self);

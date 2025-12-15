@@ -1,5 +1,6 @@
 fn main() {
     struct DemoSpot {
+        tree: spot::Image,
         image: spot::Image,
         image_sub: spot::Image,
         image_clone: spot::Image,
@@ -7,6 +8,13 @@ fn main() {
 
     impl spot::Spot for DemoSpot {
         fn initialize(_context: spot::Context) -> Self {
+            const TREE_PNG: &[u8] = include_bytes!("../assets/happy-tree.png");
+            let decoded = image::load_from_memory(TREE_PNG).expect("failed to decode happy-tree.png");
+            let rgba = decoded.to_rgba8();
+            let (w, h) = (rgba.width(), rgba.height());
+            let tree = spot::Image::new_from_rgba8(w, h, rgba.as_raw())
+                .expect("failed to create happy-tree image");
+
             let mut rgba = vec![0u8; 20 * 20 * 4];
             for y in 0..20u32 {
                 for x in 0..20u32 {
@@ -26,6 +34,7 @@ fn main() {
                 spot::Image::new_from_image(image).expect("failed to create image from image");
 
             Self {
+                tree,
                 image,
                 image_sub,
                 image_clone,
@@ -34,25 +43,29 @@ fn main() {
 
         fn draw(&mut self, context: &mut spot::Context) {
             let mut opts = spot::ImageDrawOptions::default();
-            opts.position = [50.0, 50.0];
+            opts.position = [spot::Pt(20.0), spot::Pt(300.0)];
+            self.tree.draw(context, opts);
+
+            let mut opts = spot::ImageDrawOptions::default();
+            opts.position = [spot::Pt(50.0), spot::Pt(50.0)];
             opts.scale = [10.0, 10.0];
             self.image.draw(context, opts);
 
             let mut opts = spot::ImageDrawOptions::default();
-            opts.position = [300.0, 50.0];
+            opts.position = [spot::Pt(300.0), spot::Pt(50.0)];
             opts.scale = [20.0, 20.0];
             self.image_sub.draw(context, opts);
 
             let mut opts = spot::ImageDrawOptions::default();
-            opts.position = [550.0, 50.0];
+            opts.position = [spot::Pt(550.0), spot::Pt(50.0)];
             opts.scale = [10.0, 10.0];
             self.image_clone.draw(context, opts);
         }
 
-        fn update(&mut self, _dt: std::time::Duration) {}
+        fn update(&mut self, _context: &mut spot::Context, _dt: std::time::Duration) {}
 
         fn remove(&self) {}
     }
 
-    spot::run::<DemoSpot>();
+    spot::run::<DemoSpot>(spot::WindowConfig::default());
 }

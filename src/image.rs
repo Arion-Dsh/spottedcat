@@ -97,7 +97,7 @@ impl Image {
     /// # let rgba = vec![255u8; 2 * 2 * 4];
     /// # let image = Image::new_from_rgba8(2, 2, &rgba).unwrap();
     /// let mut opts = ImageDrawOptions::default();
-    /// opts.position = [100.0, 100.0];
+    /// opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
     /// opts.scale = [2.0, 2.0];
     /// image.draw(&mut context, opts);
     /// ```
@@ -127,7 +127,7 @@ impl Image {
     /// // Create draw options for positioning sprite on canvas
     /// let option = DrawOption {
     ///     options: ImageDrawOptions {
-    ///         position: [50.0, 50.0],  // Position on canvas
+    ///         position: [spot::Pt(50.0), spot::Pt(50.0)],  // Position on canvas
     ///         rotation: 0.0,
     ///         scale: [1.0, 1.0],
     ///     },

@@ -32,16 +32,16 @@ impl Spot for TextApp {
 
         // 使用 Text::draw() - 传入字体数据
         let mut opts = TextOptions::new(font_data.clone());
-        opts.position = [100.0, 100.0];
-        opts.font_size = 32.0;
+        opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
+        opts.font_size = spot::Pt(32.0);
         opts.color = [1.0, 1.0, 1.0, 1.0];
         Text::new("Provided Font").draw(context, opts);
         
         let mut custom_opts = TextOptions::new(font_data.clone());
-        custom_opts.position = [100.0, 150.0];
-        custom_opts.font_size = 28.0;
+        custom_opts.position = [spot::Pt(100.0), spot::Pt(150.0)];
+        custom_opts.font_size = spot::Pt(28.0);
         custom_opts.color = [1.0, 0.5, 0.0, 1.0]; // 橙色
-        custom_opts.stroke_width = 2.0;
+        custom_opts.stroke_width = spot::Pt(2.0);
         custom_opts.stroke_color = [1.0, 1.0, 1.0, 1.0];
         Text::new("使用嵌入字体 - Embedded Font").draw(context, custom_opts);
 
@@ -51,29 +51,29 @@ impl Spot for TextApp {
             None => TextOptions::from_file("assets/DejaVuSans.ttf")
                 .unwrap_or_else(|_| TextOptions::new(font_data.clone())),
         };
-        file_opts.position = [100.0, 200.0];
-        file_opts.font_size = 24.0;
+        file_opts.position = [spot::Pt(100.0), spot::Pt(200.0)];
+        file_opts.font_size = spot::Pt(24.0);
         file_opts.color = [0.0, 1.0, 0.5, 1.0]; // 青绿色
         Text::new("从文件加载字体 - Loaded from File").draw(context, file_opts);
 
         // 使用 Text::draw() - 不同颜色和大小
         let mut small_opts = TextOptions::new(font_data.clone());
-        small_opts.position = [100.0, 250.0];
-        small_opts.font_size = 18.0;
+        small_opts.position = [spot::Pt(100.0), spot::Pt(250.0)];
+        small_opts.font_size = spot::Pt(18.0);
         small_opts.color = [0.5, 0.5, 1.0, 1.0]; // 淡蓝色
         Text::new("小字体 - Small Font Size").draw(context, small_opts);
 
         let mut large_opts = TextOptions::new(font_data);
-        large_opts.position = [100.0, 300.0];
-        large_opts.font_size = 48.0;
+        large_opts.position = [spot::Pt(100.0), spot::Pt(300.0)];
+        large_opts.font_size = spot::Pt(48.0);
         large_opts.color = [1.0, 0.0, 0.5, 1.0]; // 粉红色
         Text::new("大字体 - Large Font").draw(context, large_opts);
     }
 
-    fn update(&mut self, _dt: std::time::Duration) {}
+    fn update(&mut self, _context: &mut Context, _dt: std::time::Duration) {}
     fn remove(&self) {}
 }
 
 fn main() {
-    spot::run::<TextApp>();
+    spot::run::<TextApp>(spot::WindowConfig::default());
 }

@@ -1,4 +1,4 @@
-use crate::Image;
+use crate::{Image, Pt};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawAble {
@@ -19,7 +19,7 @@ pub struct DrawOption {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ImageDrawOptions {
     /// Position in screen pixels (top-left corner). Origin is at top-left of window.
-    pub position: [f32; 2],
+    pub position: [Pt; 2],
     /// Rotation in radians.
     pub rotation: f32,
     /// Scale factors (x, y). Applied after size.
@@ -29,7 +29,7 @@ pub struct ImageDrawOptions {
 impl Default for ImageDrawOptions {
     fn default() -> Self {
         Self {
-            position: [10.0, 10.0],
+            position: [Pt(10.0), Pt(10.0)],
             scale: [1.0, 1.0],
             rotation: 0.0,
         }
@@ -38,24 +38,24 @@ impl Default for ImageDrawOptions {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextOptions {
-    pub position: [f32; 2],
-    pub font_size: f32,
+    pub position: [Pt; 2],
+    pub font_size: Pt,
     pub color: [f32; 4],
     pub scale: [f32; 2],
     pub font_data: Vec<u8>,
-    pub stroke_width: f32,
+    pub stroke_width: Pt,
     pub stroke_color: [f32; 4],
 }
 
 impl TextOptions {
     pub fn new(font_data: Vec<u8>) -> Self {
         Self {
-            position: [10.0, 10.0],
-            font_size: 24.0,
+            position: [Pt(10.0), Pt(10.0)],
+            font_size: Pt(24.0),
             color: [1.0, 1.0, 1.0, 1.0],
             scale: [1.0, 1.0],
             font_data,
-            stroke_width: 0.0,
+            stroke_width: Pt(0.0),
             stroke_color: [0.0, 0.0, 0.0, 1.0],
         }
     }

@@ -37,8 +37,8 @@ impl Text {
     /// # let mut context = Context::new();
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
     /// let mut opts = TextOptions::new(load_font_from_bytes(FONT));
-    /// opts.position = [100.0, 100.0];
-    /// opts.font_size = 32.0;
+    /// opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
+    /// opts.font_size = spot::Pt(32.0);
     /// Text::new("Hello, World!").draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut Context, options: TextOptions) {

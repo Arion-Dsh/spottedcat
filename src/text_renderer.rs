@@ -497,7 +497,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     pub fn queue_text(&mut self, text: &str, opts: &TextOptions, queue: &wgpu::Queue) -> anyhow::Result<()> {
         let (font_hash, font) = self.get_font(&opts.font_data)?;
-        let px_size = (opts.font_size * opts.scale[1]).max(1.0);
+        let px_size = (opts.font_size.as_f32() * opts.scale[1]).max(1.0);
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
 
@@ -568,18 +568,19 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let h = (entry.bmax[1] - entry.bmin[1]).ceil().max(1.0);
 
             let base_pos = [
-                opts.position[0] + caret_x + entry.bmin[0],
-                opts.position[1] + baseline_y + entry.bmin[1],
+                opts.position[0].as_f32() + caret_x + entry.bmin[0],
+                opts.position[1].as_f32() + baseline_y + entry.bmin[1],
             ];
 
-            if opts.stroke_width > 0.0 {
-                let r = opts.stroke_width.ceil().max(1.0) as i32;
+            let stroke_w = opts.stroke_width.as_f32();
+            if stroke_w > 0.0 {
+                let r = stroke_w.ceil().max(1.0) as i32;
                 for dy in -r..=r {
                     for dx in -r..=r {
                         if dx == 0 && dy == 0 {
                             continue;
                         }
-                        if (dx * dx + dy * dy) as f32 > opts.stroke_width * opts.stroke_width {
+                        if (dx * dx + dy * dy) as f32 > stroke_w * stroke_w {
                             continue;
                         }
                         self.instances.push(GlyphInstance {
