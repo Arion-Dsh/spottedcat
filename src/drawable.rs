@@ -2,8 +2,14 @@ use crate::Image;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawAble {
-    Image(Image, DrawOptions),
+    Image(Image, ImageDrawOptions),
     Text(String, TextOptions),
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrawOption {
+    pub options: ImageDrawOptions,
 }
 
 
@@ -11,22 +17,19 @@ pub enum DrawAble {
 ///
 /// Controls the position, size, rotation, and scale of drawn images.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DrawOptions {
+pub struct ImageDrawOptions {
     /// Position in screen pixels (top-left corner). Origin is at top-left of window.
     pub position: [f32; 2],
-    /// Size in pixels (width, height).
-    pub size: [f32; 2],
     /// Rotation in radians.
     pub rotation: f32,
     /// Scale factors (x, y). Applied after size.
     pub scale: [f32; 2],
 }
 
-impl Default for DrawOptions {
+impl Default for ImageDrawOptions {
     fn default() -> Self {
         Self {
-            position: [100.0, 100.0],
-            size: [200.0, 200.0],
+            position: [10.0, 10.0],
             scale: [1.0, 1.0],
             rotation: 0.0,
         }
@@ -47,7 +50,7 @@ pub struct TextOptions {
 impl TextOptions {
     pub fn new(font_data: Vec<u8>) -> Self {
         Self {
-            position: [100.0, 100.0],
+            position: [10.0, 10.0],
             font_size: 24.0,
             color: [1.0, 1.0, 1.0, 1.0],
             scale: [1.0, 1.0],

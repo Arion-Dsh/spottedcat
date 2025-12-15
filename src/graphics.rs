@@ -1,15 +1,21 @@
-use crate::{Context, DrawAble, DrawOptions};
+use crate::{Context, DrawAble, DrawOption, ImageDrawOptions};
 use crate::image::{Bounds, Image, ImageEntry};
 use crate::image_raw::{ImageRaw, ImageRenderer, ImageTransform};
 use crate::texture::Texture;
 use crate::text_renderer::TextRenderer;
 
-fn mvp_from_draw_options(sw: f32, sh: f32, opts: DrawOptions) -> [[f32; 4]; 4] {
+fn mvp_from_draw_options(
+    sw: f32,
+    sh: f32,
+    base_w_px: f32,
+    base_h_px: f32,
+    opts: ImageDrawOptions,
+) -> [[f32; 4]; 4] {
     // `position` is the desired top-left corner in screen pixels (origin at top-left).
     let (px, py) = (opts.position[0], opts.position[1]);
     let (w_px, h_px) = (
-        opts.size[0] * opts.scale[0],
-        opts.size[1] * opts.scale[1],
+        base_w_px * opts.scale[0],
+        base_h_px * opts.scale[1],
     );
 
     // Target top-left in clip-space.
@@ -46,6 +52,19 @@ fn mvp_from_draw_options(sw: f32, sh: f32, opts: DrawOptions) -> [[f32; 4]; 4] {
         [0.0, 0.0, 1.0, 0.0],
         [dx, dy, 0.0, 1.0],
     ]
+}
+
+/// MVP calculation for rendering to texture (offscreen).
+/// Position is relative to texture's top-left corner in pixels.
+/// (0, 0) = top-left of texture, (tw, th) = bottom-right of texture.
+fn mvp_for_texture(
+    tw: f32,
+    th: f32,
+    base_w_px: f32,
+    base_h_px: f32,
+    opts: ImageDrawOptions,
+) -> [[f32; 4]; 4] {
+    mvp_from_draw_options(tw, th, base_w_px, base_h_px, opts)
 }
 
 pub struct Graphics {
@@ -117,6 +136,10 @@ impl Graphics {
             images: Vec::new(),
             text_renderer,
         })
+    }
+
+    pub(crate) fn surface_format(&self) -> wgpu::TextureFormat {
+        self.config.format
     }
 
     pub fn resize(&mut self, surface: &wgpu::Surface<'_>, width: u32, height: u32) {
@@ -238,8 +261,16 @@ impl Graphics {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
                         if let Some(Some(img)) = self.images.get_mut(id.0) {
+                            let base_w_px = img.bounds.width as f32;
+                            let base_h_px = img.bounds.height as f32;
                             let t = ImageTransform {
-                                mvp: mvp_from_draw_options(sw, sh, *opts),
+                                mvp: mvp_from_draw_options(
+                                    sw,
+                                    sh,
+                                    base_w_px,
+                                    base_h_px,
+                                    *opts,
+                                ),
                                 uvp: img.uvp_from_bounds(),
                                 color: ImageTransform::default().color,
                             };
@@ -262,6 +293,179 @@ impl Graphics {
 
         self.queue.submit(Some(encoder.finish()));
         frame.present();
+        Ok(())
+    }
+
+    pub(crate) fn copy_image(&mut self, dst: Image, src: Image) -> anyhow::Result<()> {
+        let (dst_tex, dst_bounds, dst_format) = {
+            let Some(Some(d)) = self.images.get(dst.0) else {
+                return Err(anyhow::anyhow!("invalid dst image"));
+            };
+            (&d.texture.0.texture, d.bounds, d.texture.0.format)
+        };
+        let (src_tex, src_bounds, src_format) = {
+            let Some(Some(s)) = self.images.get(src.0) else {
+                return Err(anyhow::anyhow!("invalid src image"));
+            };
+            (&s.texture.0.texture, s.bounds, s.texture.0.format)
+        };
+
+        if dst_bounds.width != src_bounds.width || dst_bounds.height != src_bounds.height {
+            return Err(anyhow::anyhow!(
+                "image size mismatch: dst {}x{}, src {}x{}",
+                dst_bounds.width,
+                dst_bounds.height,
+                src_bounds.width,
+                src_bounds.height
+            ));
+        }
+        if dst_format != src_format {
+            return Err(anyhow::anyhow!(
+                "image format mismatch: dst {:?}, src {:?}",
+                dst_format,
+                src_format
+            ));
+        }
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("graphics_copy_image_encoder"),
+            });
+
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: src_tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: src_bounds.x,
+                    y: src_bounds.y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: dst_tex,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: dst_bounds.x,
+                    y: dst_bounds.y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: src_bounds.width,
+                height: src_bounds.height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.queue.submit(Some(encoder.finish()));
+        Ok(())
+    }
+
+    pub(crate) fn draw_drawables_to_image(
+        &mut self,
+        target: Image,
+        drawables: &[DrawAble],
+        _option: DrawOption,
+    ) -> anyhow::Result<()> {
+        if drawables
+            .iter()
+            .any(|d| matches!(d, DrawAble::Image(id, _) if *id == target))
+        {
+            return Err(anyhow::anyhow!(
+                "cannot draw an image into itself; use a separate target image"
+            ));
+        }
+
+        let (target_view, target_bounds) = {
+            let Some(Some(target_entry)) = self.images.get(target.0) else {
+                return Err(anyhow::anyhow!("invalid target image"));
+            };
+
+            (target_entry.texture.0.view.clone(), target_entry.bounds)
+        };
+
+        let (tw, th) = (target_bounds.width as f32, target_bounds.height as f32);
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("graphics_offscreen_encoder"),
+            });
+
+        let ops = wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: wgpu::StoreOp::Store,
+        };
+
+        let renderer = &self.image_renderer;
+        self.text_renderer
+            .begin_frame(target_bounds.width, target_bounds.height, &self.queue);
+
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("graphics_offscreen_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target_view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Set viewport to match target texture size
+            rpass.set_viewport(
+                target_bounds.x as f32,
+                target_bounds.y as f32,
+                tw,
+                th,
+                0.0,
+                1.0,
+            );
+            rpass.set_scissor_rect(
+                target_bounds.x,
+                target_bounds.y,
+                target_bounds.width,
+                target_bounds.height,
+            );
+
+            for drawable in drawables {
+                match drawable {
+                    DrawAble::Image(id, opts) => {
+                        self.text_renderer
+                            .flush(&self.device, &mut rpass, &self.queue);
+                        if let Some(Some(img)) = self.images.get_mut(id.0) {
+                            let base_w_px = img.bounds.width as f32;
+                            let base_h_px = img.bounds.height as f32;
+                            let t = ImageTransform {
+                                mvp: mvp_for_texture(tw, th, base_w_px, base_h_px, *opts),
+                                uvp: img.uvp_from_bounds(),
+                                color: ImageTransform::default().color,
+                            };
+                            img.set_transform(t);
+                            img.flush(renderer, &self.queue);
+                            img.draw(renderer, &mut rpass);
+                        }
+                    }
+                    DrawAble::Text(text, opts) => {
+                        self.text_renderer
+                            .queue_text(text, opts, &self.queue)
+                            .expect("Text draw requires valid font_data");
+                    }
+                }
+            }
+
+            self.text_renderer
+                .flush(&self.device, &mut rpass, &self.queue);
+        }
+
+        self.queue.submit(Some(encoder.finish()));
         Ok(())
     }
 }

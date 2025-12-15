@@ -48,7 +48,14 @@ impl Image {
     pub fn new_from_rgba8(width: u32, height: u32, rgba: &[u8]) -> anyhow::Result<Self> {
         with_graphics(|g| {
             let (device, queue) = g.device_queue();
-            let texture = Texture::from_rgba8(device, queue, width, height, rgba)?;
+            let texture = Texture::from_rgba8_with_format(
+                device,
+                queue,
+                width,
+                height,
+                rgba,
+                g.surface_format(),
+            )?;
             let raw = g.create_raw_from_texture(&texture)?;
             Ok(g.insert_image_entry(ImageEntry::new(texture, raw)))
         })
@@ -81,20 +88,111 @@ impl Image {
     ///
     /// # Arguments
     /// * `context` - The drawing context to add this image to
-    /// * `options` - Drawing options (position, size, rotation, scale)
+    /// * `options` - Drawing options (position, rotation, scale)
     ///
     /// # Example
     /// ```no_run
-    /// # use spot::{Context, Image, DrawOptions};
+    /// # use spot::{Context, Image, ImageDrawOptions};
     /// # let mut context = Context::new();
     /// # let image = Image::new_from_file("test.png").unwrap();
-    /// let mut opts = DrawOptions::default();
+    /// let mut opts = ImageDrawOptions::default();
     /// opts.position = [100.0, 100.0];
-    /// opts.size = [200.0, 200.0];
+    /// opts.scale = [2.0, 2.0];
     /// image.draw(&mut context, opts);
     /// ```
-    pub fn draw(self, context: &mut crate::Context, options: crate::DrawOptions) {
+    pub fn draw(self, context: &mut crate::Context, options: crate::ImageDrawOptions) {
         context.push(crate::drawable::DrawAble::Image(self, options));
+    }
+
+    /// Draws a drawable onto this image as a render target.
+    ///
+    /// # Arguments
+    /// * `drawable` - The drawable to render onto this image
+    /// * `option` - Draw options controlling position, rotation, scale
+    ///
+    /// # Note
+    /// For `DrawAble::Image`, the `option.options` will override the drawable's original options.
+    /// For `DrawAble::Text`, the text's own `TextOptions` are used (position from option is ignored).
+    ///
+    /// # Example
+    /// ```no_run
+    /// use spot::{Image, DrawAble, DrawOption, ImageDrawOptions};
+    ///
+    /// // Load two images
+    /// let canvas = Image::new_from_file("canvas.png").unwrap();
+    /// let sprite = Image::new_from_file("sprite.png").unwrap();
+    ///
+    /// // Create draw options for positioning sprite on canvas
+    /// let option = DrawOption {
+    ///     options: ImageDrawOptions {
+    ///         position: [50.0, 50.0],  // Position on canvas
+    ///         rotation: 0.0,
+    ///         scale: [1.0, 1.0],
+    ///     },
+    /// };
+    ///
+    /// // Draw sprite onto canvas at specified position
+    /// let sprite_drawable = DrawAble::Image(sprite, ImageDrawOptions::default());
+    /// canvas.draw_sub(sprite_drawable, option).unwrap();
+    /// ```
+    pub fn draw_sub(
+        self,
+        drawable: crate::drawable::DrawAble,
+        option: crate::drawable::DrawOption,
+    ) -> anyhow::Result<()> {
+        with_graphics(|g| {
+            let drawable_with_options = match drawable {
+                crate::drawable::DrawAble::Image(img, _) => {
+                    // Apply DrawOption to the image
+                    crate::drawable::DrawAble::Image(img, option.options)
+                }
+                crate::drawable::DrawAble::Text(text, mut text_opts) => {
+                    // Apply position from DrawOption to text
+                    text_opts.position = option.options.position;
+                    text_opts.scale = option.options.scale;
+                    crate::drawable::DrawAble::Text(text, text_opts)
+                }
+            };
+            g.draw_drawables_to_image(self, &[drawable_with_options], option)
+        })
+    }
+
+    pub fn draw_sub_with_origin(
+        self,
+        drawable: crate::drawable::DrawAble,
+        mut option: crate::drawable::DrawOption,
+        origin: [f32; 2],
+    ) -> anyhow::Result<()> {
+        option.options.position = [
+            option.options.position[0] - origin[0],
+            option.options.position[1] - origin[1],
+        ];
+
+        with_graphics(|g| {
+            let drawable_with_options = match drawable {
+                crate::drawable::DrawAble::Image(img, _) => {
+                    crate::drawable::DrawAble::Image(img, option.options)
+                }
+                crate::drawable::DrawAble::Text(text, mut text_opts) => {
+                    text_opts.position = option.options.position;
+                    text_opts.scale = option.options.scale;
+                    crate::drawable::DrawAble::Text(text, text_opts)
+                }
+            };
+            g.draw_drawables_to_image(self, &[drawable_with_options], option)
+        })
+    }
+
+    pub fn draw_to(
+        self,
+        drawable: crate::drawable::DrawAble,
+        option: crate::drawable::DrawOption,
+    ) -> anyhow::Result<()> {
+        self.draw_sub(drawable, option)
+    }
+
+    pub fn copy_from(self, src: Image) -> anyhow::Result<()> {
+        with_graphics(|g| g.copy_image(self, src))
     }
 
     /// Destroys the image and frees its GPU resources.

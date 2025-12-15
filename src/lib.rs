@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```no_run
-//! use spot::{Context, Spot, Image, DrawOptions, switch_scene};
+//! use spot::{Context, Spot, Image, ImageDrawOptions, switch_scene};
 //!
 //! struct MyApp {
 //!     image: Image,
@@ -16,9 +16,9 @@
 //!     }
 //!
 //!     fn draw(&mut self, context: &mut Context) {
-//!         let mut opts = DrawOptions::default();
+//!         let mut opts = ImageDrawOptions::default();
 //!         opts.position = [100.0, 100.0];
-//!         opts.size = [200.0, 200.0];
+//!         opts.scale = [0.78125, 0.78125];
 //!         self.image.draw(context, opts);
 //!     }
 //!
@@ -48,11 +48,10 @@ use std::sync::{Mutex, OnceLock};
 use winit::event_loop::EventLoop;
 
 pub use image::{Bounds, Image};
-pub use drawable::{DrawOptions, TextOptions};
+pub use drawable::{DrawAble, DrawOption, ImageDrawOptions, TextOptions};
 pub use font::{load_font_from_file, load_font_from_bytes};
 pub use text::Text;
 
-use crate::drawable::DrawAble;
 use crate::graphics::Graphics;
 
 

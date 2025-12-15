@@ -67,7 +67,7 @@ impl MenuScene {
     fn draw(&mut self, context: &mut Context) {
         let mut opts = DrawOptions::default();
         opts.position = [0.0, 0.0];
-        opts.size = [800.0, 600.0];
+        opts.scale = [1.0, 1.0];
         self.background.draw(context, opts);
         
         // Check for user input to switch scenes
@@ -92,7 +92,7 @@ impl GameScene {
     fn draw(&mut self, context: &mut Context) {
         let mut opts = DrawOptions::default();
         opts.position = [100.0, 100.0];
-        opts.size = [64.0, 64.0];
+        opts.scale = [1.0, 1.0];
         self.player.draw(context, opts);
     }
 
@@ -113,7 +113,7 @@ impl GameOverScene {
     fn draw(&mut self, context: &mut Context) {
         let mut opts = DrawOptions::default();
         opts.position = [200.0, 200.0];
-        opts.size = [400.0, 100.0];
+        opts.scale = [1.0, 1.0];
         self.game_over_text.draw(context, opts);
     }
 
@@ -227,7 +227,7 @@ impl Spot for MenuScene {
     fn draw(&mut self, context: &mut Context) {
         let mut opts = DrawOptions::default();
         opts.position = [0.0, 0.0];
-        opts.size = [800.0, 600.0];
+        opts.scale = [1.0, 1.0];
         self.background.draw(context, opts);
         
         // Check for user input (e.g., button press)
@@ -256,7 +256,7 @@ impl Spot for GameScene {
     fn draw(&mut self, context: &mut Context) {
         let mut opts = DrawOptions::default();
         opts.position = [100.0, 100.0];
-        opts.size = [64.0, 64.0];
+        opts.scale = [1.0, 1.0];
         self.player.draw(context, opts);
         
         // Check for game over

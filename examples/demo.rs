@@ -33,19 +33,19 @@ fn main() {
         }
 
         fn draw(&mut self, context: &mut spot::Context) {
-            let mut opts = spot::DrawOptions::default();
+            let mut opts = spot::ImageDrawOptions::default();
             opts.position = [50.0, 50.0];
-            opts.size = [200.0, 200.0];
+            opts.scale = [10.0, 10.0];
             self.image.draw(context, opts);
 
-            let mut opts = spot::DrawOptions::default();
+            let mut opts = spot::ImageDrawOptions::default();
             opts.position = [300.0, 50.0];
-            opts.size = [200.0, 200.0];
+            opts.scale = [20.0, 20.0];
             self.image_sub.draw(context, opts);
 
-            let mut opts = spot::DrawOptions::default();
+            let mut opts = spot::ImageDrawOptions::default();
             opts.position = [550.0, 50.0];
-            opts.size = [200.0, 200.0];
+            opts.scale = [10.0, 10.0];
             self.image_clone.draw(context, opts);
         }
 

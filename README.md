@@ -37,7 +37,7 @@ impl Spot for MyApp {
     fn draw(&mut self, context: &mut Context) {
         let mut opts = DrawOptions::default();
         opts.position = [100.0, 100.0];
-        opts.size = [200.0, 200.0];
+        opts.scale = [2.0, 2.0];
         context.draw_image(self.image, opts);
     }
 
@@ -86,9 +86,8 @@ Options for controlling how images are rendered.
 
 **Fields:**
 - `position: [f32; 2]` - Top-left corner in screen pixels
-- `size: [f32; 2]` - Width and height in pixels
 - `rotation: f32` - Rotation in radians
-- `scale: [f32; 2]` - Scale factors (applied after size)
+- `scale: [f32; 2]` - Scale factors (applied after the image's intrinsic size)
 
 #### `Bounds`
 Rectangle for defining sub-regions of images.
