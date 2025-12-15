@@ -157,32 +157,6 @@ impl Image {
         })
     }
 
-    pub fn draw_sub_with_origin(
-        self,
-        drawable: crate::drawable::DrawAble,
-        mut option: crate::drawable::DrawOption,
-        origin: [f32; 2],
-    ) -> anyhow::Result<()> {
-        option.options.position = [
-            option.options.position[0] - origin[0],
-            option.options.position[1] - origin[1],
-        ];
-
-        with_graphics(|g| {
-            let drawable_with_options = match drawable {
-                crate::drawable::DrawAble::Image(img, _) => {
-                    crate::drawable::DrawAble::Image(img, option.options)
-                }
-                crate::drawable::DrawAble::Text(text, mut text_opts) => {
-                    text_opts.position = option.options.position;
-                    text_opts.scale = option.options.scale;
-                    crate::drawable::DrawAble::Text(text, text_opts)
-                }
-            };
-            g.draw_drawables_to_image(self, &[drawable_with_options], option)
-        })
-    }
-
     pub fn draw_to(
         self,
         drawable: crate::drawable::DrawAble,
