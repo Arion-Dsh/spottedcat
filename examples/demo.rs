@@ -18,11 +18,12 @@ fn main() {
                     rgba[i + 3] = 255;
                 }
             }
-            let image = spot::Image::new_from_rgba8(20, 20, &rgba).expect("failed to create test image");
+            let image =
+                spot::Image::new_from_rgba8(20, 20, &rgba).expect("failed to create test image");
             let image_sub = spot::Image::sub_image(image, spot::Bounds::new(5, 5, 10, 10))
                 .expect("failed to create sub image");
-            let image_clone = spot::Image::new_from_image(image)
-                .expect("failed to create image from image");
+            let image_clone =
+                spot::Image::new_from_image(image).expect("failed to create image from image");
 
             Self {
                 image,
