@@ -112,7 +112,7 @@ impl Image {
     ///
     /// # Note
     /// For `DrawAble::Image`, the `option.options` will override the drawable's original options.
-    /// For `DrawAble::Text`, the text's own `TextOptions` are used (position from option is ignored).
+    /// For `DrawAble::Text`, the text's `TextOptions` are used, but `position` and `scale` are applied from `option.options`.
     ///
     /// # Example
     /// ```no_run

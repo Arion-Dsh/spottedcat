@@ -42,6 +42,21 @@ fn main() {
                 .draw_sub(sprite_drawable, sub_opt)
                 .expect("failed to draw sprite onto canvas");
 
+            let font_data = spot::load_font_from_file("assets/DejaVuSans.ttf")
+                .expect("failed to load font");
+            let mut text_opts = spot::TextOptions::new(font_data);
+            text_opts.font_size = 32.0;
+            text_opts.color = [1.0, 1.0, 1.0, 1.0];
+            let text_drawable = spot::DrawAble::Text("Hello".to_string(), text_opts);
+            let mut text_draw_opts = spot::ImageDrawOptions::default();
+            text_draw_opts.position = [20.0, 50.0];
+            let text_draw_opt = spot::DrawOption {
+                options: text_draw_opts,
+            };
+            self.canvas
+                .draw_sub(text_drawable, text_draw_opt)
+                .expect("failed to draw text onto canvas");
+
             // Draw the composited canvas to screen
             let canvas_screen_pos = [10.0, 10.0];
             let mut opts = spot::ImageDrawOptions::default();
