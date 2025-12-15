@@ -1,0 +1,12 @@
+[package]
+name = "spot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ wgpu = "27"
+ bytemuck = { version = "1", features = ["derive"] }
+ anyhow = "1"
+ winit = "0.30"
+ image = "0.25"
+ ab_glyph = "0.2"

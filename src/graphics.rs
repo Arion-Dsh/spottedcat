@@ -1,0 +1,267 @@
+use crate::{Context, DrawAble, DrawOptions};
+use crate::image::{Bounds, Image, ImageEntry};
+use crate::image_raw::{ImageRaw, ImageRenderer, ImageTransform};
+use crate::texture::Texture;
+use crate::text_renderer::TextRenderer;
+
+fn mvp_from_draw_options(sw: f32, sh: f32, opts: DrawOptions) -> [[f32; 4]; 4] {
+    // `position` is the desired top-left corner in screen pixels (origin at top-left).
+    let (px, py) = (opts.position[0], opts.position[1]);
+    let (w_px, h_px) = (
+        opts.size[0] * opts.scale[0],
+        opts.size[1] * opts.scale[1],
+    );
+
+    // Target top-left in clip-space.
+    let tx = (px / sw) * 2.0 - 1.0;
+    let ty = 1.0 - (py / sh) * 2.0;
+
+    // Our quad is in local space [-1, 1]. Width/height = 2.
+    // To get a clip-space width of (w_px / sw) * 2, we need sx = w_px / sw.
+    let sx = w_px / sw;
+    let sy = h_px / sh;
+
+    let (c, s) = (opts.rotation.cos(), opts.rotation.sin());
+
+    // Anchor is local top-left corner of the quad.
+    // With our vertex layout, top-left is (-1, +1).
+    let p_tl_x = -1.0;
+    let p_tl_y = 1.0;
+
+    // Compute where the local top-left ends up after R*S, then choose translation so it lands on (tx,ty).
+    // v = R * (S * p)
+    let spx = sx * p_tl_x;
+    let spy = sy * p_tl_y;
+    let v_tl_x = c * spx - s * spy;
+    let v_tl_y = s * spx + c * spy;
+
+    let dx = tx - v_tl_x;
+    let dy = ty - v_tl_y;
+
+    // Column-major affine matrix used by WGSL (mvp * vec4(pos,0,1)).
+    // MVP = T * R * S with T chosen so that (-1,+1) maps to (tx,ty).
+    [
+        [c * sx, -s * sy, 0.0, 0.0],
+        [s * sx, c * sy, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [dx, dy, 0.0, 1.0],
+    ]
+}
+
+pub struct Graphics {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    image_renderer: ImageRenderer,
+    images: Vec<Option<ImageEntry>>,
+    text_renderer: TextRenderer,
+}
+
+impl Graphics {
+    pub async fn new(
+        instance: &wgpu::Instance,
+        surface: &wgpu::Surface<'_>,
+        width: u32,
+        height: u32,
+    ) -> anyhow::Result<Self> {
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(surface),
+                force_fallback_adapter: false,
+            })
+            .await?;
+
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    experimental_features: wgpu::ExperimentalFeatures::default(),
+                    memory_hints: wgpu::MemoryHints::default(),
+                    trace: wgpu::Trace::Off,
+                },
+            )
+            .await?;
+
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(surface_caps.formats[0]);
+
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: width.max(1),
+            height: height.max(1),
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+        surface.configure(&device, &config);
+
+        let image_renderer = ImageRenderer::new(&device, config.format, 4096);
+
+        let text_renderer = TextRenderer::new(&device, config.format);
+
+        Ok(Self {
+            device,
+            queue,
+            config,
+            image_renderer,
+            images: Vec::new(),
+            text_renderer,
+        })
+    }
+
+    pub fn resize(&mut self, surface: &wgpu::Surface<'_>, width: u32, height: u32) {
+        self.config.width = width.max(1);
+        self.config.height = height.max(1);
+        surface.configure(&self.device, &self.config);
+    }
+
+     pub(crate) fn device_queue(&self) -> (&wgpu::Device, &wgpu::Queue) {
+         (&self.device, &self.queue)
+     }
+
+     pub(crate) fn create_raw_from_texture(&mut self, texture: &Texture) -> anyhow::Result<ImageRaw> {
+         self.image_renderer
+             .create_image(&self.device, &texture.0.view)
+     }
+
+     pub(crate) fn insert_image_entry(&mut self, entry: ImageEntry) -> Image {
+         let id = Image(self.images.len());
+         self.images.push(Some(entry));
+         id
+     }
+
+     pub(crate) fn insert_sub_image(
+         &mut self,
+         image: Image,
+         bounds: Option<Bounds>,
+     ) -> anyhow::Result<Image> {
+         let (texture, src_bounds) = {
+             let src = self
+                 .images
+                 .get(image.0)
+                 .and_then(|v| v.as_ref())
+                 .ok_or_else(|| anyhow::anyhow!("invalid source image"))?;
+             (src.texture.clone(), src.bounds)
+         };
+
+         let raw = self.create_raw_from_texture(&texture)?;
+
+         let tex_w = texture.0.width;
+         let tex_h = texture.0.height;
+
+         let b = match bounds {
+             None => src_bounds,
+             Some(b) => {
+                 let x1 = b
+                     .x
+                     .checked_add(b.width)
+                     .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
+                 let y1 = b
+                     .y
+                     .checked_add(b.height)
+                     .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
+
+                 if x1 > tex_w || y1 > tex_h {
+                     return Err(anyhow::anyhow!("sub_image bounds out of range"));
+                 }
+
+                 b
+             }
+         };
+
+         Ok(self.insert_image_entry(ImageEntry::new_with_bounds(texture, raw, b)))
+     }
+
+     pub(crate) fn take_image_entry(&mut self, image: Image) -> Option<ImageEntry> {
+         self.images.get_mut(image.0)?.take()
+     }
+
+    pub fn draw_context(
+        &mut self,
+        surface: &wgpu::Surface<'_>,
+        context: &Context,
+    ) -> Result<(), wgpu::SurfaceError> {
+        self.draw_drawables(surface, context.draw_list())
+    }
+
+    pub fn draw_drawables(
+        &mut self,
+        surface: &wgpu::Surface<'_>,
+        drawables: &[DrawAble],
+    ) -> Result<(), wgpu::SurfaceError> {
+        let frame = surface.get_current_texture()?;
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("graphics_encoder"),
+            });
+
+        let renderer = &self.image_renderer;
+        self.text_renderer
+            .begin_frame(self.config.width, self.config.height, &self.queue);
+        let (sw, sh) = (self.config.width as f32, self.config.height as f32);
+
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("graphics_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            for drawable in drawables {
+                match drawable {
+                    DrawAble::Image(id, opts) => {
+                        self.text_renderer
+                            .flush(&self.device, &mut rpass, &self.queue);
+                        if let Some(Some(img)) = self.images.get_mut(id.0) {
+                            let t = ImageTransform {
+                                mvp: mvp_from_draw_options(sw, sh, *opts),
+                                uvp: img.uvp_from_bounds(),
+                                color: ImageTransform::default().color,
+                            };
+                            img.set_transform(t);
+                            img.flush(renderer, &self.queue);
+                            img.draw(renderer, &mut rpass);
+                        }
+                    }
+                    DrawAble::Text(text, opts) => {
+                        self.text_renderer
+                            .queue_text(text, opts, &self.queue)
+                            .expect("Text draw requires valid font_data");
+                    }
+                }
+            }
+
+            self.text_renderer
+                .flush(&self.device, &mut rpass, &self.queue);
+        }
+
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+        Ok(())
+    }
+}
