@@ -125,7 +125,6 @@ let sprite = Image::sub_image(
 ```rust
 let mut opts = DrawOptions::default();
 opts.position = [400.0, 300.0];
-opts.size = [100.0, 100.0];
 opts.rotation = std::f32::consts::PI / 4.0; // 45 degrees
 opts.scale = [2.0, 2.0]; // Double size
 context.draw_image(image, opts);
