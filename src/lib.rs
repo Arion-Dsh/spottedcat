@@ -166,6 +166,18 @@ pub fn cursor_position(context: &Context) -> Option<(Pt, Pt)> {
     context.input().cursor_position()
 }
 
+pub fn text_input(context: &Context) -> &str {
+    context.input().text_input()
+}
+
+pub fn get_input(context: &Context) -> &str {
+    context.input().text_input()
+}
+
+pub fn ime_preedit(context: &Context) -> Option<&str> {
+    context.input().ime_preedit()
+}
+
 type SceneFactory = Box<dyn FnOnce() -> Box<dyn Spot> + Send>;
 
 static GLOBAL_GRAPHICS: OnceLock<Mutex<Graphics>> = OnceLock::new();

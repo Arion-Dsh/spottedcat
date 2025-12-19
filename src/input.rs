@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use winit::event::{ElementState, MouseButton, MouseScrollDelta};
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta};
 use winit::keyboard::PhysicalKey;
 
 use crate::Key;
@@ -23,6 +23,9 @@ pub struct InputManager {
     cursor_position: Option<(Pt, Pt)>,
     scroll_delta: (f32, f32),
     focused: bool,
+
+    text_input: String,
+    ime_preedit: Option<String>,
 }
 
 impl Default for InputManager {
@@ -42,6 +45,9 @@ impl Default for InputManager {
             cursor_position: None,
             scroll_delta: (0.0, 0.0),
             focused: false,
+
+            text_input: String::new(),
+            ime_preedit: None,
         }
     }
 }
@@ -66,6 +72,14 @@ impl InputManager {
 
     pub fn scroll_delta(&self) -> (f32, f32) {
         self.scroll_delta
+    }
+
+    pub fn text_input(&self) -> &str {
+        &self.text_input
+    }
+
+    pub fn ime_preedit(&self) -> Option<&str> {
+        self.ime_preedit.as_deref()
     }
 
     pub fn key_down(&self, key: Key) -> bool {
@@ -127,6 +141,7 @@ impl InputManager {
         self.mouse_other_pressed.clear();
         self.mouse_other_released.clear();
         self.scroll_delta = (0.0, 0.0);
+        self.text_input.clear();
     }
 
     pub(crate) fn handle_focus(&mut self, focused: bool) {
@@ -141,6 +156,38 @@ impl InputManager {
             self.mouse_other_down.clear();
             self.mouse_other_pressed.clear();
             self.mouse_other_released.clear();
+
+            self.text_input.clear();
+            self.ime_preedit = None;
+        }
+    }
+
+    pub(crate) fn handle_received_character(&mut self, ch: char) {
+        // Ignore control characters; keep printable/unicode characters.
+        if ch.is_control() {
+            return;
+        }
+        self.text_input.push(ch);
+    }
+
+    pub(crate) fn handle_ime(&mut self, ime: Ime) {
+        match ime {
+            Ime::Preedit(value, _cursor) => {
+                if value.is_empty() {
+                    self.ime_preedit = None;
+                } else {
+                    self.ime_preedit = Some(value);
+                }
+            }
+            Ime::Commit(value) => {
+                if !value.is_empty() {
+                    self.text_input.push_str(&value);
+                }
+                self.ime_preedit = None;
+            }
+            Ime::Enabled | Ime::Disabled => {
+                self.ime_preedit = None;
+            }
         }
     }
 

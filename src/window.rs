@@ -86,6 +86,8 @@ impl ApplicationHandler for App {
                     .with_resizable(self.window_config.resizable),
             )
             .expect("failed to create window");
+
+        window.set_ime_allowed(true);
         self.scale_factor = window.scale_factor();
         self.context.set_scale_factor(self.scale_factor);
         let size = window.inner_size();
@@ -119,6 +121,9 @@ impl ApplicationHandler for App {
             WindowEvent::Focused(focused) => {
                 self.context.input_mut().handle_focus(focused);
             }
+            WindowEvent::Ime(ime) => {
+                self.context.input_mut().handle_ime(ime);
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale_factor = scale_factor;
                 self.context.set_scale_factor(self.scale_factor);
@@ -143,6 +148,14 @@ impl ApplicationHandler for App {
                 self.context
                     .input_mut()
                     .handle_keyboard_input(event.state, event.physical_key);
+
+                if matches!(event.state, winit::event::ElementState::Pressed) {
+                    if let Some(text) = event.text.as_deref() {
+                        for ch in text.chars() {
+                            self.context.input_mut().handle_received_character(ch);
+                        }
+                    }
+                }
             }
             WindowEvent::RedrawRequested => {
                 if let Some(surface) = self.surface.as_ref() {
