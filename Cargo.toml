@@ -1,5 +1,5 @@
 [package]
-name = "rustyspottedcat"
+name = "spottedcat"
 version = "0.1.0"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]

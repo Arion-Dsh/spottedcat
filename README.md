@@ -1,4 +1,4 @@
-# Rustyspottedcat
+# spottedcat
 
 A simple, clean 2D graphics library for drawing images using Rust and wgpu.
 
@@ -15,13 +15,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyspottedcat = { version = "0.1.0" }
+spottedcat = { version = "0.1.0" }
 ```
 
 ### Basic Example
 
 ```rust
-use rustyspottedcat::{Context, Spot, Image, DrawOption};
+use spottedcat::{Context, Spot, Image, DrawOption};
 
 struct MyApp {
     image: Image,
@@ -41,12 +41,12 @@ impl Spot for MyApp {
         context.draw_image(self.image, opts);
     }
 
-    fn update(&mut self, _context: &mut rustyspottedcat::Context, _dt: std::time::Duration) {}
+    fn update(&mut self, _context: &mut spottedcat::Context, _dt: std::time::Duration) {}
     fn remove(&self) {}
 }
 
 fn main() {
-    rustyspottedcat::run::<MyApp>(rustyspottedcat::WindowConfig::default());
+    spottedcat::run::<MyApp>(spottedcat::WindowConfig::default());
 }
 ```
 

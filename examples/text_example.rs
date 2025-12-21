@@ -1,4 +1,4 @@
-use rustyspottedcat::{Context, Spot, Text, TextOptions, load_font_from_bytes};
+use spottedcat::{Context, Spot, Text, TextOptions, load_font_from_bytes};
 
 struct TextApp {}
 
@@ -32,16 +32,16 @@ impl Spot for TextApp {
 
         // 使用 Text::draw() - 传入字体数据
         let mut opts = TextOptions::new(font_data.clone());
-        opts.position = [rustyspottedcat::Pt(100.0), rustyspottedcat::Pt(100.0)];
-        opts.font_size = rustyspottedcat::Pt(32.0);
+        opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
+        opts.font_size = spottedcat::Pt(32.0);
         opts.color = [1.0, 1.0, 1.0, 1.0];
         Text::new("Provided Font").draw(context, opts);
         
         let mut custom_opts = TextOptions::new(font_data.clone());
-        custom_opts.position = [rustyspottedcat::Pt(100.0), rustyspottedcat::Pt(150.0)];
-        custom_opts.font_size = rustyspottedcat::Pt(28.0);
+        custom_opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(150.0)];
+        custom_opts.font_size = spottedcat::Pt(28.0);
         custom_opts.color = [1.0, 0.5, 0.0, 1.0]; // 橙色
-        custom_opts.stroke_width = rustyspottedcat::Pt(2.0);
+        custom_opts.stroke_width = spottedcat::Pt(2.0);
         custom_opts.stroke_color = [1.0, 1.0, 1.0, 1.0];
         Text::new("使用嵌入字体 - Embedded Font").draw(context, custom_opts);
 
@@ -51,21 +51,21 @@ impl Spot for TextApp {
             None => TextOptions::from_file("assets/DejaVuSans.ttf")
                 .unwrap_or_else(|_| TextOptions::new(font_data.clone())),
         };
-        file_opts.position = [rustyspottedcat::Pt(100.0), rustyspottedcat::Pt(200.0)];
-        file_opts.font_size = rustyspottedcat::Pt(24.0);
+        file_opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(200.0)];
+        file_opts.font_size = spottedcat::Pt(24.0);
         file_opts.color = [0.0, 1.0, 0.5, 1.0]; // 青绿色
         Text::new("从文件加载字体 - Loaded from File").draw(context, file_opts);
 
         // 使用 Text::draw() - 不同颜色和大小
         let mut small_opts = TextOptions::new(font_data.clone());
-        small_opts.position = [rustyspottedcat::Pt(100.0), rustyspottedcat::Pt(250.0)];
-        small_opts.font_size = rustyspottedcat::Pt(18.0);
+        small_opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(250.0)];
+        small_opts.font_size = spottedcat::Pt(18.0);
         small_opts.color = [0.5, 0.5, 1.0, 1.0]; // 淡蓝色
         Text::new("小字体 - Small Font Size").draw(context, small_opts);
 
         let mut large_opts = TextOptions::new(font_data);
-        large_opts.position = [rustyspottedcat::Pt(100.0), rustyspottedcat::Pt(300.0)];
-        large_opts.font_size = rustyspottedcat::Pt(48.0);
+        large_opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(300.0)];
+        large_opts.font_size = spottedcat::Pt(48.0);
         large_opts.color = [1.0, 0.0, 0.5, 1.0]; // 粉红色
         Text::new("大字体 - Large Font").draw(context, large_opts);
     }
@@ -75,5 +75,5 @@ impl Spot for TextApp {
 }
 
 fn main() {
-    rustyspottedcat::run::<TextApp>(rustyspottedcat::WindowConfig::default());
+    spottedcat::run::<TextApp>(spottedcat::WindowConfig::default());
 }

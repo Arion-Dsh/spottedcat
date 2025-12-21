@@ -1,4 +1,4 @@
-use rustyspottedcat::{Context, Key, Spot, Text, TextOptions};
+use spottedcat::{Context, Key, Spot, Text, TextOptions};
 
 struct TextInputExample {
     committed: String,
@@ -22,13 +22,13 @@ impl Spot for TextInputExample {
 
         let mut font_data = None;
         for path in font_candidates {
-            if let Ok(data) = rustyspottedcat::load_font_from_file(path) {
+            if let Ok(data) = spottedcat::load_font_from_file(path) {
                 font_data = Some(data);
                 break;
             }
         }
 
-        let font_data = font_data.unwrap_or_else(|| rustyspottedcat::load_font_from_bytes(FALLBACK_FONT));
+        let font_data = font_data.unwrap_or_else(|| spottedcat::load_font_from_bytes(FALLBACK_FONT));
         Self {
             committed: String::new(),
             preedit: String::new(),
@@ -38,18 +38,18 @@ impl Spot for TextInputExample {
 
     fn update(&mut self, ctx: &mut Context, _dt: std::time::Duration) {
         // Append characters entered this frame.
-        self.committed.push_str(rustyspottedcat::text_input(ctx));
+        self.committed.push_str(spottedcat::text_input(ctx));
 
         // Cache IME preedit so draw() doesn't need to query input state.
-        self.preedit = rustyspottedcat::ime_preedit(ctx).unwrap_or("").to_string();
+        self.preedit = spottedcat::ime_preedit(ctx).unwrap_or("").to_string();
 
         // Simple editing: Backspace deletes one Unicode scalar value.
-        if rustyspottedcat::key_pressed(ctx, Key::Backspace) {
+        if spottedcat::key_pressed(ctx, Key::Backspace) {
             self.committed.pop();
         }
 
         // Clear input.
-        if rustyspottedcat::key_pressed(ctx, Key::Escape) {
+        if spottedcat::key_pressed(ctx, Key::Escape) {
             self.committed.clear();
             self.preedit.clear();
         }
@@ -57,14 +57,14 @@ impl Spot for TextInputExample {
 
     fn draw(&mut self, ctx: &mut Context) {
         let mut title_opts = TextOptions::new(self.font_data.clone());
-        title_opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(40.0)];
-        title_opts.font_size = rustyspottedcat::Pt(22.0);
+        title_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(40.0)];
+        title_opts.font_size = spottedcat::Pt(22.0);
         title_opts.color = [1.0, 1.0, 1.0, 1.0];
         Text::new("Text Input Example (type to input, Backspace delete, Esc clear)").draw(ctx, title_opts);
 
         let mut input_opts = TextOptions::new(self.font_data.clone());
-        input_opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(90.0)];
-        input_opts.font_size = rustyspottedcat::Pt(28.0);
+        input_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(90.0)];
+        input_opts.font_size = spottedcat::Pt(28.0);
         input_opts.color = [0.9, 0.9, 0.9, 1.0];
 
         let mut composed = self.committed.clone();
@@ -75,8 +75,8 @@ impl Spot for TextInputExample {
 
         if !self.preedit.is_empty() {
             let mut ime_opts = TextOptions::new(self.font_data.clone());
-            ime_opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(130.0)];
-            ime_opts.font_size = rustyspottedcat::Pt(16.0);
+            ime_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(130.0)];
+            ime_opts.font_size = spottedcat::Pt(16.0);
             ime_opts.color = [0.6, 0.8, 1.0, 1.0];
             Text::new(format!("IME preedit: {}", self.preedit)).draw(ctx, ime_opts);
         }
@@ -86,5 +86,5 @@ impl Spot for TextInputExample {
 }
 
 fn main() {
-    rustyspottedcat::run::<TextInputExample>(rustyspottedcat::WindowConfig::default());
+    spottedcat::run::<TextInputExample>(spottedcat::WindowConfig::default());
 }

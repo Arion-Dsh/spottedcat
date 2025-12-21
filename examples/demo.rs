@@ -1,5 +1,5 @@
 fn main() {
-    use rustyspottedcat::{Bounds, Context, Image, ImageDrawOptions, Pt, Spot, WindowConfig, run};
+    use spottedcat::{Bounds, Context, Image, ImageDrawOptions, Pt, Spot, WindowConfig, run};
 
     struct DemoSpot {
         tree: Image,
