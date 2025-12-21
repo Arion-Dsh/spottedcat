@@ -53,7 +53,7 @@ fn main() {
             let sub_opt = spot::DrawOption { options: sub_opts };
             let sprite_drawable = spot::DrawAble::Image(self.sprite, spot::ImageDrawOptions::default());
             self.canvas
-                .draw_sub(sprite_drawable, sub_opt)
+                .draw_sub(context, sprite_drawable, sub_opt)
                 .expect("failed to draw sprite onto canvas");
 
             self.rng_state = self
@@ -72,7 +72,7 @@ fn main() {
                     options: text_draw_opts,
                 };
                 self.canvas
-                    .draw_sub(text_drawable, text_draw_opt)
+                    .draw_sub(context, text_drawable, text_draw_opt)
                     .expect("failed to draw text onto canvas");
             }
 

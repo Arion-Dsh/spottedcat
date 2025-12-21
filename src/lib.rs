@@ -62,6 +62,13 @@ pub use mouse::MouseButton;
 pub use pt::Pt;
 
 #[derive(Debug, Clone)]
+pub(crate) struct OffscreenCommand {
+    pub(crate) target: Image,
+    pub(crate) drawables: Vec<DrawAble>,
+    pub(crate) option: DrawOption,
+}
+
+#[derive(Debug, Clone)]
 pub struct WindowConfig {
     pub title: String,
     pub width: Pt,
@@ -90,6 +97,7 @@ use crate::graphics::Graphics;
 #[derive(Debug, Clone)]
 pub struct Context {
     draw_list: Vec<DrawAble>,
+    offscreen: Vec<OffscreenCommand>,
     input: InputManager,
     scale_factor: f64,
 }
@@ -102,6 +110,7 @@ impl Context {
     pub fn new() -> Self {
         Self {
             draw_list: Vec::new(),
+            offscreen: Vec::new(),
             input: InputManager::new(),
             scale_factor: 1.0,
         }
@@ -113,6 +122,7 @@ impl Context {
     /// manually if needed.
     pub(crate) fn begin_frame(&mut self) {
         self.draw_list.clear();
+        self.offscreen.clear();
     }
 
     pub(crate) fn input(&self) -> &InputManager {
@@ -147,6 +157,14 @@ impl Context {
 
     pub(crate) fn push_text(&mut self, text: String, options: TextOptions) {
         self.push(DrawAble::Text(text, options));
+    }
+
+    pub(crate) fn push_offscreen(&mut self, cmd: OffscreenCommand) {
+        self.offscreen.push(cmd);
+    }
+
+    pub(crate) fn take_offscreen(&mut self) -> Vec<OffscreenCommand> {
+        std::mem::take(&mut self.offscreen)
     }
 }
 

@@ -1,4 +1,4 @@
-# Spot
+# Rustyspottedcat
 
 A simple, clean 2D graphics library for drawing images using Rust and wgpu.
 
@@ -15,7 +15,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spot = { path = "." }
+rustyspottedcat = { version = "0.0.1" }
 ```
 
 ### Basic Example
@@ -137,42 +137,3 @@ let mut rgba = vec![0u8; 64 * 64 * 4];
 // Fill with your pixel data...
 let image = Image::new_from_rgba8(64, 64, &rgba)?;
 ```
-
-## Project Structure
-
-```
-spot/
-├── src/
-│   ├── lib.rs          # Public API and core types
-│   ├── graphics.rs     # Graphics system and rendering
-│   ├── image.rs        # Image resource management
-│   ├── image_raw.rs    # Low-level image rendering
-│   ├── texture.rs      # GPU texture wrapper
-│   ├── drawable.rs     # Drawing primitives
-│   ├── window.rs       # Window and event loop
-│   └── main.rs         # Example application
-├── Cargo.toml
-└── README.md
-```
-
-## Architecture
-
-The library is organized into clear layers:
-
-1. **Public API** (`lib.rs`): Clean, minimal surface exposing only essential types
-2. **Graphics System** (`graphics.rs`): Manages GPU state and rendering pipeline
-3. **Resource Management** (`image.rs`, `texture.rs`): Handles image lifecycle
-4. **Rendering** (`image_raw.rs`): Low-level GPU rendering operations
-5. **Application** (`window.rs`): Window management and event loop
-
-## Dependencies
-
-- `wgpu` - Modern GPU API
-- `winit` - Cross-platform windowing
-- `image` - Image loading and decoding
-- `bytemuck` - Safe type casting
-- `anyhow` - Error handling
-
-## License
-
-See LICENSE file for details.

@@ -32,6 +32,46 @@ impl Default for ImageTransform {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+pub struct InstanceData {
+    pub mvp: [[f32; 4]; 4],
+    pub uvp: [[f32; 4]; 4],
+    pub color: [f32; 4],
+}
+
+impl From<ImageTransform> for InstanceData {
+    fn from(t: ImageTransform) -> Self {
+        Self {
+            mvp: t.mvp,
+            uvp: t.uvp,
+            color: t.color,
+        }
+    }
+}
+
+impl InstanceData {
+    const ATTRS: [wgpu::VertexAttribute; 9] = wgpu::vertex_attr_array![
+        2 => Float32x4,
+        3 => Float32x4,
+        4 => Float32x4,
+        5 => Float32x4,
+        6 => Float32x4,
+        7 => Float32x4,
+        8 => Float32x4,
+        9 => Float32x4,
+        10 => Float32x4
+    ];
+
+    fn layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::ATTRS,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 struct QuadVertex {
     pos: [f32; 2],
     uv: [f32; 2],
@@ -61,12 +101,11 @@ pub struct ImageRenderer {
     pub(crate) quad_index_buffer: wgpu::Buffer,
     pub(crate) quad_index_count: u32,
 
-    pub(crate) transform_buffer: wgpu::Buffer,
-    pub(crate) transform_bind_group: wgpu::BindGroup,
-    pub(crate) transform_stride: u32,
-
     pub(crate) sampler: wgpu::Sampler,
     pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,
+
+    pub(crate) instance_buffer: wgpu::Buffer,
+    pub(crate) instance_stride: u32,
 
     next_instance: u32,
     max_instances: u32,
@@ -74,45 +113,16 @@ pub struct ImageRenderer {
 
 impl ImageRenderer {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat, max_instances: u32) -> Self {
-        let transform_size = std::mem::size_of::<ImageTransform>() as u32;
-        let alignment = device.limits().min_uniform_buffer_offset_alignment;
-        let transform_stride = align_up(transform_size, alignment);
-        let transform_buffer_size = transform_stride as wgpu::BufferAddress * max_instances as wgpu::BufferAddress;
+        let instance_size = std::mem::size_of::<InstanceData>() as u32;
+        let alignment = 16;
+        let instance_stride = align_up(instance_size, alignment);
+        let instance_buffer_size = instance_stride as wgpu::BufferAddress * max_instances as wgpu::BufferAddress;
 
-        let transform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("image_transform_buffer"),
-            size: transform_buffer_size,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("image_instance_buffer"),
+            size: instance_buffer_size,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
-        });
-
-        let transform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("image_transform_bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: Some(
-                        std::num::NonZeroU64::new(std::mem::size_of::<ImageTransform>() as u64).unwrap(),
-                    ),
-                },
-                count: None,
-            }],
-        });
-
-        let transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("image_transform_bg"),
-            layout: &transform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &transform_buffer,
-                    offset: 0,
-                    size: Some(std::num::NonZeroU64::new(std::mem::size_of::<ImageTransform>() as u64).unwrap()),
-                }),
-            }],
         });
 
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -144,7 +154,7 @@ impl ImageRenderer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("image_pipeline_layout"),
-            bind_group_layouts: &[&transform_bind_group_layout, &texture_bind_group_layout],
+            bind_group_layouts: &[&texture_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -152,44 +162,48 @@ impl ImageRenderer {
             label: Some("image_shader"),
             source: wgpu::ShaderSource::Wgsl(
                 r#"
-struct ImageTransform {
-    mvp: mat4x4<f32>,
-    uvp: mat4x4<f32>,
-    color: vec4<f32>,
-};
-
 @group(0) @binding(0)
-var<uniform> u: ImageTransform;
-
-@group(1) @binding(0)
 var tex: texture_2d<f32>;
 
-@group(1) @binding(1)
+@group(0) @binding(1)
 var samp: sampler;
 
 struct VsIn {
     @location(0) pos: vec2<f32>,
     @location(1) uv: vec2<f32>,
+    @location(2) mvp0: vec4<f32>,
+    @location(3) mvp1: vec4<f32>,
+    @location(4) mvp2: vec4<f32>,
+    @location(5) mvp3: vec4<f32>,
+    @location(6) uvp0: vec4<f32>,
+    @location(7) uvp1: vec4<f32>,
+    @location(8) uvp2: vec4<f32>,
+    @location(9) uvp3: vec4<f32>,
+    @location(10) color: vec4<f32>,
 };
 
 struct VsOut {
     @builtin(position) clip_pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) color: vec4<f32>,
 };
 
 @vertex
 fn vs_main(in: VsIn) -> VsOut {
     var out: VsOut;
-    out.clip_pos = u.mvp * vec4<f32>(in.pos, 0.0, 1.0);
-    let uv4 = u.uvp * vec4<f32>(in.uv, 0.0, 1.0);
+    let mvp = mat4x4<f32>(in.mvp0, in.mvp1, in.mvp2, in.mvp3);
+    let uvp = mat4x4<f32>(in.uvp0, in.uvp1, in.uvp2, in.uvp3);
+    out.clip_pos = mvp * vec4<f32>(in.pos, 0.0, 1.0);
+    let uv4 = uvp * vec4<f32>(in.uv, 0.0, 1.0);
     out.uv = uv4.xy;
+    out.color = in.color;
     return out;
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, in.uv);
-    return c * u.color;
+    return c * in.color;
 }
 "#
                 .into(),
@@ -203,7 +217,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[QuadVertex::layout()],
+                buffers: &[QuadVertex::layout(), InstanceData::layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -254,25 +268,21 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             quad_vertex_buffer,
             quad_index_buffer,
             quad_index_count: indices.len() as u32,
-            transform_buffer,
-            transform_bind_group,
-            transform_stride,
             sampler,
             texture_bind_group_layout,
+            instance_buffer,
+            instance_stride,
             next_instance: 0,
             max_instances,
         }
     }
 
-    pub fn create_image(&mut self, device: &wgpu::Device, texture_view: &wgpu::TextureView) -> anyhow::Result<ImageRaw> {
-        if self.next_instance >= self.max_instances {
-            return Err(anyhow::anyhow!("max image instances exceeded"));
-        }
-
-        let transform_offset = self.next_instance * self.transform_stride;
-        self.next_instance += 1;
-
-        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+    pub fn create_texture_bind_group(
+        &self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("image_texture_bg"),
             layout: &self.texture_bind_group_layout,
             entries: &[
@@ -285,50 +295,54 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
                 },
             ],
-        });
-
-        Ok(ImageRaw {
-            texture_bind_group,
-            transform_offset,
-            transform: ImageTransform::default(),
-            dirty: true,
         })
     }
 
+    pub fn begin_frame(&mut self) {
+        self.next_instance = 0;
+    }
 
-    pub fn flush_image(&self, queue: &wgpu::Queue, image: &mut ImageRaw) {
-        if !image.dirty {
-            return;
+    pub fn upload_instances(
+        &mut self,
+        queue: &wgpu::Queue,
+        instances: &[InstanceData],
+    ) -> anyhow::Result<std::ops::Range<u32>> {
+        let count = instances.len() as u32;
+        if count == 0 {
+            return Ok(0..0);
+        }
+        if self.next_instance.saturating_add(count) > self.max_instances {
+            return Err(anyhow::anyhow!("max image instances exceeded"));
         }
 
+        let start = self.next_instance;
+        let offset_bytes = start as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
         queue.write_buffer(
-            &self.transform_buffer,
-            image.transform_offset as wgpu::BufferAddress,
-            bytemuck::bytes_of(&image.transform),
+            &self.instance_buffer,
+            offset_bytes,
+            bytemuck::cast_slice(instances),
         );
-        image.dirty = false;
+        self.next_instance += count;
+        Ok(start..(start + count))
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, image: &ImageRaw) {
+    pub fn draw_batch<'rp>(
+        &self,
+        pass: &mut wgpu::RenderPass<'rp>,
+        texture_bind_group: &wgpu::BindGroup,
+        instance_range: std::ops::Range<u32>,
+    ) {
+        if instance_range.start == instance_range.end {
+            return;
+        }
         pass.set_pipeline(&self.pipeline);
         pass.set_vertex_buffer(0, self.quad_vertex_buffer.slice(..));
+        let start = instance_range.start as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
+        let end = instance_range.end as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
+        pass.set_vertex_buffer(1, self.instance_buffer.slice(start..end));
         pass.set_index_buffer(self.quad_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        pass.set_bind_group(0, &self.transform_bind_group, &[image.transform_offset]);
-        pass.set_bind_group(1, &image.texture_bind_group, &[]);
-        pass.draw_indexed(0..self.quad_index_count, 0, 0..1);
-    }
-}
-
-pub struct ImageRaw {
-    pub(crate) texture_bind_group: wgpu::BindGroup,
-    pub(crate) transform_offset: u32,
-    pub(crate) transform: ImageTransform,
-    pub(crate) dirty: bool,
-}
-
-impl ImageRaw {
-    pub fn set_transform(&mut self, t: ImageTransform) {
-        self.transform = t;
-        self.dirty = true;
+        pass.set_bind_group(0, texture_bind_group, &[]);
+        let instance_count = instance_range.end - instance_range.start;
+        pass.draw_indexed(0..self.quad_index_count, 0, 0..instance_count);
     }
 }

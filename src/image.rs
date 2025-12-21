@@ -1,5 +1,4 @@
-
-use crate::image_raw::{ImageRaw, ImageRenderer, ImageTransform};
+ 
 use crate::texture::Texture;
 use crate::with_graphics;
 
@@ -56,8 +55,8 @@ impl Image {
                 rgba,
                 g.surface_format(),
             )?;
-            let raw = g.create_raw_from_texture(&texture)?;
-            Ok(g.insert_image_entry(ImageEntry::new(texture, raw)))
+            let bg = g.create_texture_bind_group_from_texture(&texture);
+            Ok(g.insert_image_entry(ImageEntry::new(texture, bg)))
         })
     }
 
@@ -139,32 +138,42 @@ impl Image {
     /// ```
     pub fn draw_sub(
         self,
+        context: &mut crate::Context,
         drawable: crate::drawable::DrawAble,
         option: crate::drawable::DrawOption,
     ) -> anyhow::Result<()> {
-        with_graphics(|g| {
-            let drawable_with_options = match drawable {
-                crate::drawable::DrawAble::Image(img, _) => {
-                    // Apply DrawOption to the image
-                    crate::drawable::DrawAble::Image(img, option.options)
-                }
-                crate::drawable::DrawAble::Text(text, mut text_opts) => {
-                    // Apply position from DrawOption to text
-                    text_opts.position = option.options.position;
-                    text_opts.scale = option.options.scale;
-                    crate::drawable::DrawAble::Text(text, text_opts)
-                }
-            };
-            g.draw_drawables_to_image(self, &[drawable_with_options], option)
-        })
+        if matches!(drawable, crate::drawable::DrawAble::Image(id, _) if id == self) {
+            return Err(anyhow::anyhow!(
+                "cannot draw an image into itself; use a separate target image"
+            ));
+        }
+
+        let drawable_with_options = match drawable {
+            crate::drawable::DrawAble::Image(img, _) => {
+                crate::drawable::DrawAble::Image(img, option.options)
+            }
+            crate::drawable::DrawAble::Text(text, mut text_opts) => {
+                text_opts.position = option.options.position;
+                text_opts.scale = option.options.scale;
+                crate::drawable::DrawAble::Text(text, text_opts)
+            }
+        };
+
+        context.push_offscreen(crate::OffscreenCommand {
+            target: self,
+            drawables: vec![drawable_with_options],
+            option,
+        });
+        Ok(())
     }
 
     pub fn draw_to(
         self,
+        context: &mut crate::Context,
         drawable: crate::drawable::DrawAble,
         option: crate::drawable::DrawOption,
     ) -> anyhow::Result<()> {
-        self.draw_sub(drawable, option)
+        self.draw_sub(context, drawable, option)
     }
 
     pub fn clear(self, color: [f32; 4]) -> anyhow::Result<()> {
@@ -185,44 +194,53 @@ impl Image {
 
 pub(crate) struct ImageEntry {
     pub(crate) texture: Texture,
-    pub(crate) raw: ImageRaw,
     pub(crate) bounds: Bounds,
-    visible: bool,
+    pub(crate) uvp: [[f32; 4]; 4],
+    pub(crate) texture_bind_group: wgpu::BindGroup,
+    pub(crate) visible: bool,
 }
 
 impl ImageEntry {
-    pub(crate) fn new(texture: Texture, raw: ImageRaw) -> Self {
+    pub(crate) fn new(texture: Texture, texture_bind_group: wgpu::BindGroup) -> Self {
         let bounds = Bounds {
             x: 0,
             y: 0,
             width: texture.0.width,
             height: texture.0.height,
         };
+        let uvp = Self::uvp_from(texture.0.width, texture.0.height, bounds);
         Self {
             texture,
-            raw,
             bounds,
+            uvp,
+            texture_bind_group,
             visible: true,
         }
     }
 
-    pub(crate) fn new_with_bounds(texture: Texture, raw: ImageRaw, bounds: Bounds) -> Self {
+    pub(crate) fn new_with_bounds(
+        texture: Texture,
+        texture_bind_group: wgpu::BindGroup,
+        bounds: Bounds,
+    ) -> Self {
+        let uvp = Self::uvp_from(texture.0.width, texture.0.height, bounds);
         Self {
             texture,
-            raw,
             bounds,
+            uvp,
+            texture_bind_group,
             visible: true,
         }
     }
 
-    pub(crate) fn uvp_from_bounds(&self) -> [[f32; 4]; 4] {
-        let tw = self.texture.0.width as f32;
-        let th = self.texture.0.height as f32;
+    fn uvp_from(tex_w: u32, tex_h: u32, bounds: Bounds) -> [[f32; 4]; 4] {
+        let tw = tex_w as f32;
+        let th = tex_h as f32;
 
-        let u0 = (self.bounds.x as f32) / tw;
-        let v0 = (self.bounds.y as f32) / th;
-        let u1 = ((self.bounds.x + self.bounds.width) as f32) / tw;
-        let v1 = ((self.bounds.y + self.bounds.height) as f32) / th;
+        let u0 = (bounds.x as f32) / tw;
+        let v0 = (bounds.y as f32) / th;
+        let u1 = ((bounds.x + bounds.width) as f32) / tw;
+        let v1 = ((bounds.y + bounds.height) as f32) / th;
 
         let sx = u1 - u0;
         let sy = v1 - v0;
@@ -233,23 +251,5 @@ impl ImageEntry {
             [0.0, 0.0, 1.0, 0.0],
             [u0, v0, 0.0, 1.0],
         ]
-    }
-
-    pub(crate) fn set_transform(&mut self, t: ImageTransform) {
-        self.raw.set_transform(t);
-    }
-
-    pub(crate) fn flush(&mut self, renderer: &ImageRenderer, queue: &wgpu::Queue) {
-        if !self.visible {
-            return;
-        }
-        renderer.flush_image(queue, &mut self.raw);
-    }
-
-    pub(crate) fn draw<'a>(&self, renderer: &'a ImageRenderer, pass: &mut wgpu::RenderPass<'a>) {
-        if !self.visible {
-            return;
-        }
-        renderer.draw(pass, &self.raw);
     }
 }

@@ -171,8 +171,18 @@ impl ApplicationHandler for App {
                         }
                         self.spot = Some(factory());
                     }
-                    
-                    let _ = with_graphics(|g| g.draw_context(surface, &self.context));
+
+                    let offscreen = self.context.take_offscreen();
+                    let _ = with_graphics(|g| {
+                        for cmd in offscreen {
+                            if let Err(e) =
+                                g.draw_drawables_to_image(cmd.target, &cmd.drawables, cmd.option)
+                            {
+                                eprintln!("offscreen draw failed: {e:?}");
+                            }
+                        }
+                        g.draw_context(surface, &self.context)
+                    });
                 }
             }
             _ => {}

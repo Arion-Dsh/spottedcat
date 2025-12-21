@@ -1,6 +1,6 @@
 use crate::{Context, DrawAble, DrawOption, ImageDrawOptions};
 use crate::image::{Bounds, Image, ImageEntry};
-use crate::image_raw::{ImageRaw, ImageRenderer, ImageTransform};
+use crate::image_raw::{ImageRenderer, ImageTransform, InstanceData};
 use crate::texture::Texture;
 use crate::text_renderer::TextRenderer;
 
@@ -152,9 +152,12 @@ impl Graphics {
          (&self.device, &self.queue)
      }
 
-     pub(crate) fn create_raw_from_texture(&mut self, texture: &Texture) -> anyhow::Result<ImageRaw> {
+     pub(crate) fn create_texture_bind_group_from_texture(
+         &self,
+         texture: &Texture,
+     ) -> wgpu::BindGroup {
          self.image_renderer
-             .create_image(&self.device, &texture.0.view)
+             .create_texture_bind_group(&self.device, &texture.0.view)
      }
 
      pub(crate) fn insert_image_entry(&mut self, entry: ImageEntry) -> Image {
@@ -168,16 +171,14 @@ impl Graphics {
          image: Image,
          bounds: Option<Bounds>,
      ) -> anyhow::Result<Image> {
-         let (texture, src_bounds) = {
+         let (texture, src_bounds, src_bg) = {
              let src = self
                  .images
                  .get(image.0)
                  .and_then(|v| v.as_ref())
                  .ok_or_else(|| anyhow::anyhow!("invalid source image"))?;
-             (src.texture.clone(), src.bounds)
+             (src.texture.clone(), src.bounds, src.texture_bind_group.clone())
          };
-
-         let raw = self.create_raw_from_texture(&texture)?;
 
          let tex_w = texture.0.width;
          let tex_h = texture.0.height;
@@ -202,7 +203,9 @@ impl Graphics {
              }
          };
 
-         Ok(self.insert_image_entry(ImageEntry::new_with_bounds(texture, raw, b)))
+         Ok(self.insert_image_entry(ImageEntry::new_with_bounds(
+             texture, src_bg, b,
+         )))
      }
 
      pub(crate) fn take_image_entry(&mut self, image: Image) -> Option<ImageEntry> {
@@ -233,7 +236,7 @@ impl Graphics {
                 label: Some("graphics_encoder"),
             });
 
-        let renderer = &self.image_renderer;
+        self.image_renderer.begin_frame();
         self.text_renderer
             .begin_frame(self.config.width, self.config.height, &self.queue);
         let (sw, sh) = (self.config.width as f32, self.config.height as f32);
@@ -255,37 +258,102 @@ impl Graphics {
                 occlusion_query_set: None,
             });
 
+            let mut current_key: Option<usize> = None;
+            let mut current_bg: Option<wgpu::BindGroup> = None;
+            let mut batch: Vec<InstanceData> = Vec::new();
+
             for drawable in drawables {
                 match drawable {
                     DrawAble::Image(id, opts) => {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
-                        if let Some(Some(img)) = self.images.get_mut(id.0) {
-                            let base_w_px = img.bounds.width as f32;
-                            let base_h_px = img.bounds.height as f32;
-                            let t = ImageTransform {
-                                mvp: mvp_from_draw_options(
-                                    sw,
-                                    sh,
-                                    base_w_px,
-                                    base_h_px,
-                                    *opts,
-                                ),
-                                uvp: img.uvp_from_bounds(),
-                                color: ImageTransform::default().color,
-                            };
-                            img.set_transform(t);
-                            img.flush(renderer, &self.queue);
-                            img.draw(renderer, &mut rpass);
+
+                        let Some(Some(img)) = self.images.get(id.0) else {
+                            continue;
+                        };
+                        if !img.visible {
+                            continue;
                         }
+
+                        let tex_key = std::sync::Arc::as_ptr(&img.texture.0) as usize;
+                        if current_key.is_some() && current_key != Some(tex_key) {
+                            if !batch.is_empty() {
+                                let Some(bind_group) = current_bg.clone() else {
+                                    batch.clear();
+                                    continue;
+                                };
+                                let range_opt = {
+                                    let renderer = &mut self.image_renderer;
+                                    match renderer.upload_instances(&self.queue, batch.as_slice()) {
+                                        Ok(r) => Some(r),
+                                        Err(_) => None,
+                                    }
+                                };
+                                if let Some(range) = range_opt {
+                                    let renderer = &self.image_renderer;
+                                    renderer.draw_batch(&mut rpass, &bind_group, range);
+                                }
+                                batch.clear();
+                            }
+                        }
+                        if current_key != Some(tex_key) {
+                            current_key = Some(tex_key);
+                            current_bg = Some(img.texture_bind_group.clone());
+                        }
+
+                        let base_w_px = img.bounds.width as f32;
+                        let base_h_px = img.bounds.height as f32;
+                        let t = ImageTransform {
+                            mvp: mvp_from_draw_options(sw, sh, base_w_px, base_h_px, *opts),
+                            uvp: img.uvp,
+                            color: ImageTransform::default().color,
+                        };
+                        batch.push(InstanceData::from(t));
                     }
                     DrawAble::Text(text, opts) => {
+                        if !batch.is_empty() {
+                            if let Some(bind_group) = current_bg.clone() {
+                                let range_opt = {
+                                    let renderer = &mut self.image_renderer;
+                                    match renderer.upload_instances(&self.queue, batch.as_slice()) {
+                                        Ok(r) => Some(r),
+                                        Err(_) => None,
+                                    }
+                                };
+                                if let Some(range) = range_opt {
+                                    let renderer = &self.image_renderer;
+                                    renderer.draw_batch(&mut rpass, &bind_group, range);
+                                }
+                            }
+                            batch.clear();
+                        }
+                        current_key = None;
+                        current_bg = None;
                         self.text_renderer
                             .queue_text(text, opts, &self.queue)
                             .expect("Text draw requires valid font_data");
                     }
                 }
             }
+
+            if !batch.is_empty() {
+                if let Some(bind_group) = current_bg.clone() {
+                    let range_opt = {
+                        let renderer = &mut self.image_renderer;
+                        match renderer.upload_instances(&self.queue, batch.as_slice()) {
+                            Ok(r) => Some(r),
+                            Err(_) => None,
+                        }
+                    };
+                    if let Some(range) = range_opt {
+                        let renderer = &self.image_renderer;
+                        renderer.draw_batch(&mut rpass, &bind_group, range);
+                    }
+                }
+                batch.clear();
+            }
+
+            current_key = None;
 
             self.text_renderer
                 .flush(&self.device, &mut rpass, &self.queue);
@@ -370,7 +438,6 @@ impl Graphics {
             let Some(Some(target_entry)) = self.images.get(target.0) else {
                 return Err(anyhow::anyhow!("invalid target image"));
             };
-
             target_entry.texture.0.view.clone()
         };
 
@@ -408,6 +475,7 @@ impl Graphics {
     }
 
     pub(crate) fn draw_drawables_to_image(
+
         &mut self,
         target: Image,
         drawables: &[DrawAble],
@@ -426,7 +494,6 @@ impl Graphics {
             let Some(Some(target_entry)) = self.images.get(target.0) else {
                 return Err(anyhow::anyhow!("invalid target image"));
             };
-
             (target_entry.texture.0.view.clone(), target_entry.bounds)
         };
 
@@ -443,7 +510,7 @@ impl Graphics {
             store: wgpu::StoreOp::Store,
         };
 
-        let renderer = &self.image_renderer;
+        self.image_renderer.begin_frame();
         self.text_renderer
             .begin_frame(target_bounds.width, target_bounds.height, &self.queue);
 
@@ -461,7 +528,6 @@ impl Graphics {
                 occlusion_query_set: None,
             });
 
-            // Set viewport to match target texture size
             rpass.set_viewport(
                 target_bounds.x as f32,
                 target_bounds.y as f32,
@@ -477,30 +543,84 @@ impl Graphics {
                 target_bounds.height,
             );
 
+            let mut current_key: Option<usize> = None;
+            let mut current_bg: Option<wgpu::BindGroup> = None;
+            let mut batch: Vec<InstanceData> = Vec::new();
+
             for drawable in drawables {
                 match drawable {
                     DrawAble::Image(id, opts) => {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
-                        if let Some(Some(img)) = self.images.get_mut(id.0) {
-                            let base_w_px = img.bounds.width as f32;
-                            let base_h_px = img.bounds.height as f32;
-                            let t = ImageTransform {
-                                mvp: mvp_for_texture(tw, th, base_w_px, base_h_px, *opts),
-                                uvp: img.uvp_from_bounds(),
-                                color: ImageTransform::default().color,
-                            };
-                            img.set_transform(t);
-                            img.flush(renderer, &self.queue);
-                            img.draw(renderer, &mut rpass);
+
+                        let Some(Some(img)) = self.images.get(id.0) else {
+                            continue;
+                        };
+                        if !img.visible {
+                            continue;
                         }
+
+                        let tex_key = std::sync::Arc::as_ptr(&img.texture.0) as usize;
+                        if current_key.is_some() && current_key != Some(tex_key) {
+                            if !batch.is_empty() {
+                                if let Some(bind_group) = current_bg.clone() {
+                                    let range = {
+                                        let renderer = &mut self.image_renderer;
+                                        renderer.upload_instances(&self.queue, batch.as_slice())?
+                                    };
+                                    let renderer = &self.image_renderer;
+                                    renderer.draw_batch(&mut rpass, &bind_group, range);
+                                }
+                                batch.clear();
+                            }
+                        }
+
+                        if current_key != Some(tex_key) {
+                            current_key = Some(tex_key);
+                            current_bg = Some(img.texture_bind_group.clone());
+                        }
+
+                        let base_w_px = img.bounds.width as f32;
+                        let base_h_px = img.bounds.height as f32;
+                        let t = ImageTransform {
+                            mvp: mvp_for_texture(tw, th, base_w_px, base_h_px, *opts),
+                            uvp: img.uvp,
+                            color: ImageTransform::default().color,
+                        };
+                        batch.push(InstanceData::from(t));
                     }
                     DrawAble::Text(text, opts) => {
+                        if !batch.is_empty() {
+                            if let Some(bind_group) = current_bg.clone() {
+                                let range = {
+                                    let renderer = &mut self.image_renderer;
+                                    renderer.upload_instances(&self.queue, batch.as_slice())?
+                                };
+                                let renderer = &self.image_renderer;
+                                renderer.draw_batch(&mut rpass, &bind_group, range);
+                            }
+                            batch.clear();
+                        }
+                        current_key = None;
+                        current_bg = None;
+
                         self.text_renderer
                             .queue_text(text, opts, &self.queue)
                             .expect("Text draw requires valid font_data");
                     }
                 }
+            }
+
+            if !batch.is_empty() {
+                if let Some(bind_group) = current_bg.clone() {
+                    let range = {
+                        let renderer = &mut self.image_renderer;
+                        renderer.upload_instances(&self.queue, batch.as_slice())?
+                    };
+                    let renderer = &self.image_renderer;
+                    renderer.draw_batch(&mut rpass, &bind_group, range);
+                }
+                batch.clear();
             }
 
             self.text_renderer

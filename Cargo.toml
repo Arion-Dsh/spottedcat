@@ -1,7 +1,12 @@
-[package]
-name = "spot"
-version = "0.1.0"
+name = "rustyspottedcat"
+version = "0.0.1"
 edition = "2024"
+authors = ["Arion <arion.dsh@gmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/arion-dsh/spottedcat"
+description = "Rusty SpottedCat simple game engine"
+readme = "README.md"
+
 
 [dependencies]
  wgpu = "27"
