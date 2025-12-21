@@ -184,6 +184,14 @@ pub fn cursor_position(context: &Context) -> Option<(Pt, Pt)> {
     context.input().cursor_position()
 }
 
+pub fn text_input_enabled(context: &Context) -> bool {
+    context.input().text_input_enabled()
+}
+
+pub fn set_text_input_enabled(context: &mut Context, enabled: bool) {
+    context.input_mut().set_text_input_enabled(enabled);
+}
+
 pub fn text_input(context: &Context) -> &str {
     context.input().text_input()
 }

@@ -24,6 +24,8 @@ pub struct InputManager {
     scroll_delta: (f32, f32),
     focused: bool,
 
+    text_input_enabled: bool,
+
     text_input: String,
     ime_preedit: Option<String>,
 }
@@ -46,6 +48,8 @@ impl Default for InputManager {
             scroll_delta: (0.0, 0.0),
             focused: false,
 
+            text_input_enabled: false,
+
             text_input: String::new(),
             ime_preedit: None,
         }
@@ -60,6 +64,18 @@ fn key_word_bit(key: Key) -> (usize, u64) {
 impl InputManager {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn text_input_enabled(&self) -> bool {
+        self.text_input_enabled
+    }
+
+    pub fn set_text_input_enabled(&mut self, enabled: bool) {
+        self.text_input_enabled = enabled;
+        if !enabled {
+            self.text_input.clear();
+            self.ime_preedit = None;
+        }
     }
 
     pub fn is_focused(&self) -> bool {
@@ -163,6 +179,9 @@ impl InputManager {
     }
 
     pub(crate) fn handle_received_character(&mut self, ch: char) {
+        if !self.text_input_enabled {
+            return;
+        }
         // Ignore control characters; keep printable/unicode characters.
         if ch.is_control() {
             return;
@@ -173,14 +192,15 @@ impl InputManager {
     pub(crate) fn handle_ime(&mut self, ime: Ime) {
         match ime {
             Ime::Preedit(value, _cursor) => {
-                if value.is_empty() {
+                if !self.text_input_enabled {
                     self.ime_preedit = None;
-                } else {
-                    self.ime_preedit = Some(value);
+                    return;
                 }
+
+                self.ime_preedit = if value.is_empty() { None } else { Some(value) };
             }
             Ime::Commit(value) => {
-                if !value.is_empty() {
+                if self.text_input_enabled && !value.is_empty() {
                     self.text_input.push_str(&value);
                 }
                 self.ime_preedit = None;

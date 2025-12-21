@@ -4,6 +4,7 @@ struct TextInputExample {
     committed: String,
     preedit: String,
     font_data: Vec<u8>,
+    capture_enabled: bool,
 }
 
 impl Spot for TextInputExample {
@@ -33,10 +34,16 @@ impl Spot for TextInputExample {
             committed: String::new(),
             preedit: String::new(),
             font_data,
+            capture_enabled: false,
         }
     }
 
     fn update(&mut self, ctx: &mut Context, _dt: std::time::Duration) {
+        if spottedcat::key_pressed(ctx, Key::F1) {
+            self.capture_enabled = !self.capture_enabled;
+            spottedcat::set_text_input_enabled(ctx, self.capture_enabled);
+        }
+
         // Append characters entered this frame.
         self.committed.push_str(spottedcat::text_input(ctx));
 
@@ -60,7 +67,12 @@ impl Spot for TextInputExample {
         title_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(40.0)];
         title_opts.font_size = spottedcat::Pt(22.0);
         title_opts.color = [1.0, 1.0, 1.0, 1.0];
-        Text::new("Text Input Example (type to input, Backspace delete, Esc clear)").draw(ctx, title_opts);
+        let status = if self.capture_enabled { "ON" } else { "OFF" };
+        Text::new(format!(
+            "Text Input Example (capture: {}, F1 toggle, Backspace delete, Esc clear)",
+            status
+        ))
+        .draw(ctx, title_opts);
 
         let mut input_opts = TextOptions::new(self.font_data.clone());
         input_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(90.0)];
