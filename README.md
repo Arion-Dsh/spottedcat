@@ -15,13 +15,13 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustyspottedcat = { version = "0.0.1" }
+rustyspottedcat = { version = "0.1.0" }
 ```
 
 ### Basic Example
 
 ```rust
-use spot::{Context, Spot, Image, DrawOptions};
+use rustyspottedcat::{Context, Spot, Image, DrawOption};
 
 struct MyApp {
     image: Image,
@@ -41,12 +41,12 @@ impl Spot for MyApp {
         context.draw_image(self.image, opts);
     }
 
-    fn update(&self, _event: spot::Event) {}
+    fn update(&mut self, _context: &mut rustyspottedcat::Context, _dt: std::time::Duration) {}
     fn remove(&self) {}
 }
 
 fn main() {
-    spot::run(|ctx| Box::new(MyApp::initialize(ctx)));
+    rustyspottedcat::run::<MyApp>(rustyspottedcat::WindowConfig::default());
 }
 ```
 

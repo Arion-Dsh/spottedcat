@@ -1,13 +1,13 @@
 fn main() {
     struct DrawSubDemo {
-        canvas: spot::Image,
-        sprite: spot::Image,
+        canvas: rustyspottedcat::Image,
+        sprite: rustyspottedcat::Image,
         font_data: Vec<u8>,
         rng_state: u32,
     }
 
-    impl spot::Spot for DrawSubDemo {
-        fn initialize(_context: spot::Context) -> Self {
+    impl rustyspottedcat::Spot for DrawSubDemo {
+        fn initialize(_context: rustyspottedcat::Context) -> Self {
             // Create a 400x400 canvas (blue background)
             let mut canvas_rgba = vec![0u8; 400 * 400 * 4];
             for i in 0..(400 * 400) {
@@ -16,7 +16,7 @@ fn main() {
                 canvas_rgba[i * 4 + 2] = 200; // B
                 canvas_rgba[i * 4 + 3] = 255; // A
             }
-            let canvas = spot::Image::new_from_rgba8(400, 400, &canvas_rgba)
+            let canvas = rustyspottedcat::Image::new_from_rgba8(400, 400, &canvas_rgba)
                 .expect("failed to create canvas");
 
             // Create a 20x20 sprite (red square)
@@ -27,10 +27,10 @@ fn main() {
                 sprite_rgba[i * 4 + 2] = 80;  // B
                 sprite_rgba[i * 4 + 3] = 255; // A
             }
-            let sprite = spot::Image::new_from_rgba8(20, 20, &sprite_rgba)
+            let sprite = rustyspottedcat::Image::new_from_rgba8(20, 20, &sprite_rgba)
                 .expect("failed to create sprite");
 
-            let font_data = spot::load_font_from_file("assets/DejaVuSans.ttf")
+            let font_data = rustyspottedcat::load_font_from_file("assets/DejaVuSans.ttf")
                 .expect("failed to load font");
 
             Self {
@@ -41,17 +41,17 @@ fn main() {
             }
         }
 
-        fn draw(&mut self, context: &mut spot::Context) {
+        fn draw(&mut self, context: &mut rustyspottedcat::Context) {
             self.canvas
                 .clear([50.0 / 255.0, 50.0 / 255.0, 200.0 / 255.0, 1.0])
                 .expect("failed to clear canvas");
 
             // Compose B onto A.
             // In sub-canvas coordinates, (0,0) is A's top-left corner.
-            let mut sub_opts = spot::ImageDrawOptions::default();
-            sub_opts.position = [spot::Pt(380.0), spot::Pt(380.0)];
-            let sub_opt = spot::DrawOption { options: sub_opts };
-            let sprite_drawable = spot::DrawAble::Image(self.sprite, spot::ImageDrawOptions::default());
+            let mut sub_opts = rustyspottedcat::ImageDrawOptions::default();
+            sub_opts.position = [rustyspottedcat::Pt(380.0), rustyspottedcat::Pt(380.0)];
+            let sub_opt = rustyspottedcat::DrawOption { options: sub_opts };
+            let sprite_drawable = rustyspottedcat::DrawAble::Image(self.sprite, rustyspottedcat::ImageDrawOptions::default());
             self.canvas
                 .draw_sub(context, sprite_drawable, sub_opt)
                 .expect("failed to draw sprite onto canvas");
@@ -62,13 +62,13 @@ fn main() {
                 .wrapping_add(1013904223);
             let r = (self.rng_state % 11) as u32;
             if r > 8 {
-                let mut text_opts = spot::TextOptions::new(self.font_data.clone());
-                text_opts.font_size = spot::Pt(32.0);
+                let mut text_opts = rustyspottedcat::TextOptions::new(self.font_data.clone());
+                text_opts.font_size = rustyspottedcat::Pt(32.0);
                 text_opts.color = [1.0, 1.0, 1.0, 1.0];
-                let text_drawable = spot::DrawAble::Text(format!("Hello ({})", r), text_opts);
-                let mut text_draw_opts = spot::ImageDrawOptions::default();
-                text_draw_opts.position = [spot::Pt(20.0), spot::Pt(50.0)];
-                let text_draw_opt = spot::DrawOption {
+                let text_drawable = rustyspottedcat::DrawAble::Text(format!("Hello ({})", r), text_opts);
+                let mut text_draw_opts = rustyspottedcat::ImageDrawOptions::default();
+                text_draw_opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(50.0)];
+                let text_draw_opt = rustyspottedcat::DrawOption {
                     options: text_draw_opts,
                 };
                 self.canvas
@@ -77,29 +77,29 @@ fn main() {
             }
 
             // Draw the composited canvas to screen
-            let canvas_screen_pos = [spot::Pt(10.0), spot::Pt(10.0)];
-            let mut opts = spot::ImageDrawOptions::default();
+            let canvas_screen_pos = [rustyspottedcat::Pt(10.0), rustyspottedcat::Pt(10.0)];
+            let mut opts = rustyspottedcat::ImageDrawOptions::default();
             opts.position = canvas_screen_pos;
             self.canvas.draw(context, opts);
 
             // Draw the sprite in screen space relative to the canvas top-left.
             // This keeps the sprite offset/size fixed in screen pixels and does not scale
             // with the canvas draw size.
-            let mut opts = spot::ImageDrawOptions::default();
-            opts.position = [spot::Pt(canvas_screen_pos[0].as_f32() + 10.0), spot::Pt(canvas_screen_pos[1].as_f32() + 10.0)];
+            let mut opts = rustyspottedcat::ImageDrawOptions::default();
+            opts.position = [rustyspottedcat::Pt(canvas_screen_pos[0].as_f32() + 10.0), rustyspottedcat::Pt(canvas_screen_pos[1].as_f32() + 10.0)];
             self.sprite.draw(context, opts);
 
             // Also draw the original sprite separately for comparison
-            let mut opts = spot::ImageDrawOptions::default();
-            opts.position = [spot::Pt(550.0), spot::Pt(10.0)];
+            let mut opts = rustyspottedcat::ImageDrawOptions::default();
+            opts.position = [rustyspottedcat::Pt(550.0), rustyspottedcat::Pt(10.0)];
             opts.scale = [5.0, 5.0];
             self.sprite.draw(context, opts);
         }
 
-        fn update(&mut self, _context: &mut spot::Context, _dt: std::time::Duration) {}
+        fn update(&mut self, _context: &mut rustyspottedcat::Context, _dt: std::time::Duration) {}
 
         fn remove(&self) {}
     }
 
-    spot::run::<DrawSubDemo>(spot::WindowConfig::default());
+    rustyspottedcat::run::<DrawSubDemo>(rustyspottedcat::WindowConfig::default());
 }

@@ -8,9 +8,6 @@ repository = "https://github.com/arion-dsh/spottedcat"
 description = "Rusty SpottedCat simple game engine"
 readme = "README.md"
 
-[lib]
-name = "spot"
-
 [dependencies]
 wgpu = "27"
 bytemuck = { version = "1", features = ["derive"] }

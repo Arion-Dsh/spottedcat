@@ -1,4 +1,4 @@
-use spot::{Context, Spot, Text, TextOptions, Key};
+use rustyspottedcat::{Context, Spot, Text, TextOptions, Key};
 
 struct InputExample {
     x: f32,
@@ -18,20 +18,20 @@ impl Spot for InputExample {
     fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) {
         let dt = dt.as_secs_f32();
 
-        if spot::key_down(ctx, Key::W) || spot::key_down(ctx, Key::Up) {
+        if rustyspottedcat::key_down(ctx, Key::W) || rustyspottedcat::key_down(ctx, Key::Up) {
             self.y -= self.speed * dt;
         }
-        if spot::key_down(ctx, Key::S) || spot::key_down(ctx, Key::Down) {
+        if rustyspottedcat::key_down(ctx, Key::S) || rustyspottedcat::key_down(ctx, Key::Down) {
             self.y += self.speed * dt;
         }
-        if spot::key_down(ctx, Key::A) || spot::key_down(ctx, Key::Left) {
+        if rustyspottedcat::key_down(ctx, Key::A) || rustyspottedcat::key_down(ctx, Key::Left) {
             self.x -= self.speed * dt;
         }
-        if spot::key_down(ctx, Key::D) || spot::key_down(ctx, Key::Right) {
+        if rustyspottedcat::key_down(ctx, Key::D) || rustyspottedcat::key_down(ctx, Key::Right) {
             self.x += self.speed * dt;
         }
 
-        if spot::key_pressed(ctx, Key::Escape) {
+        if rustyspottedcat::key_pressed(ctx, Key::Escape) {
             self.x = 200.0;
             self.y = 200.0;
         }
@@ -40,23 +40,23 @@ impl Spot for InputExample {
     fn draw(&mut self, context: &mut Context) {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
 
-        let mut opts = TextOptions::new(spot::load_font_from_bytes(FONT));
-        opts.position = [spot::Pt(20.0), spot::Pt(40.0)];
-        opts.font_size = spot::Pt(24.0);
+        let mut opts = TextOptions::new(rustyspottedcat::load_font_from_bytes(FONT));
+        opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(40.0)];
+        opts.font_size = rustyspottedcat::Pt(24.0);
         opts.color = [1.0, 1.0, 1.0, 1.0];
 
         Text::new("Input Example (WASD / Arrow Keys to move, ESC to reset)").draw(context, opts);
 
-        let mut opts = TextOptions::new(spot::load_font_from_bytes(FONT));
-        opts.position = [spot::Pt(20.0), spot::Pt(80.0)];
-        opts.font_size = spot::Pt(20.0);
+        let mut opts = TextOptions::new(rustyspottedcat::load_font_from_bytes(FONT));
+        opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(80.0)];
+        opts.font_size = rustyspottedcat::Pt(20.0);
         opts.color = [0.7, 0.9, 1.0, 1.0];
 
         Text::new(format!("Position: ({:.1}, {:.1})", self.x, self.y)).draw(context, opts);
 
-        let mut opts = TextOptions::new(spot::load_font_from_bytes(FONT));
-        opts.position = [spot::Pt(20.0), spot::Pt(120.0)];
-        opts.font_size = spot::Pt(18.0);
+        let mut opts = TextOptions::new(rustyspottedcat::load_font_from_bytes(FONT));
+        opts.position = [rustyspottedcat::Pt(20.0), rustyspottedcat::Pt(120.0)];
+        opts.font_size = rustyspottedcat::Pt(18.0);
         opts.color = [0.9, 0.9, 0.9, 1.0];
 
         Text::new("Tip: hold keys for continuous movement; press ESC to reset.").draw(context, opts);
@@ -66,5 +66,5 @@ impl Spot for InputExample {
 }
 
 fn main() {
-    spot::run::<InputExample>(spot::WindowConfig::default());
+    rustyspottedcat::run::<InputExample>(rustyspottedcat::WindowConfig::default());
 }
