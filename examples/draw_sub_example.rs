@@ -7,7 +7,7 @@ fn main() {
     }
 
     impl spottedcat::Spot for DrawSubDemo {
-        fn initialize(_context: spottedcat::Context) -> Self {
+        fn initialize(_context: &mut spottedcat::Context) -> Self {
             // Create a 400x400 canvas (blue background)
             let mut canvas_rgba = vec![0u8; 400 * 400 * 4];
             for i in 0..(400 * 400) {

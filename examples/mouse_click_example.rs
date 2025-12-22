@@ -5,7 +5,7 @@ struct MouseClickExample {
 }
 
 impl Spot for MouseClickExample {
-    fn initialize(_: Context) -> Self {
+    fn initialize(_: &mut Context) -> Self {
         Self { last_click: None }
     }
 

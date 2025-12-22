@@ -7,7 +7,7 @@ struct InputExample {
 }
 
 impl Spot for InputExample {
-    fn initialize(_: Context) -> Self {
+    fn initialize(_: &mut Context) -> Self {
         Self {
             x: 200.0,
             y: 200.0,

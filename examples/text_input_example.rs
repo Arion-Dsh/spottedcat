@@ -8,7 +8,7 @@ struct TextInputExample {
 }
 
 impl Spot for TextInputExample {
-    fn initialize(_: Context) -> Self {
+    fn initialize(_: &mut Context) -> Self {
         // Prefer a system font that contains CJK glyphs.
         // Fallback to the bundled DejaVuSans.ttf.
         const FALLBACK_FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");

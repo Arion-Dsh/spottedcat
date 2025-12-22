@@ -3,7 +3,7 @@ use spottedcat::{Context, Spot, Text, TextOptions, load_font_from_bytes};
 struct TextApp {}
 
 impl Spot for TextApp {
-    fn initialize(_context: Context) -> Self {
+    fn initialize(_context: &mut Context) -> Self {
         Self {}
     }
 

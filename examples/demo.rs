@@ -9,7 +9,7 @@ fn main() {
     }
 
     impl Spot for DemoSpot {
-        fn initialize(_context: Context) -> Self {
+        fn initialize(_context: &mut Context) -> Self {
             const TREE_PNG: &[u8] = include_bytes!("../assets/happy-tree.png");
             let decoded = image::load_from_memory(TREE_PNG).expect("failed to decode happy-tree.png");
             let rgba = decoded.to_rgba8();

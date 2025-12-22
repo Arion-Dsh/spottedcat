@@ -18,7 +18,7 @@ pub(crate) struct App {
     surface: Option<wgpu::Surface<'static>>,
     context: Context,
     spot: Option<Box<dyn Spot>>,
-    scene_factory: Box<dyn Fn() -> Box<dyn Spot> + Send>,
+    scene_factory: Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send>,
     window_config: WindowConfig,
     scale_factor: f64,
     previous: Option<Instant>,
@@ -59,7 +59,7 @@ impl App {
             surface: None,
             context: Context::new(),
             spot: None,
-            scene_factory: Box::new(|| Box::new(T::initialize(Context::new()))),
+            scene_factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
             window_config,
             scale_factor: 1.0,
             previous: None,
@@ -107,7 +107,7 @@ impl ApplicationHandler for App {
             panic!("global Graphics already initialized");
         }
 
-        let spot = Some((self.scene_factory)());
+        let spot = Some((self.scene_factory)(&mut self.context));
 
         self.window_id = Some(window.id());
         self.window = Some(window);
@@ -169,7 +169,7 @@ impl ApplicationHandler for App {
                         if let Some(old_spot) = self.spot.take() {
                             old_spot.remove();
                         }
-                        self.spot = Some(factory());
+                        self.spot = Some(factory(&mut self.context));
                     }
 
                     let offscreen = self.context.take_offscreen();

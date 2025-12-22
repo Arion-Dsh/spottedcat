@@ -28,7 +28,7 @@ struct MyApp {
 }
 
 impl Spot for MyApp {
-    fn initialize(_context: Context) -> Self {
+    fn initialize(_context: &mut Context) -> Self {
         let image = Image::new_from_file("image.png")
             .expect("Failed to load image");
         Self { image }
@@ -66,7 +66,7 @@ Drawing context for managing render commands. Accumulates drawing operations dur
 Main application trait defining the lifecycle of your app.
 
 **Required methods:**
-- `initialize(context)` - Set up initial state and load resources
+- `initialize(&mut context)` - Set up initial state and load resources
 - `draw(&mut context)` - Render the current frame
 - `update(event)` - Handle events (reserved for future use)
 - `remove()` - Cleanup on shutdown
@@ -104,7 +104,7 @@ Rectangle for defining sub-regions of images.
 Main entry point. Creates a window, initializes graphics, and runs the event loop.
 
 **Arguments:**
-- `init: fn(Context) -> Box<dyn Spot>` - Function to create your app
+- `init: fn(&mut Context) -> Box<dyn Spot>` - Function to create your app
 
 ## Advanced Usage
 

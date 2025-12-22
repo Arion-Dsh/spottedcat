@@ -48,7 +48,9 @@ mod key;
 mod mouse;
 mod pt;
 
-use std::sync::{Mutex, OnceLock};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use winit::event_loop::EventLoop;
 
@@ -101,6 +103,20 @@ pub struct Context {
     offscreen: Vec<OffscreenCommand>,
     input: InputManager,
     scale_factor: f64,
+    resources: ResourceMap,
+}
+
+#[derive(Clone, Default)]
+struct ResourceMap {
+    inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
+}
+
+impl std::fmt::Debug for ResourceMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResourceMap")
+            .field("len", &self.inner.len())
+            .finish()
+    }
 }
 
 impl Context {
@@ -114,7 +130,22 @@ impl Context {
             offscreen: Vec::new(),
             input: InputManager::new(),
             scale_factor: 1.0,
+            resources: ResourceMap::default(),
         }
+    }
+
+    pub fn insert_resource<T: Any + Send + Sync>(&mut self, value: Arc<T>) {
+        self.resources
+            .inner
+            .insert(TypeId::of::<T>(), value as Arc<dyn Any + Send + Sync>);
+    }
+
+    pub fn get_resource<T: Any + Send + Sync>(&self) -> Option<Arc<T>> {
+        self.resources
+            .inner
+            .get(&TypeId::of::<T>())
+            .cloned()
+            .and_then(|v| Arc::downcast::<T>(v).ok())
     }
 
     /// Clears all drawing commands from the previous frame.
@@ -225,7 +256,7 @@ pub fn ime_preedit(context: &Context) -> Option<&str> {
     context.input().ime_preedit()
 }
 
-type SceneFactory = Box<dyn FnOnce() -> Box<dyn Spot> + Send>;
+type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot> + Send>;
 
 static GLOBAL_GRAPHICS: OnceLock<Mutex<Graphics>> = OnceLock::new();
 static SCENE_SWITCH_REQUEST: OnceLock<Mutex<Option<SceneFactory>>> = OnceLock::new();
@@ -251,7 +282,7 @@ fn init_scene_switch() {
 
 fn request_scene_switch<F>(factory: F)
 where
-    F: FnOnce() -> Box<dyn Spot> + Send + 'static,
+    F: FnOnce(&mut Context) -> Box<dyn Spot> + Send + 'static,
 {
     if let Some(request) = SCENE_SWITCH_REQUEST.get() {
         let mut guard = request.lock().expect("Scene switch mutex poisoned");
@@ -325,7 +356,7 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
 /// // }
 /// ```
 pub fn switch_scene<T: Spot + 'static>() {
-    request_scene_switch(|| Box::new(T::initialize(Context::new())));
+    request_scene_switch(|ctx| Box::new(T::initialize(ctx)));
 }
 
 /// Main application trait that must be implemented by your application.
@@ -339,7 +370,7 @@ pub trait Spot {
     ///
     /// # Arguments
     /// * `context` - Initial drawing context
-    fn initialize(context: Context) -> Self
+    fn initialize(context: &mut Context) -> Self
     where
         Self: Sized;
 
