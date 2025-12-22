@@ -181,6 +181,26 @@ pub fn key_released(context: &Context, key: Key) -> bool {
     context.input().key_released(key)
 }
 
+pub fn mouse_button_down(context: &Context, button: MouseButton) -> bool {
+    context.input().mouse_down(button)
+}
+
+pub fn mouse_button_pressed(context: &Context, button: MouseButton) -> bool {
+    context.input().mouse_pressed(button)
+}
+
+pub fn mouse_button_released(context: &Context, button: MouseButton) -> bool {
+    context.input().mouse_released(button)
+}
+
+pub fn mouse_button_pressed_position(context: &Context, button: MouseButton) -> Option<(Pt, Pt)> {
+    if mouse_button_pressed(context, button) {
+        cursor_position(context)
+    } else {
+        None
+    }
+}
+
 pub fn cursor_position(context: &Context) -> Option<(Pt, Pt)> {
     context.input().cursor_position()
 }
