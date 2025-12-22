@@ -83,8 +83,8 @@ impl Default for WindowConfig {
     fn default() -> Self {
         Self {
             title: "spot".to_string(),
-            width: Pt(800.0),
-            height: Pt(600.0),
+            width: Pt(800),
+            height: Pt(600),
             resizable: true,
         }
     }

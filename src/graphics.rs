@@ -148,69 +148,86 @@ impl Graphics {
         surface.configure(&self.device, &self.config);
     }
 
-     pub(crate) fn device_queue(&self) -> (&wgpu::Device, &wgpu::Queue) {
-         (&self.device, &self.queue)
-     }
+    pub(crate) fn device_queue(&self) -> (&wgpu::Device, &wgpu::Queue) {
+        (&self.device, &self.queue)
+    }
 
-     pub(crate) fn create_texture_bind_group_from_texture(
-         &self,
-         texture: &Texture,
-     ) -> wgpu::BindGroup {
-         self.image_renderer
-             .create_texture_bind_group(&self.device, &texture.0.view)
-     }
+    pub(crate) fn create_texture_bind_group_from_texture(
+        &self,
+        texture: &Texture,
+    ) -> wgpu::BindGroup {
+        self.image_renderer
+            .create_texture_bind_group(&self.device, &texture.0.view)
+    }
 
-     pub(crate) fn insert_image_entry(&mut self, entry: ImageEntry) -> Image {
-         let id = Image(self.images.len());
-         self.images.push(Some(entry));
-         id
-     }
+    pub(crate) fn insert_image_entry(&mut self, entry: ImageEntry) -> Image {
+        let id = self.images.len() as u32;
+        let bounds = entry.bounds;
+        self.images.push(Some(entry));
+        Image {
+            id,
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+        }
+    }
 
-     pub(crate) fn insert_sub_image(
-         &mut self,
-         image: Image,
-         bounds: Option<Bounds>,
-     ) -> anyhow::Result<Image> {
-         let (texture, src_bounds, src_bg) = {
-             let src = self
-                 .images
-                 .get(image.0)
-                 .and_then(|v| v.as_ref())
-                 .ok_or_else(|| anyhow::anyhow!("invalid source image"))?;
-             (src.texture.clone(), src.bounds, src.texture_bind_group.clone())
-         };
+    pub(crate) fn insert_sub_image(
+        &mut self,
+        image: Image,
+        bounds: Option<Bounds>,
+    ) -> anyhow::Result<Image> {
+        let (texture, src_bounds, src_bg) = {
+            let src = self
+                .images
+                .get(image.index())
+                .and_then(|v| v.as_ref())
+                .ok_or_else(|| anyhow::anyhow!("invalid source image"))?;
+            (src.texture.clone(), src.bounds, src.texture_bind_group.clone())
+        };
 
-         let tex_w = texture.0.width;
-         let tex_h = texture.0.height;
+        let tex_w = texture.0.width;
+        let tex_h = texture.0.height;
 
-         let b = match bounds {
-             None => src_bounds,
-             Some(b) => {
-                 let x1 = b
-                     .x
-                     .checked_add(b.width)
-                     .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
-                 let y1 = b
-                     .y
-                     .checked_add(b.height)
-                     .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
+        let b = match bounds {
+            None => src_bounds,
+            Some(b) => {
+                let x1 = b
+                    .x
+                    .checked_add(b.width)
+                    .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
+                let y1 = b
+                    .y
+                    .checked_add(b.height)
+                    .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
 
-                 if x1 > tex_w || y1 > tex_h {
-                     return Err(anyhow::anyhow!("sub_image bounds out of range"));
-                 }
+                if x1 > tex_w || y1 > tex_h {
+                    return Err(anyhow::anyhow!(
+                        "sub_image bounds out of range"
+                    ));
+                }
 
-                 b
-             }
-         };
+                b
+            }
+        };
 
-         Ok(self.insert_image_entry(ImageEntry::new_with_bounds(
-             texture, src_bg, b,
-         )))
-     }
+        Ok(self.insert_image_entry(ImageEntry::new_with_bounds(
+            texture, src_bg, b,
+        )))
+    }
 
-     pub(crate) fn take_image_entry(&mut self, image: Image) -> Option<ImageEntry> {
-         self.images.get_mut(image.0)?.take()
-     }
+    pub(crate) fn take_image_entry(&mut self, image: Image) -> Option<ImageEntry> {
+        self.images.get_mut(image.index())?.take()
+    }
+
+    pub(crate) fn image_bounds(&self, image: Image) -> anyhow::Result<Bounds> {
+        self.images
+            .get(image.index())
+            .and_then(|v| v.as_ref())
+            .map(|e| e.bounds)
+            .ok_or_else(|| anyhow::anyhow!("invalid image"))
+    }
 
     pub fn draw_context(
         &mut self,
@@ -268,7 +285,7 @@ impl Graphics {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
 
-                        let Some(Some(img)) = self.images.get(id.0) else {
+                        let Some(Some(img)) = self.images.get(id.index()) else {
                             continue;
                         };
                         if !img.visible {
@@ -366,13 +383,13 @@ impl Graphics {
 
     pub(crate) fn copy_image(&mut self, dst: Image, src: Image) -> anyhow::Result<()> {
         let (dst_tex, dst_bounds, dst_format) = {
-            let Some(Some(d)) = self.images.get(dst.0) else {
+            let Some(Some(d)) = self.images.get(dst.index()) else {
                 return Err(anyhow::anyhow!("invalid dst image"));
             };
             (&d.texture.0.texture, d.bounds, d.texture.0.format)
         };
         let (src_tex, src_bounds, src_format) = {
-            let Some(Some(s)) = self.images.get(src.0) else {
+            let Some(Some(s)) = self.images.get(src.index()) else {
                 return Err(anyhow::anyhow!("invalid src image"));
             };
             (&s.texture.0.texture, s.bounds, s.texture.0.format)
@@ -435,7 +452,7 @@ impl Graphics {
 
     pub(crate) fn clear_image(&mut self, target: Image, color: [f32; 4]) -> anyhow::Result<()> {
         let target_view = {
-            let Some(Some(target_entry)) = self.images.get(target.0) else {
+            let Some(Some(target_entry)) = self.images.get(target.index()) else {
                 return Err(anyhow::anyhow!("invalid target image"));
             };
             target_entry.texture.0.view.clone()
@@ -491,7 +508,7 @@ impl Graphics {
         }
 
         let (target_view, target_bounds) = {
-            let Some(Some(target_entry)) = self.images.get(target.0) else {
+            let Some(Some(target_entry)) = self.images.get(target.index()) else {
                 return Err(anyhow::anyhow!("invalid target image"));
             };
             (target_entry.texture.0.view.clone(), target_entry.bounds)
@@ -553,7 +570,7 @@ impl Graphics {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
 
-                        let Some(Some(img)) = self.images.get(id.0) else {
+                        let Some(Some(img)) = self.images.get(id.index()) else {
                             continue;
                         };
                         if !img.visible {

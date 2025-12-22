@@ -41,22 +41,22 @@ impl Spot for InputExample {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
 
         let mut opts = TextOptions::new(spottedcat::load_font_from_bytes(FONT));
-        opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(40.0)];
-        opts.font_size = spottedcat::Pt(24.0);
+        opts.position = [spottedcat::Pt(20), spottedcat::Pt(40)];
+        opts.font_size = spottedcat::Pt(24);
         opts.color = [1.0, 1.0, 1.0, 1.0];
 
         Text::new("Input Example (WASD / Arrow Keys to move, ESC to reset)").draw(context, opts);
 
         let mut opts = TextOptions::new(spottedcat::load_font_from_bytes(FONT));
-        opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(80.0)];
-        opts.font_size = spottedcat::Pt(20.0);
+        opts.position = [spottedcat::Pt(20), spottedcat::Pt(80)];
+        opts.font_size = spottedcat::Pt(20);
         opts.color = [0.7, 0.9, 1.0, 1.0];
 
         Text::new(format!("Position: ({:.1}, {:.1})", self.x, self.y)).draw(context, opts);
 
         let mut opts = TextOptions::new(spottedcat::load_font_from_bytes(FONT));
-        opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(120.0)];
-        opts.font_size = spottedcat::Pt(18.0);
+        opts.position = [spottedcat::Pt(20), spottedcat::Pt(120)];
+        opts.font_size = spottedcat::Pt(18);
         opts.color = [0.9, 0.9, 0.9, 1.0];
 
         Text::new("Tip: hold keys for continuous movement; press ESC to reset.").draw(context, opts);

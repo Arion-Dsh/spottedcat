@@ -64,8 +64,8 @@ impl Spot for TextInputExample {
 
     fn draw(&mut self, ctx: &mut Context) {
         let mut title_opts = TextOptions::new(self.font_data.clone());
-        title_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(40.0)];
-        title_opts.font_size = spottedcat::Pt(22.0);
+        title_opts.position = [spottedcat::Pt(20), spottedcat::Pt(40)];
+        title_opts.font_size = spottedcat::Pt(22);
         title_opts.color = [1.0, 1.0, 1.0, 1.0];
         let status = if self.capture_enabled { "ON" } else { "OFF" };
         Text::new(format!(
@@ -75,8 +75,8 @@ impl Spot for TextInputExample {
         .draw(ctx, title_opts);
 
         let mut input_opts = TextOptions::new(self.font_data.clone());
-        input_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(90.0)];
-        input_opts.font_size = spottedcat::Pt(28.0);
+        input_opts.position = [spottedcat::Pt(20), spottedcat::Pt(90)];
+        input_opts.font_size = spottedcat::Pt(28);
         input_opts.color = [0.9, 0.9, 0.9, 1.0];
 
         let mut composed = self.committed.clone();
@@ -87,8 +87,8 @@ impl Spot for TextInputExample {
 
         if !self.preedit.is_empty() {
             let mut ime_opts = TextOptions::new(self.font_data.clone());
-            ime_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(130.0)];
-            ime_opts.font_size = spottedcat::Pt(16.0);
+            ime_opts.position = [spottedcat::Pt(20), spottedcat::Pt(130)];
+            ime_opts.font_size = spottedcat::Pt(16);
             ime_opts.color = [0.6, 0.8, 1.0, 1.0];
             Text::new(format!("IME preedit: {}", self.preedit)).draw(ctx, ime_opts);
         }

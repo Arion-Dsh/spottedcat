@@ -43,21 +43,21 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             let mut opts = ImageDrawOptions::default();
-            opts.position = [Pt(20.0), Pt(300.0)];
+            opts.position = [Pt(20), Pt(300)];
             self.tree.draw(context, opts);
 
             let mut opts = ImageDrawOptions::default();
-            opts.position = [Pt(50.0), Pt(50.0)];
+            opts.position = [Pt(50), Pt(50)];
             opts.scale = [10.0, 10.0];
             self.image.draw(context, opts);
 
             let mut opts = ImageDrawOptions::default();
-            opts.position = [Pt(300.0), Pt(50.0)];
+            opts.position = [Pt(300), Pt(50)];
             opts.scale = [20.0, 20.0];
             self.image_sub.draw(context, opts);
 
             let mut opts = ImageDrawOptions::default();
-            opts.position = [Pt(550.0), Pt(50.0)];
+            opts.position = [Pt(550), Pt(50)];
             opts.scale = [10.0, 10.0];
             self.image_clone.draw(context, opts);
         }

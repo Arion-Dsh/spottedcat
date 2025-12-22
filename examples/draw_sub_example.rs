@@ -49,7 +49,7 @@ fn main() {
             // Compose B onto A.
             // In sub-canvas coordinates, (0,0) is A's top-left corner.
             let mut sub_opts = spottedcat::ImageDrawOptions::default();
-            sub_opts.position = [spottedcat::Pt(380.0), spottedcat::Pt(380.0)];
+            sub_opts.position = [spottedcat::Pt(380), spottedcat::Pt(380)];
             let sub_opt = spottedcat::DrawOption { options: sub_opts };
             let sprite_drawable = spottedcat::DrawAble::Image(self.sprite);
             self.canvas
@@ -63,10 +63,10 @@ fn main() {
             let r = (self.rng_state % 11) as u32;
             if r > 8 {
                 let mut text_opts = spottedcat::TextOptions::new(self.font_data.clone());
-                text_opts.font_size = spottedcat::Pt(32.0);
+                text_opts.font_size = spottedcat::Pt(32);
                 text_opts.color = [1.0, 1.0, 1.0, 1.0];
                 let mut text_draw_opts = spottedcat::ImageDrawOptions::default();
-                text_draw_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(50.0)];
+                text_draw_opts.position = [spottedcat::Pt(20), spottedcat::Pt(50)];
                 let text_draw_opt = spottedcat::DrawOption {
                     options: text_draw_opts,
                 };
@@ -81,7 +81,7 @@ fn main() {
             }
 
             // Draw the composited canvas to screen
-            let canvas_screen_pos = [spottedcat::Pt(10.0), spottedcat::Pt(10.0)];
+            let canvas_screen_pos = [spottedcat::Pt(10), spottedcat::Pt(10)];
             let mut opts = spottedcat::ImageDrawOptions::default();
             opts.position = canvas_screen_pos;
             self.canvas.draw(context, opts);
@@ -90,7 +90,10 @@ fn main() {
             // This keeps the sprite offset/size fixed in screen pixels and does not scale
             // with the canvas draw size.
             let mut opts = spottedcat::ImageDrawOptions::default();
-            opts.position = [spottedcat::Pt(canvas_screen_pos[0].as_f32() + 10.0), spottedcat::Pt(canvas_screen_pos[1].as_f32() + 10.0)];
+            opts.position = [
+                spottedcat::Pt(canvas_screen_pos[0].0 + 10),
+                spottedcat::Pt(canvas_screen_pos[1].0 + 10),
+            ];
             self.sprite.draw(context, opts);
 
 

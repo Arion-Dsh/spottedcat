@@ -36,7 +36,7 @@ pub struct ImageDrawOptions {
 impl Default for ImageDrawOptions {
     fn default() -> Self {
         Self {
-            position: [Pt(10.0), Pt(10.0)],
+            position: [Pt(10), Pt(10)],
             scale: [1.0, 1.0],
             rotation: 0.0,
         }
@@ -57,12 +57,12 @@ pub struct TextOptions {
 impl TextOptions {
     pub fn new(font_data: Vec<u8>) -> Self {
         Self {
-            position: [Pt(10.0), Pt(10.0)],
-            font_size: Pt(24.0),
+            position: [Pt(10), Pt(10)],
+            font_size: Pt(24),
             color: [1.0, 1.0, 1.0, 1.0],
             scale: [1.0, 1.0],
             font_data,
-            stroke_width: Pt(0.0),
+            stroke_width: Pt(0),
             stroke_color: [0.0, 0.0, 0.0, 1.0],
         }
     }

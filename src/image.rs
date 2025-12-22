@@ -31,8 +31,34 @@ impl Bounds {
 ///
 /// Images are GPU textures that can be drawn to the screen. They are reference-counted
 /// and can be cloned cheaply.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Image(pub usize);
+#[derive(Debug, Clone, Copy)]
+pub struct Image {
+    pub id: u32,
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Image {
+    pub(crate) fn index(self) -> usize {
+        self.id as usize
+    }
+}
+
+impl PartialEq for Image {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for Image {}
+
+impl std::hash::Hash for Image {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 impl Image {
     /// Creates a new image from raw RGBA8 pixel data.
@@ -186,6 +212,15 @@ impl Image {
 
     pub fn copy_from(self, src: Image) -> anyhow::Result<()> {
         with_graphics(|g| g.copy_image(self, src))
+    }
+
+    pub fn bounds(self) -> anyhow::Result<Bounds> {
+        Ok(Bounds {
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height,
+        })
     }
 
     /// Destroys the image and frees its GPU resources.
