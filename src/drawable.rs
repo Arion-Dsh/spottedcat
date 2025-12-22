@@ -1,9 +1,16 @@
 use crate::{Image, Pt};
+use crate::Text;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawAble {
+    Image(Image),
+    Text(Text),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum DrawCommand {
     Image(Image, ImageDrawOptions),
-    Text(String, TextOptions),
+    Text(Text, TextOptions),
 }
 
 

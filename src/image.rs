@@ -91,17 +91,17 @@ impl Image {
     ///
     /// # Example
     /// ```no_run
-    /// # use spot::{Context, Image, ImageDrawOptions};
+    /// # use spottedcat::{Context, Image, ImageDrawOptions};
     /// # let mut context = Context::new();
     /// # let rgba = vec![255u8; 2 * 2 * 4];
     /// # let image = Image::new_from_rgba8(2, 2, &rgba).unwrap();
     /// let mut opts = ImageDrawOptions::default();
-    /// opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
+    /// opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
     /// opts.scale = [2.0, 2.0];
     /// image.draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut crate::Context, options: crate::ImageDrawOptions) {
-        context.push(crate::drawable::DrawAble::Image(self, options));
+        context.push(crate::drawable::DrawCommand::Image(self, options));
     }
 
     /// Draws a drawable onto this image as a render target.
@@ -116,7 +116,8 @@ impl Image {
     ///
     /// # Example
     /// ```no_run
-    /// use spot::{Image, DrawAble, DrawOption, ImageDrawOptions};
+    /// use spottedcat::{Context, Image, DrawAble, DrawOption, ImageDrawOptions};
+    /// # let mut context = Context::new();
     ///
     /// // Load two images
     /// let rgba = vec![255u8; 2 * 2 * 4];
@@ -126,36 +127,38 @@ impl Image {
     /// // Create draw options for positioning sprite on canvas
     /// let option = DrawOption {
     ///     options: ImageDrawOptions {
-    ///         position: [spot::Pt(50.0), spot::Pt(50.0)],  // Position on canvas
+    ///         position: [spottedcat::Pt(50.0), spottedcat::Pt(50.0)],  // Position on canvas
     ///         rotation: 0.0,
     ///         scale: [1.0, 1.0],
     ///     },
     /// };
     ///
     /// // Draw sprite onto canvas at specified position
-    /// let sprite_drawable = DrawAble::Image(sprite, ImageDrawOptions::default());
-    /// canvas.draw_sub(sprite_drawable, option).unwrap();
+    /// let sprite_drawable = DrawAble::Image(sprite);
+    /// canvas.draw_sub(&mut context, sprite_drawable, option, None).unwrap();
     /// ```
     pub fn draw_sub(
         self,
         context: &mut crate::Context,
         drawable: crate::drawable::DrawAble,
         option: crate::drawable::DrawOption,
+        text_options: Option<crate::drawable::TextOptions>,
     ) -> anyhow::Result<()> {
-        if matches!(drawable, crate::drawable::DrawAble::Image(id, _) if id == self) {
-            return Err(anyhow::anyhow!(
-                "cannot draw an image into itself; use a separate target image"
-            ));
-        }
-
         let drawable_with_options = match drawable {
-            crate::drawable::DrawAble::Image(img, _) => {
-                crate::drawable::DrawAble::Image(img, option.options)
+            crate::drawable::DrawAble::Image(img) => {
+                if img == self {
+                    return Err(anyhow::anyhow!(
+                        "cannot draw an image into itself; use a separate target image"
+                    ));
+                }
+                crate::drawable::DrawCommand::Image(img, option.options)
             }
-            crate::drawable::DrawAble::Text(text, mut text_opts) => {
-                text_opts.position = option.options.position;
-                text_opts.scale = option.options.scale;
-                crate::drawable::DrawAble::Text(text, text_opts)
+            crate::drawable::DrawAble::Text(text) => {
+                let mut opts = text_options
+                    .ok_or_else(|| anyhow::anyhow!("DrawAble::Text requires text_options"))?;
+                opts.position = option.options.position;
+                opts.scale = option.options.scale;
+                crate::drawable::DrawCommand::Text(text, opts)
             }
         };
 
@@ -172,8 +175,9 @@ impl Image {
         context: &mut crate::Context,
         drawable: crate::drawable::DrawAble,
         option: crate::drawable::DrawOption,
+        text_options: Option<crate::drawable::TextOptions>,
     ) -> anyhow::Result<()> {
-        self.draw_sub(context, drawable, option)
+        self.draw_sub(context, drawable, option, text_options)
     }
 
     pub fn clear(self, color: [f32; 4]) -> anyhow::Result<()> {

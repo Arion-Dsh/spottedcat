@@ -51,9 +51,9 @@ fn main() {
             let mut sub_opts = spottedcat::ImageDrawOptions::default();
             sub_opts.position = [spottedcat::Pt(380.0), spottedcat::Pt(380.0)];
             let sub_opt = spottedcat::DrawOption { options: sub_opts };
-            let sprite_drawable = spottedcat::DrawAble::Image(self.sprite, spottedcat::ImageDrawOptions::default());
+            let sprite_drawable = spottedcat::DrawAble::Image(self.sprite);
             self.canvas
-                .draw_sub(context, sprite_drawable, sub_opt)
+                .draw_sub(context, sprite_drawable, sub_opt, None)
                 .expect("failed to draw sprite onto canvas");
 
             self.rng_state = self
@@ -65,14 +65,18 @@ fn main() {
                 let mut text_opts = spottedcat::TextOptions::new(self.font_data.clone());
                 text_opts.font_size = spottedcat::Pt(32.0);
                 text_opts.color = [1.0, 1.0, 1.0, 1.0];
-                let text_drawable = spottedcat::DrawAble::Text(format!("Hello ({})", r), text_opts);
                 let mut text_draw_opts = spottedcat::ImageDrawOptions::default();
                 text_draw_opts.position = [spottedcat::Pt(20.0), spottedcat::Pt(50.0)];
                 let text_draw_opt = spottedcat::DrawOption {
                     options: text_draw_opts,
                 };
                 self.canvas
-                    .draw_sub(context, text_drawable, text_draw_opt)
+                    .draw_sub(
+                        context,
+                        spottedcat::DrawAble::Text(spottedcat::Text::new(format!("Hello ({})", r))),
+                        text_draw_opt,
+                        Some(text_opts.clone()),
+                    )
                     .expect("failed to draw text onto canvas");
             }
 
@@ -89,11 +93,16 @@ fn main() {
             opts.position = [spottedcat::Pt(canvas_screen_pos[0].as_f32() + 10.0), spottedcat::Pt(canvas_screen_pos[1].as_f32() + 10.0)];
             self.sprite.draw(context, opts);
 
-            // Also draw the original sprite separately for comparison
-            let mut opts = spottedcat::ImageDrawOptions::default();
-            opts.position = [spottedcat::Pt(550.0), spottedcat::Pt(10.0)];
-            opts.scale = [5.0, 5.0];
+
+            // // Also draw the original sprite separately for comparison
+            let opts = spottedcat::ImageDrawOptions::default();
+            // opts.position = [spottedcat::Pt(550.0), spottedcat::Pt(10.0)];
+            // opts.scale = [5.0, 5.0];
             self.sprite.draw(context, opts);
+
+            self.canvas
+                    .draw_sub(context, spottedcat::DrawAble::Image(self.sprite), spottedcat::DrawOption { options: opts }, None)
+                    .expect("failed to draw sprite onto canvas");
         }
 
         fn update(&mut self, _context: &mut spottedcat::Context, _dt: std::time::Duration) {}

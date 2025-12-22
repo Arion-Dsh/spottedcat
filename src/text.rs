@@ -1,4 +1,5 @@
 use crate::{Context, TextOptions};
+use std::fmt;
 
 /// Text handle for drawing text to the screen.
 ///
@@ -6,6 +7,12 @@ use crate::{Context, TextOptions};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Text {
     content: String,
+}
+
+impl fmt::Display for Text {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.content)
+    }
 }
 
 impl Text {
@@ -16,7 +23,7 @@ impl Text {
     ///
     /// # Example
     /// ```no_run
-    /// # use spot::Text;
+    /// # use spottedcat::Text;
     /// let text = Text::new("Hello, World!");
     /// ```
     pub fn new(content: impl Into<String>) -> Self {
@@ -33,12 +40,12 @@ impl Text {
     ///
     /// # Example
     /// ```no_run
-    /// # use spot::{Context, Text, TextOptions, load_font_from_bytes};
+    /// # use spottedcat::{Context, Text, TextOptions, load_font_from_bytes};
     /// # let mut context = Context::new();
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
     /// let mut opts = TextOptions::new(load_font_from_bytes(FONT));
-    /// opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
-    /// opts.font_size = spot::Pt(32.0);
+    /// opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
+    /// opts.font_size = spottedcat::Pt(32.0);
     /// Text::new("Hello, World!").draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut Context, options: TextOptions) {

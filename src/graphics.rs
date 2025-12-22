@@ -1,4 +1,4 @@
-use crate::{Context, DrawAble, DrawOption, ImageDrawOptions};
+use crate::{Context, DrawCommand, DrawOption, ImageDrawOptions};
 use crate::image::{Bounds, Image, ImageEntry};
 use crate::image_raw::{ImageRenderer, ImageTransform, InstanceData};
 use crate::texture::Texture;
@@ -223,7 +223,7 @@ impl Graphics {
     pub fn draw_drawables(
         &mut self,
         surface: &wgpu::Surface<'_>,
-        drawables: &[DrawAble],
+        drawables: &[DrawCommand],
     ) -> Result<(), wgpu::SurfaceError> {
         let frame = surface.get_current_texture()?;
         let view = frame
@@ -264,7 +264,7 @@ impl Graphics {
 
             for drawable in drawables {
                 match drawable {
-                    DrawAble::Image(id, opts) => {
+                    DrawCommand::Image(id, opts) => {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
 
@@ -310,7 +310,7 @@ impl Graphics {
                         };
                         batch.push(InstanceData::from(t));
                     }
-                    DrawAble::Text(text, opts) => {
+                    DrawCommand::Text(text, opts) => {
                         if !batch.is_empty() {
                             if let Some(bind_group) = current_bg.clone() {
                                 let range_opt = {
@@ -330,7 +330,7 @@ impl Graphics {
                         current_key = None;
                         current_bg = None;
                         self.text_renderer
-                            .queue_text(text, opts, &self.queue)
+                            .queue_text(&text.clone().to_string(), opts, &self.queue)
                             .expect("Text draw requires valid font_data");
                     }
                 }
@@ -478,12 +478,12 @@ impl Graphics {
 
         &mut self,
         target: Image,
-        drawables: &[DrawAble],
+        drawables: &[DrawCommand],
         _option: DrawOption,
     ) -> anyhow::Result<()> {
         if drawables
             .iter()
-            .any(|d| matches!(d, DrawAble::Image(id, _) if *id == target))
+            .any(|d| matches!(d, DrawCommand::Image(id, _) if *id == target))
         {
             return Err(anyhow::anyhow!(
                 "cannot draw an image into itself; use a separate target image"
@@ -549,7 +549,7 @@ impl Graphics {
 
             for drawable in drawables {
                 match drawable {
-                    DrawAble::Image(id, opts) => {
+                    DrawCommand::Image(id, opts) => {
                         self.text_renderer
                             .flush(&self.device, &mut rpass, &self.queue);
 
@@ -589,7 +589,7 @@ impl Graphics {
                         };
                         batch.push(InstanceData::from(t));
                     }
-                    DrawAble::Text(text, opts) => {
+                    DrawCommand::Text(text, opts) => {
                         if !batch.is_empty() {
                             if let Some(bind_group) = current_bg.clone() {
                                 let range = {
@@ -605,7 +605,7 @@ impl Graphics {
                         current_bg = None;
 
                         self.text_renderer
-                            .queue_text(text, opts, &self.queue)
+                            .queue_text(&text.to_string(), opts, &self.queue)
                             .expect("Text draw requires valid font_data");
                     }
                 }

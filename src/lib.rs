@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```no_run
-//! use spot::{Context, Spot, Image, ImageDrawOptions, switch_scene};
+//! use spottedcat::{Context, Spot, Image, ImageDrawOptions, switch_scene};
 //!
 //! struct MyApp {
 //!     image: Image,
@@ -17,7 +17,7 @@
 //!
 //!     fn draw(&mut self, context: &mut Context) {
 //!         let mut opts = ImageDrawOptions::default();
-//!         opts.position = [spot::Pt(100.0), spot::Pt(100.0)];
+//!         opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
 //!         opts.scale = [0.78125, 0.78125];
 //!         self.image.draw(context, opts);
 //!     }
@@ -27,7 +27,7 @@
 //! }
 //!
 //! fn main() {
-//!     spot::run::<MyApp>(spot::WindowConfig::default());
+//!     spottedcat::run::<MyApp>(spottedcat::WindowConfig::default());
 //! }
 //!
 //! // Scene switching example:
@@ -54,6 +54,7 @@ use winit::event_loop::EventLoop;
 
 pub use image::{Bounds, Image};
 pub use drawable::{DrawAble, DrawOption, ImageDrawOptions, TextOptions};
+use drawable::DrawCommand;
 pub use font::{load_font_from_file, load_font_from_bytes};
 pub use text::Text;
 pub use input::InputManager;
@@ -64,7 +65,7 @@ pub use pt::Pt;
 #[derive(Debug, Clone)]
 pub(crate) struct OffscreenCommand {
     pub(crate) target: Image,
-    pub(crate) drawables: Vec<DrawAble>,
+    pub(crate) drawables: Vec<DrawCommand>,
     pub(crate) option: DrawOption,
 }
 
@@ -96,7 +97,7 @@ use crate::graphics::Graphics;
 /// graphics system to render the scene.
 #[derive(Debug, Clone)]
 pub struct Context {
-    draw_list: Vec<DrawAble>,
+    draw_list: Vec<DrawCommand>,
     offscreen: Vec<OffscreenCommand>,
     input: InputManager,
     scale_factor: f64,
@@ -144,19 +145,19 @@ impl Context {
     /// Adds a drawable item to the draw list.
     ///
     /// This is used internally by Image::draw() and other drawing methods.
-    pub(crate) fn push(&mut self, drawable: DrawAble) {
+    pub(crate) fn push(&mut self, drawable: DrawCommand) {
         self.draw_list.push(drawable);
     }
 
     /// Returns the list of drawing commands accumulated so far.
     ///
     /// This is used internally by the graphics system to render the scene.
-    pub(crate) fn draw_list(&self) -> &[DrawAble] {
+    pub(crate) fn draw_list(&self) -> &[DrawCommand] {
         &self.draw_list
     }
 
     pub(crate) fn push_text(&mut self, text: String, options: TextOptions) {
-        self.push(DrawAble::Text(text, options));
+        self.push(DrawCommand::Text(Text::new(text), options));
     }
 
     pub(crate) fn push_offscreen(&mut self, cmd: OffscreenCommand) {
@@ -255,7 +256,7 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
 ///
 /// # Example
 /// ```no_run
-/// # use spot::{Context, Spot};
+/// # use spottedcat::{Context, Spot};
 /// # struct MyApp;
 /// # impl Spot for MyApp {
 /// #     fn initialize(_: Context) -> Self { MyApp }
@@ -263,7 +264,7 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
 /// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
-/// spot::run::<MyApp>(spot::WindowConfig::default());
+/// spottedcat::run::<MyApp>(spottedcat::WindowConfig::default());
 /// ```
 pub fn run<T: Spot + 'static>(window: WindowConfig) {
     init_scene_switch();
@@ -283,19 +284,19 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
 ///
 /// # Example
 /// ```no_run
-/// # use spot::{Spot, switch_scene};
+/// # use spottedcat::{Context, Spot, switch_scene};
 /// # struct MenuScene;
 /// # struct GameScene;
 /// # impl Spot for MenuScene {
-/// #     fn initialize(_: spot::Context) -> Self { MenuScene }
-/// #     fn draw(&mut self, _: &mut spot::Context) {}
-/// #     fn update(&mut self, _: &mut spot::Context, _dt: std::time::Duration) {}
+/// #     fn initialize(_: Context) -> Self { MenuScene }
+/// #     fn draw(&mut self, _: &mut Context) {}
+/// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// # impl Spot for GameScene {
-/// #     fn initialize(_: spot::Context) -> Self { GameScene }
-/// #     fn draw(&mut self, _: &mut spot::Context) {}
-/// #     fn update(&mut self, _: &mut spot::Context, _dt: std::time::Duration) {}
+/// #     fn initialize(_: Context) -> Self { GameScene }
+/// #     fn draw(&mut self, _: &mut Context) {}
+/// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// // In your scene's draw or update method:
