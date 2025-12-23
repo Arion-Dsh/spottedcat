@@ -1,23 +1,24 @@
  
 use crate::texture::Texture;
 use crate::with_graphics;
+use crate::Pt;
 
 /// Rectangle bounds for defining sub-regions of images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bounds {
     /// X coordinate of the top-left corner.
-    pub x: u32,
+    pub x: Pt,
     /// Y coordinate of the top-left corner.
-    pub y: u32,
+    pub y: Pt,
     /// Width of the bounds.
-    pub width: u32,
+    pub width: Pt,
     /// Height of the bounds.
-    pub height: u32,
+    pub height: Pt,
 }
 
 impl Bounds {
     /// Creates new bounds with the specified dimensions.
-    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
+    pub fn new(x: Pt, y: Pt, width: Pt, height: Pt) -> Self {
         Self {
             x,
             y,
@@ -34,10 +35,10 @@ impl Bounds {
 #[derive(Debug, Clone, Copy)]
 pub struct Image {
     pub id: u32,
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
+    pub x: Pt,
+    pub y: Pt,
+    pub width: Pt,
+    pub height: Pt,
 }
 
 impl Image {
@@ -70,7 +71,7 @@ impl Image {
     ///
     /// # Errors
     /// Returns an error if the data length doesn't match width * height * 4.
-    pub fn new_from_rgba8(width: u32, height: u32, rgba: &[u8]) -> anyhow::Result<Self> {
+    pub fn new_from_rgba8(width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Self> {
         with_graphics(|g| {
             let (device, queue) = g.device_queue();
             let texture = Texture::from_rgba8_with_format(
@@ -242,10 +243,10 @@ pub(crate) struct ImageEntry {
 impl ImageEntry {
     pub(crate) fn new(texture: Texture, texture_bind_group: wgpu::BindGroup) -> Self {
         let bounds = Bounds {
-            x: 0,
-            y: 0,
-            width: texture.0.width,
-            height: texture.0.height,
+            x: Pt(0.0),
+            y: Pt(0.0),
+            width: Pt::from(texture.0.width),
+            height: Pt::from(texture.0.height),
         };
         let uvp = Self::uvp_from(texture.0.width, texture.0.height, bounds);
         Self {
@@ -276,10 +277,10 @@ impl ImageEntry {
         let tw = tex_w as f32;
         let th = tex_h as f32;
 
-        let u0 = (bounds.x as f32) / tw;
-        let v0 = (bounds.y as f32) / th;
-        let u1 = ((bounds.x + bounds.width) as f32) / tw;
-        let v1 = ((bounds.y + bounds.height) as f32) / th;
+        let u0 = bounds.x.as_f32() / tw;
+        let v0 = bounds.y.as_f32() / th;
+        let u1 = (bounds.x + bounds.width).as_f32() / tw;
+        let v1 = (bounds.y + bounds.height).as_f32() / th;
 
         let sx = u1 - u0;
         let sy = v1 - v0;

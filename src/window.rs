@@ -75,13 +75,16 @@ impl ApplicationHandler for App {
         self.previous = Some(Instant::now());
         self.lag = Duration::ZERO;
 
+        let w = (self.window_config.width.0).max(1.0) as f64;
+        let h = (self.window_config.height.0).max(1.0) as f64;
+
         let window = event_loop
             .create_window(
                 Window::default_attributes()
                     .with_title(self.window_config.title.clone())
                     .with_inner_size(winit::dpi::LogicalSize::new(
-                        self.window_config.width.as_f32() as f64,
-                        self.window_config.height.as_f32() as f64,
+                        w,
+                        h,
                     ))
                     .with_resizable(self.window_config.resizable),
             )
@@ -91,6 +94,10 @@ impl ApplicationHandler for App {
         self.scale_factor = window.scale_factor();
         self.context.set_scale_factor(self.scale_factor);
         let size = window.inner_size();
+        self.context.set_window_logical_size(
+            Pt::from_physical_px(size.width as f64, self.scale_factor),
+            Pt::from_physical_px(size.height as f64, self.scale_factor),
+        );
 
         // SAFETY: We store the Window inside self, and leak a reference by transmuting the
         // surface lifetime to 'static. This is a common pattern for wgpu+winit; the surface
@@ -127,11 +134,24 @@ impl ApplicationHandler for App {
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.scale_factor = scale_factor;
                 self.context.set_scale_factor(self.scale_factor);
+
+                if let Some(window) = self.window.as_ref() {
+                    let size = window.inner_size();
+                    self.context.set_window_logical_size(
+                        Pt::from_physical_px(size.width as f64, self.scale_factor),
+                        Pt::from_physical_px(size.height as f64, self.scale_factor),
+                    );
+                }
             }
             WindowEvent::Resized(new_size) => {
                 if let Some(surface) = self.surface.as_ref() {
                     with_graphics(|g| g.resize(surface, new_size.width, new_size.height));
                 }
+
+                self.context.set_window_logical_size(
+                    Pt::from_physical_px(new_size.width as f64, self.scale_factor),
+                    Pt::from_physical_px(new_size.height as f64, self.scale_factor),
+                );
             }
             WindowEvent::CursorMoved { position, .. } => {
                 let x = Pt::from_physical_px(position.x, self.scale_factor);

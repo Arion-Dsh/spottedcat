@@ -193,16 +193,21 @@ impl Graphics {
         let b = match bounds {
             None => src_bounds,
             Some(b) => {
-                let x1 = b
-                    .x
-                    .checked_add(b.width)
-                    .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
-                let y1 = b
-                    .y
-                    .checked_add(b.height)
-                    .ok_or_else(|| anyhow::anyhow!("bounds overflow"))?;
+                let x0 = b.x.0;
+                let y0 = b.y.0;
+                let w0 = b.width.0;
+                let h0 = b.height.0;
+                if x0 < 0.0 || y0 < 0.0 || w0 < 0.0 || h0 < 0.0 {
+                    return Err(anyhow::anyhow!("sub_image bounds must be non-negative"));
+                }
 
-                if x1 > tex_w || y1 > tex_h {
+                let x1 = x0 + w0;
+                let y1 = y0 + h0;
+                if !x1.is_finite() || !y1.is_finite() {
+                    return Err(anyhow::anyhow!("bounds overflow"));
+                }
+
+                if x1 > tex_w as f32 || y1 > tex_h as f32 {
                     return Err(anyhow::anyhow!(
                         "sub_image bounds out of range"
                     ));
@@ -234,13 +239,14 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         context: &Context,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.draw_drawables(surface, context.draw_list())
+        self.draw_drawables(surface, context.draw_list(), context.scale_factor())
     }
 
     pub fn draw_drawables(
         &mut self,
         surface: &wgpu::Surface<'_>,
         drawables: &[DrawCommand],
+        scale_factor: f64,
     ) -> Result<(), wgpu::SurfaceError> {
         let frame = surface.get_current_texture()?;
         let view = frame
@@ -254,9 +260,17 @@ impl Graphics {
             });
 
         self.image_renderer.begin_frame();
-        self.text_renderer
-            .begin_frame(self.config.width, self.config.height, &self.queue);
-        let (sw, sh) = (self.config.width as f32, self.config.height as f32);
+        let scale_factor = if scale_factor.is_finite() && scale_factor > 0.0 {
+            scale_factor
+        } else {
+            1.0
+        };
+
+        let logical_w = ((self.config.width as f64) / scale_factor).round().max(1.0) as u32;
+        let logical_h = ((self.config.height as f64) / scale_factor).round().max(1.0) as u32;
+
+        self.text_renderer.begin_frame(logical_w, logical_h, &self.queue);
+        let (sw, sh) = (logical_w as f32, logical_h as f32);
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -318,8 +332,8 @@ impl Graphics {
                             current_bg = Some(img.texture_bind_group.clone());
                         }
 
-                        let base_w_px = img.bounds.width as f32;
-                        let base_h_px = img.bounds.height as f32;
+                        let base_w_px = img.bounds.width.0.max(0.0);
+                        let base_h_px = img.bounds.height.0.max(0.0);
                         let t = ImageTransform {
                             mvp: mvp_from_draw_options(sw, sh, base_w_px, base_h_px, *opts),
                             uvp: img.uvp,
@@ -369,8 +383,6 @@ impl Graphics {
                 }
                 batch.clear();
             }
-
-            current_key = None;
 
             self.text_renderer
                 .flush(&self.device, &mut rpass, &self.queue);
@@ -423,8 +435,8 @@ impl Graphics {
                 texture: src_tex,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
-                    x: src_bounds.x,
-                    y: src_bounds.y,
+                    x: src_bounds.x.to_u32_clamped(),
+                    y: src_bounds.y.to_u32_clamped(),
                     z: 0,
                 },
                 aspect: wgpu::TextureAspect::All,
@@ -433,15 +445,15 @@ impl Graphics {
                 texture: dst_tex,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
-                    x: dst_bounds.x,
-                    y: dst_bounds.y,
+                    x: dst_bounds.x.to_u32_clamped(),
+                    y: dst_bounds.y.to_u32_clamped(),
                     z: 0,
                 },
                 aspect: wgpu::TextureAspect::All,
             },
             wgpu::Extent3d {
-                width: src_bounds.width,
-                height: src_bounds.height,
+                width: src_bounds.width.to_u32_clamped(),
+                height: src_bounds.height.to_u32_clamped(),
                 depth_or_array_layers: 1,
             },
         );
@@ -514,7 +526,7 @@ impl Graphics {
             (target_entry.texture.0.view.clone(), target_entry.bounds)
         };
 
-        let (tw, th) = (target_bounds.width as f32, target_bounds.height as f32);
+        let (tw, th) = (target_bounds.width.as_f32(), target_bounds.height.as_f32());
 
         let mut encoder = self
             .device
@@ -529,7 +541,11 @@ impl Graphics {
 
         self.image_renderer.begin_frame();
         self.text_renderer
-            .begin_frame(target_bounds.width, target_bounds.height, &self.queue);
+            .begin_frame(
+                target_bounds.width.to_u32_clamped(),
+                target_bounds.height.to_u32_clamped(),
+                &self.queue,
+            );
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -546,18 +562,18 @@ impl Graphics {
             });
 
             rpass.set_viewport(
-                target_bounds.x as f32,
-                target_bounds.y as f32,
+                target_bounds.x.as_f32(),
+                target_bounds.y.as_f32(),
                 tw,
                 th,
                 0.0,
                 1.0,
             );
             rpass.set_scissor_rect(
-                target_bounds.x,
-                target_bounds.y,
-                target_bounds.width,
-                target_bounds.height,
+                target_bounds.x.to_u32_clamped(),
+                target_bounds.y.to_u32_clamped(),
+                target_bounds.width.to_u32_clamped(),
+                target_bounds.height.to_u32_clamped(),
             );
 
             let mut current_key: Option<usize> = None;
@@ -597,8 +613,8 @@ impl Graphics {
                             current_bg = Some(img.texture_bind_group.clone());
                         }
 
-                        let base_w_px = img.bounds.width as f32;
-                        let base_h_px = img.bounds.height as f32;
+                        let base_w_px = img.bounds.width.0.max(0.0);
+                        let base_h_px = img.bounds.height.0.max(0.0);
                         let t = ImageTransform {
                             mvp: mvp_for_texture(tw, th, base_w_px, base_h_px, *opts),
                             uvp: img.uvp,

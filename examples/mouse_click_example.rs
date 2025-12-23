@@ -20,14 +20,14 @@ impl Spot for MouseClickExample {
         let font_data = spottedcat::load_font_from_bytes(FONT);
 
         let mut title_opts = TextOptions::new(font_data.clone());
-        title_opts.position = [spottedcat::Pt(20), spottedcat::Pt(40)];
-        title_opts.font_size = spottedcat::Pt(24);
+        title_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)];
+        title_opts.font_size = spottedcat::Pt::from(24.0);
         title_opts.color = [1.0, 1.0, 1.0, 1.0];
         Text::new("Mouse Click Example (Left click to record position)").draw(context, title_opts);
 
         let mut pos_opts = TextOptions::new(font_data);
-        pos_opts.position = [spottedcat::Pt(20), spottedcat::Pt(90)];
-        pos_opts.font_size = spottedcat::Pt(20);
+        pos_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)];
+        pos_opts.font_size = spottedcat::Pt::from(20.0);
         pos_opts.color = [0.7, 0.9, 1.0, 1.0];
 
         let text = match self.last_click {

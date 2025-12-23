@@ -83,8 +83,8 @@ impl Default for WindowConfig {
     fn default() -> Self {
         Self {
             title: "spot".to_string(),
-            width: Pt(800),
-            height: Pt(600),
+            width: Pt(800.0),
+            height: Pt(600.0),
             resizable: true,
         }
     }
@@ -103,6 +103,7 @@ pub struct Context {
     offscreen: Vec<OffscreenCommand>,
     input: InputManager,
     scale_factor: f64,
+    window_logical_size: (Pt, Pt),
     resources: ResourceMap,
 }
 
@@ -130,8 +131,31 @@ impl Context {
             offscreen: Vec::new(),
             input: InputManager::new(),
             scale_factor: 1.0,
+            window_logical_size: (Pt(0.0), Pt(0.0)),
             resources: ResourceMap::default(),
         }
+    }
+
+    pub fn set_window_logical_size(&mut self, width: Pt, height: Pt) {
+        let w = Pt(width.0.max(0.0));
+        let h = Pt(height.0.max(0.0));
+        self.window_logical_size = (w, h);
+    }
+
+    pub fn window_logical_size(&self) -> (Pt, Pt) {
+        self.window_logical_size
+    }
+
+    pub fn vw(&self, percent: f32) -> Pt {
+        let (w, _) = self.window_logical_size;
+        let p = if percent.is_finite() { percent } else { 0.0 };
+        Pt::from((w.as_f32() * (p / 100.0)) as f32)
+    }
+
+    pub fn vh(&self, percent: f32) -> Pt {
+        let (_, h) = self.window_logical_size;
+        let p = if percent.is_finite() { percent } else { 0.0 };
+        Pt::from((h.as_f32() * (p / 100.0)) as f32)
     }
 
     pub fn insert_resource<T: Any + Send + Sync>(&mut self, value: Arc<T>) {
@@ -230,6 +254,10 @@ pub fn mouse_button_pressed_position(context: &Context, button: MouseButton) -> 
     } else {
         None
     }
+}
+
+pub fn window_size(context: &Context) -> (Pt, Pt) {
+    context.window_logical_size()
 }
 
 pub fn cursor_position(context: &Context) -> Option<(Pt, Pt)> {

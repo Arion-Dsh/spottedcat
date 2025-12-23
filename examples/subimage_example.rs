@@ -12,12 +12,15 @@ fn main() {
             let decoded = image::load_from_memory(TREE_PNG).expect("failed to decode happy-tree.png");
             let rgba = decoded.to_rgba8();
             let (w, h) = (rgba.width(), rgba.height());
-            let tree = Image::new_from_rgba8(w, h, rgba.as_raw())
+            let tree = Image::new_from_rgba8(Pt::from(w), Pt::from(h), rgba.as_raw())
                 .expect("failed to create happy-tree image");
 
             let crop_w = (w / 2).max(1);
             let crop_h = (h / 2).max(1);
-            let tree_sub = Image::sub_image(tree, Bounds::new(0, 0, crop_w, crop_h))
+            let tree_sub = Image::sub_image(
+                tree,
+                Bounds::new(Pt::from(0.0), Pt::from(0.0), Pt::from(crop_w), Pt::from(crop_h)),
+            )
                 .expect("failed to create sub image");
 
             Self { tree, tree_sub }
@@ -25,12 +28,12 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             let mut opts = ImageDrawOptions::default();
-            opts.position = [Pt(20), Pt(20)];
+            opts.position = [Pt::from(20.0), Pt::from(20.0)];
             opts.scale = [1.0, 1.0];
             self.tree.draw(context, opts);
 
             let mut opts = ImageDrawOptions::default();
-            opts.position = [Pt(420), Pt(20)];
+            opts.position = [Pt::from(420.0), Pt::from(20.0)];
             opts.scale = [1.0, 1.0];
             self.tree_sub.draw(context, opts);
         }

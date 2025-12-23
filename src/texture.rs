@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::Pt;
 #[derive(Clone)]
 pub struct Texture(pub(crate) Arc<AnyTexture>);
 
@@ -126,10 +127,12 @@ impl Texture {
     pub fn from_rgba8(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
+        width: Pt,
+        height: Pt,
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
+        let width = width.to_u32_clamped();
+        let height = height.to_u32_clamped();
         Ok(Self(Arc::new(AnyTexture::from_rgba8(
             device, queue, width, height, rgba,
         )?)))
@@ -138,11 +141,13 @@ impl Texture {
     pub fn from_rgba8_with_format(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        width: u32,
-        height: u32,
+        width: Pt,
+        height: Pt,
         rgba: &[u8],
         format: wgpu::TextureFormat,
     ) -> anyhow::Result<Self> {
+        let width = width.to_u32_clamped();
+        let height = height.to_u32_clamped();
         Ok(Self(Arc::new(AnyTexture::from_rgba8_with_format(
             device, queue, width, height, rgba, format,
         )?)))
