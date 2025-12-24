@@ -14,9 +14,10 @@ pub(crate) enum DrawCommand {
 }
 
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DrawOption {
-    pub options: ImageDrawOptions,
+#[derive(Debug, Clone,PartialEq)]
+pub enum DrawOption {
+   Image(ImageDrawOptions),
+   Text(TextOptions),
 }
 
 

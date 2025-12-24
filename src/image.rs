@@ -1,4 +1,8 @@
  
+use crate::DrawAble;
+use crate::DrawOption;
+use crate::ImageDrawOptions;
+use crate::drawable::DrawCommand;
 use crate::texture::Texture;
 use crate::with_graphics;
 use crate::Pt;
@@ -167,27 +171,36 @@ impl Image {
     pub fn draw_sub(
         self,
         context: &mut crate::Context,
-        drawable: crate::drawable::DrawAble,
-        option: crate::drawable::DrawOption,
-        text_options: Option<crate::drawable::TextOptions>,
+        drawable: DrawAble,
+        option: DrawOption,
     ) -> anyhow::Result<()> {
-        let drawable_with_options = match drawable {
-            crate::drawable::DrawAble::Image(img) => {
-                if img == self {
+
+        let drawable_with_options = match (drawable, option.clone()) {
+                // 情况 1: 都是 Image
+                (DrawAble::Image(img), DrawOption::Image(image_draw_options)) => {
+                    if img == self {    
+                        return Err(anyhow::anyhow!(
+                            "cannot draw an image into itself; use a separate target image"
+                        ));
+                    }
+                    DrawCommand::Image(img, image_draw_options) // 注意：这里没有分号，表示返回该值
+                }
+
+                // 情况 2: 都是 Text
+                (DrawAble::Text(text), DrawOption::Text(text_option)) => {
+                    DrawCommand::Text(text, text_option)    
+                }
+
+                // 情况 3: 类型不匹配 (例如 DrawAble 是 Image，但 Option 是 Text)
+                (d, _) => {
                     return Err(anyhow::anyhow!(
-                        "cannot draw an image into itself; use a separate target image"
+                        "DrawOption 不匹配: 绘图对象是 {:?}, 但提供了错误的配置选项", 
+                        d // 假设你的 Enum 实现了 Debug
                     ));
                 }
-                crate::drawable::DrawCommand::Image(img, option.options)
-            }
-            crate::drawable::DrawAble::Text(text) => {
-                let mut opts = text_options
-                    .ok_or_else(|| anyhow::anyhow!("DrawAble::Text requires text_options"))?;
-                opts.position = option.options.position;
-                opts.scale = option.options.scale;
-                crate::drawable::DrawCommand::Text(text, opts)
-            }
-        };
+            };
+
+    
 
         context.push_offscreen(crate::OffscreenCommand {
             target: self,
@@ -200,11 +213,10 @@ impl Image {
     pub fn draw_to(
         self,
         context: &mut crate::Context,
-        drawable: crate::drawable::DrawAble,
-        option: crate::drawable::DrawOption,
-        text_options: Option<crate::drawable::TextOptions>,
+        drawable: DrawAble,
+        option: DrawOption,
     ) -> anyhow::Result<()> {
-        self.draw_sub(context, drawable, option, text_options)
+        self.draw_sub(context, drawable, option)
     }
 
     pub fn clear(self, color: [f32; 4]) -> anyhow::Result<()> {

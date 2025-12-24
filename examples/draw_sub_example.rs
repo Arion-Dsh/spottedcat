@@ -1,3 +1,5 @@
+use spottedcat::{DrawOption, Image};
+
 fn main() {
     struct DrawSubDemo {
         canvas: spottedcat::Image,
@@ -58,10 +60,10 @@ fn main() {
             // In sub-canvas coordinates, (0,0) is A's top-left corner.
             let mut sub_opts = spottedcat::ImageDrawOptions::default();
             sub_opts.position = [spottedcat::Pt::from(380.0), spottedcat::Pt::from(380.0)];
-            let sub_opt = spottedcat::DrawOption { options: sub_opts };
+            let sub_opt = spottedcat::DrawOption::Image(sub_opts);
             let sprite_drawable = spottedcat::DrawAble::Image(self.sprite);
             self.canvas
-                .draw_sub(context, sprite_drawable, sub_opt, None)
+                .draw_sub(context, sprite_drawable, sub_opt)
                 .expect("failed to draw sprite onto canvas");
 
             self.rng_state = self
@@ -75,15 +77,12 @@ fn main() {
                 text_opts.color = [1.0, 1.0, 1.0, 1.0];
                 let mut text_draw_opts = spottedcat::ImageDrawOptions::default();
                 text_draw_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(50.0)];
-                let text_draw_opt = spottedcat::DrawOption {
-                    options: text_draw_opts,
-                };
+
                 self.canvas
                     .draw_sub(
                         context,
                         spottedcat::DrawAble::Text(spottedcat::Text::new(format!("Hello ({})", r))),
-                        text_draw_opt,
-                        Some(text_opts.clone()),
+                        spottedcat::DrawOption::Text(text_opts),
                     )
                     .expect("failed to draw text onto canvas");
             }
@@ -112,7 +111,7 @@ fn main() {
             self.sprite.draw(context, opts);
 
             self.canvas
-                    .draw_sub(context, spottedcat::DrawAble::Image(self.sprite), spottedcat::DrawOption { options: opts }, None)
+                    .draw_sub(context, spottedcat::DrawAble::Image(self.sprite), spottedcat::DrawOption::Image(opts))
                     .expect("failed to draw sprite onto canvas");
         }
 
