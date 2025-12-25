@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```no_run
-//! use spottedcat::{Context, Spot, Image, ImageDrawOptions, switch_scene};
+//! use spottedcat::{Context, Spot, Image, DrawOption, switch_scene};
 //!
 //! struct MyApp {
 //!     image: Image,
@@ -16,7 +16,7 @@
 //!     }
 //!
 //!     fn draw(&mut self, context: &mut Context) {
-//!         let mut opts = ImageDrawOptions::default();
+//!         let mut opts = DrawOption::default();
 //!         opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
 //!         opts.scale = [0.78125, 0.78125];
 //!         self.image.draw(context, opts);
@@ -55,7 +55,7 @@ use std::time::Duration;
 use winit::event_loop::EventLoop;
 
 pub use image::{Bounds, Image};
-pub use drawable::{DrawAble, DrawOption, ImageDrawOptions, TextOptions};
+pub use drawable::{DrawAble, DrawOption};
 use drawable::DrawCommand;
 pub use font::{load_font_from_file, load_font_from_bytes};
 pub use text::Text;
@@ -211,8 +211,8 @@ impl Context {
         &self.draw_list
     }
 
-    pub(crate) fn push_text(&mut self, text: String, options: TextOptions) {
-        self.push(DrawCommand::Text(Text::new(text), options));
+    pub(crate) fn push_text(&mut self, text: Text, options: DrawOption) {
+        self.push(DrawCommand::Text(text, options));
     }
 
     pub(crate) fn push_offscreen(&mut self, cmd: OffscreenCommand) {

@@ -1,7 +1,6 @@
  
 use crate::DrawAble;
 use crate::DrawOption;
-use crate::ImageDrawOptions;
 use crate::drawable::DrawCommand;
 use crate::texture::Texture;
 use crate::with_graphics;
@@ -11,13 +10,21 @@ use crate::Pt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bounds {
     /// X coordinate of the top-left corner.
-    pub x: Pt,
+    pub(crate) x: Pt,
     /// Y coordinate of the top-left corner.
-    pub y: Pt,
+    pub(crate) y: Pt,
     /// Width of the bounds.
-    pub width: Pt,
+    pub(crate) width: Pt,
     /// Height of the bounds.
-    pub height: Pt,
+    pub(crate) height: Pt,
+}
+impl Bounds {
+    pub fn width(&self) -> Pt {
+        self.width
+    }
+    pub fn height(&self) -> Pt {
+        self.height
+    }
 }
 
 impl Bounds {
@@ -122,16 +129,16 @@ impl Image {
     ///
     /// # Example
     /// ```no_run
-    /// # use spottedcat::{Context, Image, ImageDrawOptions};
+    /// # use spottedcat::{Context, Image, DrawOption};
     /// # let mut context = Context::new();
     /// # let rgba = vec![255u8; 2 * 2 * 4];
     /// # let image = Image::new_from_rgba8(2, 2, &rgba).unwrap();
-    /// let mut opts = ImageDrawOptions::default();
+    /// let mut opts = DrawOption::default();
     /// opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
     /// opts.scale = [2.0, 2.0];
     /// image.draw(&mut context, opts);
     /// ```
-    pub fn draw(self, context: &mut crate::Context, options: crate::ImageDrawOptions) {
+    pub fn draw(self, context: &mut crate::Context, options: crate::DrawOption) {
         context.push(crate::drawable::DrawCommand::Image(self, options));
     }
 
@@ -142,12 +149,11 @@ impl Image {
     /// * `option` - Draw options controlling position, rotation, scale
     ///
     /// # Note
-    /// For `DrawAble::Image`, the `option.options` will override the drawable's original options.
-    /// For `DrawAble::Text`, the text's `TextOptions` are used, but `position` and `scale` are applied from `option.options`.
+    /// For `DrawAble::Image` and `DrawAble::Text`, the same `DrawOption` is used.
     ///
     /// # Example
     /// ```no_run
-    /// use spottedcat::{Context, Image, DrawAble, DrawOption, ImageDrawOptions};
+    /// use spottedcat::{Context, Image, DrawAble, DrawOption};
     /// # let mut context = Context::new();
     ///
     /// // Load two images
@@ -156,13 +162,8 @@ impl Image {
     /// let sprite = Image::new_from_rgba8(2, 2, &rgba).unwrap();
     ///
     /// // Create draw options for positioning sprite on canvas
-    /// let option = DrawOption {
-    ///     options: ImageDrawOptions {
-    ///         position: [spottedcat::Pt(50.0), spottedcat::Pt(50.0)],  // Position on canvas
-    ///         rotation: 0.0,
-    ///         scale: [1.0, 1.0],
-    ///     },
-    /// };
+    /// let mut option = DrawOption::default();
+    /// option.position = [spottedcat::Pt(50.0), spottedcat::Pt(50.0)];
     ///
     /// // Draw sprite onto canvas at specified position
     /// let sprite_drawable = DrawAble::Image(sprite);
@@ -175,30 +176,16 @@ impl Image {
         option: DrawOption,
     ) -> anyhow::Result<()> {
 
-        let drawable_with_options = match (drawable, option.clone()) {
-                // 情况 1: 都是 Image
-                (DrawAble::Image(img), DrawOption::Image(image_draw_options)) => {
-                    if img == self {    
-                        return Err(anyhow::anyhow!(
-                            "cannot draw an image into itself; use a separate target image"
-                        ));
-                    }
-                    DrawCommand::Image(img, image_draw_options) // 注意：这里没有分号，表示返回该值
-                }
+        if matches!(drawable, DrawAble::Image(img) if img == self) {
+            return Err(anyhow::anyhow!(
+                "cannot draw an image into itself; use a separate target image"
+            ));
+        }
 
-                // 情况 2: 都是 Text
-                (DrawAble::Text(text), DrawOption::Text(text_option)) => {
-                    DrawCommand::Text(text, text_option)    
-                }
-
-                // 情况 3: 类型不匹配 (例如 DrawAble 是 Image，但 Option 是 Text)
-                (d, _) => {
-                    return Err(anyhow::anyhow!(
-                        "DrawOption 不匹配: 绘图对象是 {:?}, 但提供了错误的配置选项", 
-                        d // 假设你的 Enum 实现了 Debug
-                    ));
-                }
-            };
+        let drawable_with_options = match drawable {
+            DrawAble::Image(img) => DrawCommand::Image(img, option.clone()),
+            DrawAble::Text(text) => DrawCommand::Text(text, option.clone()),
+        };
 
     
 

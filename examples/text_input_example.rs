@@ -1,4 +1,4 @@
-use spottedcat::{Context, Key, Spot, Text, TextOptions};
+use spottedcat::{Context, Key, Spot, Text, DrawOption};
 
 struct TextInputExample {
     committed: String,
@@ -63,34 +63,42 @@ impl Spot for TextInputExample {
     }
 
     fn draw(&mut self, ctx: &mut Context) {
-        let mut title_opts = TextOptions::new(self.font_data.clone());
+        let mut title_opts = DrawOption::new();
         title_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)];
-        title_opts.font_size = spottedcat::Pt::from(22.0);
-        title_opts.color = [1.0, 1.0, 1.0, 1.0];
         let status = if self.capture_enabled { "ON" } else { "OFF" };
-        Text::new(format!(
+        Text::new(
+            format!(
             "Text Input Example (capture: {}, F1 toggle, Backspace delete, Esc clear)",
             status
-        ))
+            ),
+            self.font_data.clone(),
+        )
+        .with_font_size(spottedcat::Pt::from(22.0))
+        .with_color([1.0, 1.0, 1.0, 1.0])
         .draw(ctx, title_opts);
 
-        let mut input_opts = TextOptions::new(self.font_data.clone());
+        let mut input_opts = DrawOption::new();
         input_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)];
-        input_opts.font_size = spottedcat::Pt::from(28.0);
-        input_opts.color = [0.9, 0.9, 0.9, 1.0];
 
         let mut composed = self.committed.clone();
         if !self.preedit.is_empty() {
             composed.push_str(&self.preedit);
         }
-        Text::new(composed).draw(ctx, input_opts);
+        Text::new(composed, self.font_data.clone())
+            .with_font_size(spottedcat::Pt::from(28.0))
+            .with_color([0.9, 0.9, 0.9, 1.0])
+            .draw(ctx, input_opts);
 
         if !self.preedit.is_empty() {
-            let mut ime_opts = TextOptions::new(self.font_data.clone());
+            let mut ime_opts = DrawOption::new();
             ime_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(130.0)];
-            ime_opts.font_size = spottedcat::Pt::from(16.0);
-            ime_opts.color = [0.6, 0.8, 1.0, 1.0];
-            Text::new(format!("IME preedit: {}", self.preedit)).draw(ctx, ime_opts);
+            Text::new(
+                format!("IME preedit: {}", self.preedit),
+                self.font_data.clone(),
+            )
+            .with_font_size(spottedcat::Pt::from(16.0))
+            .with_color([0.6, 0.8, 1.0, 1.0])
+            .draw(ctx, ime_opts);
         }
     }
 

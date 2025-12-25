@@ -1,4 +1,4 @@
-use crate::{Context, DrawCommand, DrawOption, ImageDrawOptions};
+use crate::{Context, DrawCommand, DrawOption};
 use crate::image::{Bounds, Image, ImageEntry};
 use crate::image_raw::{ImageRenderer, ImageTransform, InstanceData};
 use crate::texture::Texture;
@@ -9,7 +9,7 @@ fn mvp_from_draw_options(
     sh: f32,
     base_w_px: f32,
     base_h_px: f32,
-    opts: ImageDrawOptions,
+    opts: DrawOption,
 ) -> [[f32; 4]; 4] {
     // `position` is the desired top-left corner in screen pixels (origin at top-left).
     let (px, py) = (opts.position[0].as_f32(), opts.position[1].as_f32());
@@ -62,7 +62,7 @@ fn mvp_for_texture(
     th: f32,
     base_w_px: f32,
     base_h_px: f32,
-    opts: ImageDrawOptions,
+    opts: DrawOption,
 ) -> [[f32; 4]; 4] {
     mvp_from_draw_options(tw, th, base_w_px, base_h_px, opts)
 }
@@ -361,7 +361,7 @@ impl Graphics {
                         current_key = None;
                         current_bg = None;
                         self.text_renderer
-                            .queue_text(&text.clone().to_string(), opts, &self.queue)
+                            .queue_text(text, opts, &self.queue)
                             .expect("Text draw requires valid font_data");
                     }
                 }
@@ -638,7 +638,7 @@ impl Graphics {
                         current_bg = None;
 
                         self.text_renderer
-                            .queue_text(&text.to_string(), opts, &self.queue)
+                            .queue_text(text, opts, &self.queue)
                             .expect("Text draw requires valid font_data");
                     }
                 }

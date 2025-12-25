@@ -1,5 +1,5 @@
 fn main() {
-    use spottedcat::{Bounds, Context, Image, ImageDrawOptions, Pt, Spot, WindowConfig, run};
+    use spottedcat::{Bounds, Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 
     struct DemoSpot {
         tree: Image,
@@ -43,21 +43,21 @@ fn main() {
         }
 
         fn draw(&mut self, context: &mut Context) {
-            let mut opts = ImageDrawOptions::default();
+            let mut opts = DrawOption::default();
             opts.position = [Pt::from(20.0), Pt::from(300.0)];
             self.tree.draw(context, opts);
 
-            let mut opts = ImageDrawOptions::default();
+            let mut opts = DrawOption::default();
             opts.position = [Pt::from(50.0), Pt::from(50.0)];
             opts.scale = [10.0, 10.0];
             self.image.draw(context, opts);
 
-            let mut opts = ImageDrawOptions::default();
+            let mut opts = DrawOption::default();
             opts.position = [Pt::from(300.0), Pt::from(50.0)];
             opts.scale = [20.0, 20.0];
             self.image_sub.draw(context, opts);
 
-            let mut opts = ImageDrawOptions::default();
+            let mut opts = DrawOption::default();
             opts.position = [Pt::from(550.0), Pt::from(50.0)];
             opts.scale = [10.0, 10.0];
             self.image_clone.draw(context, opts);

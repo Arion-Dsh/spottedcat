@@ -1,4 +1,4 @@
-use spottedcat::{Context, Spot, Text, TextOptions, Key};
+use spottedcat::{Context, Spot, Text, DrawOption, Key};
 
 struct InputExample {
     x: f32,
@@ -39,27 +39,34 @@ impl Spot for InputExample {
 
     fn draw(&mut self, context: &mut Context) {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+        let font_data = spottedcat::load_font_from_bytes(FONT);
 
-        let mut opts = TextOptions::new(spottedcat::load_font_from_bytes(FONT));
+        let mut opts = DrawOption::new();
         opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)];
-        opts.font_size = spottedcat::Pt::from(24.0);
-        opts.color = [1.0, 1.0, 1.0, 1.0];
+        Text::new(
+            "Input Example (WASD / Arrow Keys to move, ESC to reset)",
+            font_data.clone(),
+        )
+        .with_font_size(spottedcat::Pt::from(24.0))
+        .with_color([1.0, 1.0, 1.0, 1.0])
+        .draw(context, opts);
 
-        Text::new("Input Example (WASD / Arrow Keys to move, ESC to reset)").draw(context, opts);
-
-        let mut opts = TextOptions::new(spottedcat::load_font_from_bytes(FONT));
+        let mut opts = DrawOption::new();
         opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(80.0)];
-        opts.font_size = spottedcat::Pt::from(20.0);
-        opts.color = [0.7, 0.9, 1.0, 1.0];
+        Text::new(format!("Position: ({:.1}, {:.1})", self.x, self.y), font_data.clone())
+            .with_font_size(spottedcat::Pt::from(20.0))
+            .with_color([0.7, 0.9, 1.0, 1.0])
+            .draw(context, opts);
 
-        Text::new(format!("Position: ({:.1}, {:.1})", self.x, self.y)).draw(context, opts);
-
-        let mut opts = TextOptions::new(spottedcat::load_font_from_bytes(FONT));
+        let mut opts = DrawOption::new();
         opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(120.0)];
-        opts.font_size = spottedcat::Pt::from(18.0);
-        opts.color = [0.9, 0.9, 0.9, 1.0];
-
-        Text::new("Tip: hold keys for continuous movement; press ESC to reset.").draw(context, opts);
+        Text::new(
+            "Tip: hold keys for continuous movement; press ESC to reset.",
+            font_data,
+        )
+        .with_font_size(spottedcat::Pt::from(18.0))
+        .with_color([0.9, 0.9, 0.9, 1.0])
+        .draw(context, opts);
     }
 
     fn remove(&self) {}

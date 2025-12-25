@@ -9,23 +9,16 @@ pub enum DrawAble {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand {
-    Image(Image, ImageDrawOptions),
-    Text(Text, TextOptions),
+    Image(Image, DrawOption),
+    Text(Text, DrawOption),
 }
 
 
-#[derive(Debug, Clone,PartialEq)]
-pub enum DrawOption {
-   Image(ImageDrawOptions),
-   Text(TextOptions),
-}
-
-
-/// Options for drawing images.
+/// Unified options for drawing images and text.
 ///
-/// Controls the position, size, rotation, and scale of drawn images.
+/// Controls the position, rotation, and scale of drawn items.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ImageDrawOptions {
+pub struct DrawOption {
     /// Position in screen pixels (top-left corner). Origin is at top-left of window.
     pub position: [Pt; 2],
     /// Rotation in radians.
@@ -34,7 +27,7 @@ pub struct ImageDrawOptions {
     pub scale: [f32; 2],
 }
 
-impl Default for ImageDrawOptions {
+impl Default for DrawOption {
     fn default() -> Self {
         Self {
             position: [Pt(10.0), Pt(10.0)],
@@ -44,43 +37,8 @@ impl Default for ImageDrawOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TextOptions {
-    pub position: [Pt; 2],
-    pub font_size: Pt,
-    pub color: [f32; 4],
-    pub scale: [f32; 2],
-    pub font_data: Vec<u8>,
-    pub stroke_width: Pt,
-    pub stroke_color: [f32; 4],
-}
-
-impl TextOptions {
-    pub fn new(font_data: Vec<u8>) -> Self {
-        Self {
-            position: [Pt(10.0), Pt(10.0)],
-            font_size: Pt(24.0),
-            color: [1.0, 1.0, 1.0, 1.0],
-            scale: [1.0, 1.0],
-            font_data,
-            stroke_width: Pt(0.0),
-            stroke_color: [0.0, 0.0, 0.0, 1.0],
-        }
-    }
-
-    pub fn from_file(path: &str) -> anyhow::Result<Self> {
-        let font_data = std::fs::read(path)?;
-        Ok(Self::new(font_data))
-    }
-
-    pub fn with_font_from_bytes(mut self, font_data: Vec<u8>) -> Self {
-        self.font_data = font_data;
-        self
-    }
-
-    pub fn with_font_from_file(mut self, path: &str) -> anyhow::Result<Self> {
-        let font_data = std::fs::read(path)?;
-        self.font_data = font_data;
-        Ok(self)
+impl DrawOption {
+    pub fn new() -> Self {
+        Self::default()
     }
 }

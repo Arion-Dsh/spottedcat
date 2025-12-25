@@ -1,5 +1,5 @@
 fn main() {
-    use spottedcat::{Bounds, Context, Image, ImageDrawOptions, Pt, Spot, WindowConfig, run};
+    use spottedcat::{Bounds, Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 
     struct SubImageExample {
         tree: Image,
@@ -27,12 +27,12 @@ fn main() {
         }
 
         fn draw(&mut self, context: &mut Context) {
-            let mut opts = ImageDrawOptions::default();
+            let mut opts = DrawOption::default();
             opts.position = [Pt::from(20.0), Pt::from(20.0)];
             opts.scale = [1.0, 1.0];
             self.tree.draw(context, opts);
 
-            let mut opts = ImageDrawOptions::default();
+            let mut opts = DrawOption::default();
             opts.position = [Pt::from(420.0), Pt::from(20.0)];
             opts.scale = [1.0, 1.0];
             self.tree_sub.draw(context, opts);

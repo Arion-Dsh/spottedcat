@@ -1,4 +1,4 @@
-use spottedcat::{DrawOption, Image};
+ 
 
 fn main() {
     struct DrawSubDemo {
@@ -58,9 +58,8 @@ fn main() {
 
             // Compose B onto A.
             // In sub-canvas coordinates, (0,0) is A's top-left corner.
-            let mut sub_opts = spottedcat::ImageDrawOptions::default();
-            sub_opts.position = [spottedcat::Pt::from(380.0), spottedcat::Pt::from(380.0)];
-            let sub_opt = spottedcat::DrawOption::Image(sub_opts);
+            let mut sub_opt = spottedcat::DrawOption::new();
+            sub_opt.position = [spottedcat::Pt::from(380.0), spottedcat::Pt::from(380.0)];
             let sprite_drawable = spottedcat::DrawAble::Image(self.sprite);
             self.canvas
                 .draw_sub(context, sprite_drawable, sub_opt)
@@ -72,31 +71,32 @@ fn main() {
                 .wrapping_add(1013904223);
             let r = (self.rng_state % 11) as u32;
             if r > 8 {
-                let mut text_opts = spottedcat::TextOptions::new(self.font_data.clone());
-                text_opts.font_size = spottedcat::Pt::from(32.0);
-                text_opts.color = [1.0, 1.0, 1.0, 1.0];
-                let mut text_draw_opts = spottedcat::ImageDrawOptions::default();
-                text_draw_opts.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(50.0)];
+                let mut text_opt = spottedcat::DrawOption::new();
+                text_opt.position = [spottedcat::Pt::from(20.0), spottedcat::Pt::from(50.0)];
 
                 self.canvas
                     .draw_sub(
                         context,
-                        spottedcat::DrawAble::Text(spottedcat::Text::new(format!("Hello ({})", r))),
-                        spottedcat::DrawOption::Text(text_opts),
+                        spottedcat::DrawAble::Text(
+                            spottedcat::Text::new(format!("Hello ({})", r), self.font_data.clone())
+                                .with_font_size(spottedcat::Pt::from(32.0))
+                                .with_color([1.0, 1.0, 1.0, 1.0]),
+                        ),
+                        text_opt,
                     )
                     .expect("failed to draw text onto canvas");
             }
 
             // Draw the composited canvas to screen
             let canvas_screen_pos = [spottedcat::Pt::from(10.0), spottedcat::Pt::from(10.0)];
-            let mut opts = spottedcat::ImageDrawOptions::default();
+            let mut opts = spottedcat::DrawOption::new();
             opts.position = canvas_screen_pos;
             self.canvas.draw(context, opts);
 
             // Draw the sprite in screen space relative to the canvas top-left.
             // This keeps the sprite offset/size fixed in screen pixels and does not scale
             // with the canvas draw size.
-            let mut opts = spottedcat::ImageDrawOptions::default();
+            let mut opts = spottedcat::DrawOption::new();
             opts.position = [
                 spottedcat::Pt::from(canvas_screen_pos[0].as_f32() + 10.0),
                 spottedcat::Pt::from(canvas_screen_pos[1].as_f32() + 10.0),
@@ -105,13 +105,13 @@ fn main() {
 
 
             // // Also draw the original sprite separately for comparison
-            let opts = spottedcat::ImageDrawOptions::default();
+            let opts = spottedcat::DrawOption::new();
             // opts.position = [spottedcat::Pt(550.0), spottedcat::Pt(10.0)];
             // opts.scale = [5.0, 5.0];
             self.sprite.draw(context, opts);
 
             self.canvas
-                    .draw_sub(context, spottedcat::DrawAble::Image(self.sprite), spottedcat::DrawOption::Image(opts))
+                    .draw_sub(context, spottedcat::DrawAble::Image(self.sprite), opts)
                     .expect("failed to draw sprite onto canvas");
         }
 
