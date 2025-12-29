@@ -45,11 +45,11 @@ impl Bounds {
 /// and can be cloned cheaply.
 #[derive(Debug, Clone, Copy)]
 pub struct Image {
-    pub id: u32,
-    pub x: Pt,
-    pub y: Pt,
-    pub width: Pt,
-    pub height: Pt,
+    pub(crate) id: u32,
+    pub(crate) x: Pt,
+    pub(crate) y: Pt,
+    pub(crate) width: Pt,
+    pub(crate) height: Pt,
 }
 
 impl Image {

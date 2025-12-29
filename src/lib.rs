@@ -97,7 +97,7 @@ use crate::graphics::Graphics;
 ///
 /// The context accumulates drawing commands during a frame and is used by the
 /// graphics system to render the scene.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Context {
     draw_list: Vec<DrawCommand>,
     offscreen: Vec<OffscreenCommand>,
@@ -107,7 +107,7 @@ pub struct Context {
     resources: ResourceMap,
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 struct ResourceMap {
     inner: HashMap<TypeId, Arc<dyn Any + Send + Sync>>,
 }
