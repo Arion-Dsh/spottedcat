@@ -28,13 +28,13 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             let mut opts = DrawOption::default();
-            opts.position = [Pt::from(20.0), Pt::from(20.0)];
-            opts.scale = [1.0, 1.0];
+            opts.set_position([Pt::from(80.0), Pt::from(80.0)]);
+            opts.set_scale([3.0, 3.0]);
             self.tree.draw(context, opts);
 
             let mut opts = DrawOption::default();
-            opts.position = [Pt::from(420.0), Pt::from(20.0)];
-            opts.scale = [1.0, 1.0];
+            opts.set_position([Pt::from(420.0), Pt::from(80.0)]);
+            opts.set_scale([6.0, 6.0]);
             self.tree_sub.draw(context, opts);
         }
 

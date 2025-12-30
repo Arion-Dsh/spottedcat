@@ -16,19 +16,21 @@ struct TextUniforms {
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct GlyphInstance {
     pos: [f32; 2],
-    size: [f32; 2],
+    basis_x: [f32; 2],
+    basis_y: [f32; 2],
     uv_min: [f32; 2],
     uv_max: [f32; 2],
     color: [f32; 4],
 }
 
 impl GlyphInstance {
-    const ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+    const ATTRS: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
         2 => Float32x2, // pos
-        3 => Float32x2, // size
-        4 => Float32x2, // uv_min
-        5 => Float32x2, // uv_max
-        6 => Float32x4, // color
+        3 => Float32x2, // basis_x
+        4 => Float32x2, // basis_y
+        5 => Float32x2, // uv_min
+        6 => Float32x2, // uv_max
+        7 => Float32x4, // color
     ];
 
     fn layout() -> wgpu::VertexBufferLayout<'static> {
@@ -269,10 +271,11 @@ struct VsIn {
     @location(1) uv: vec2<f32>,
 
     @location(2) i_pos: vec2<f32>,
-    @location(3) i_size: vec2<f32>,
-    @location(4) i_uv_min: vec2<f32>,
-    @location(5) i_uv_max: vec2<f32>,
-    @location(6) i_color: vec4<f32>,
+    @location(3) i_basis_x: vec2<f32>,
+    @location(4) i_basis_y: vec2<f32>,
+    @location(5) i_uv_min: vec2<f32>,
+    @location(6) i_uv_max: vec2<f32>,
+    @location(7) i_color: vec4<f32>,
 };
 
 struct VsOut {
@@ -284,7 +287,8 @@ struct VsOut {
 @vertex
 fn vs_main(in: VsIn) -> VsOut {
     var out: VsOut;
-    let p = in.i_pos + in.pos * in.i_size;
+    // quad vertex `pos` is in [0..1] for both axes.
+    let p = in.i_pos + in.pos.x * in.i_basis_x + in.pos.y * in.i_basis_y;
 
     let x = (p.x / u.screen_size.x) * 2.0 - 1.0;
     let y = 1.0 - (p.y / u.screen_size.y) * 2.0;
@@ -502,7 +506,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         queue: &wgpu::Queue,
     ) -> anyhow::Result<()> {
         let (font_hash, font) = self.get_font(&text.font_data)?;
-        let px_size = (text.font_size.as_f32() * opts.scale[1]).max(1.0);
+        // Scaling is applied via per-glyph basis vectors so that X/Y scale and rotation
+        // work consistently.
+        let px_size = text.font_size.as_f32().max(1.0);
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
 
@@ -572,10 +578,35 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let w = (entry.bmax[0] - entry.bmin[0]).ceil().max(1.0);
             let h = (entry.bmax[1] - entry.bmin[1]).ceil().max(1.0);
 
+            let r = opts.rotation();
+            let sinr = r.sin();
+            let cosr = r.cos();
+            let c = cosr;
+            let s = sinr;
+            let scale = opts.scale();
+            let sx = scale[0];
+            let sy = scale[1];
+
+            // Position is defined at the text's top-left corner in screen pixels.
+            // Apply child local offset (caret/bounds/baseline), then scale+rotate around the
+            // top-left anchor, then translate by opts.position.
+            let local_x = caret_x + entry.bmin[0];
+            let local_y = baseline_y + entry.bmin[1];
+            let scaled_x = local_x * sx;
+            let scaled_y = local_y * sy;
+            let rot_x = cosr * scaled_x - sinr * scaled_y;
+            let rot_y = sinr * scaled_x + cosr * scaled_y;
+            let pos = opts.position();
+            let px = pos[0].as_f32();
+            let py = pos[1].as_f32();
             let base_pos = [
-                opts.position[0].as_f32() + caret_x + entry.bmin[0],
-                opts.position[1].as_f32() + baseline_y + entry.bmin[1],
+                px + rot_x,
+                py + rot_y,
             ];
+
+            // Basis vectors for the glyph quad in screen pixels.
+            let basis_x = [cosr * w * sx, sinr * w * sx];
+            let basis_y = [-sinr * h * sy, cosr * h * sy];
 
             let stroke_w = text.stroke_width.as_f32();
             if stroke_w > 0.0 {
@@ -588,9 +619,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
                         if (dx * dx + dy * dy) as f32 > stroke_w * stroke_w {
                             continue;
                         }
+                        // Stroke offset is in local (unrotated) pixel space.
+                        let sox = (dx as f32) * sx;
+                        let soy = (dy as f32) * sy;
+                        let srx = c * sox - s * soy;
+                        let sry = s * sox + c * soy;
+
                         self.instances.push(GlyphInstance {
-                            pos: [base_pos[0] + dx as f32, base_pos[1] + dy as f32],
-                            size: [w, h],
+                            pos: [base_pos[0] + srx, base_pos[1] + sry],
+                            basis_x,
+                            basis_y,
                             uv_min,
                             uv_max,
                             color: text.stroke_color,
@@ -601,7 +639,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
             self.instances.push(GlyphInstance {
                 pos: base_pos,
-                size: [w, h],
+                basis_x,
+                basis_y,
                 uv_min,
                 uv_max,
                 color: text.color,

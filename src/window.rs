@@ -64,7 +64,7 @@ impl App {
             scale_factor: 1.0,
             previous: None,
             lag: Duration::ZERO,
-            fixed_dt: Duration::from_nanos(16_666_667),
+            fixed_dt: Duration::from_nanos(8_333_333),
         }
     }
 }
@@ -192,24 +192,14 @@ impl ApplicationHandler for App {
                         self.spot = Some(factory(&mut self.context));
                     }
 
-                    let offscreen = self.context.take_offscreen();
-                    let _ = with_graphics(|g| {
-                        for cmd in offscreen {
-                            if let Err(e) =
-                                g.draw_drawables_to_image(cmd.target, &cmd.drawables, cmd.option)
-                            {
-                                eprintln!("offscreen draw failed: {e:?}");
-                            }
-                        }
-                        g.draw_context(surface, &self.context)
-                    });
+                    let _ = with_graphics(|g| g.draw_context(surface, &self.context));
                 }
             }
             _ => {}
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         if let Some(previous) = self.previous.replace(now) {
             let elapsed = now.duration_since(previous);
@@ -224,7 +214,6 @@ impl ApplicationHandler for App {
             }
         }
 
-        event_loop.set_control_flow(ControlFlow::Poll);
 
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();

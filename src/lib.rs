@@ -9,15 +9,15 @@
 //! }
 //!
 //! impl Spot for MyApp {
-//!     fn initialize(_context: Context) -> Self {
+//!     fn initialize(_context: &mut Context) -> Self {
 //!         let rgba = vec![255u8; 256 * 256 * 4];
-//!         let image = Image::new_from_rgba8(256, 256, &rgba).unwrap();
+//!         let image = Image::new_from_rgba8(256u32.into(), 256u32.into(), &rgba).unwrap();
 //!         Self { image }
 //!     }
 //!
 //!     fn draw(&mut self, context: &mut Context) {
 //!         let mut opts = DrawOption::default();
-//!         opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
+//!         opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)];
 //!         opts.scale = [0.78125, 0.78125];
 //!         self.image.draw(context, opts);
 //!     }
@@ -47,6 +47,8 @@ mod input;
 mod key;
 mod mouse;
 mod pt;
+mod packer;
+mod shader_opts;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -55,7 +57,7 @@ use std::time::Duration;
 use winit::event_loop::EventLoop;
 
 pub use image::{Bounds, Image};
-pub use drawable::{DrawAble, DrawOption};
+pub use drawable::DrawOption;
 use drawable::DrawCommand;
 pub use font::{load_font_from_file, load_font_from_bytes};
 pub use text::Text;
@@ -63,13 +65,7 @@ pub use input::InputManager;
 pub use key::Key;
 pub use mouse::MouseButton;
 pub use pt::Pt;
-
-#[derive(Debug, Clone)]
-pub(crate) struct OffscreenCommand {
-    pub(crate) target: Image,
-    pub(crate) drawables: Vec<DrawCommand>,
-    pub(crate) option: DrawOption,
-}
+pub use shader_opts::ShaderOpts;
 
 #[derive(Debug, Clone)]
 pub struct WindowConfig {
@@ -92,7 +88,6 @@ impl Default for WindowConfig {
 
 use crate::graphics::Graphics;
 
-
 /// Drawing context for managing render commands.
 ///
 /// The context accumulates drawing commands during a frame and is used by the
@@ -100,7 +95,6 @@ use crate::graphics::Graphics;
 #[derive(Debug)]
 pub struct Context {
     draw_list: Vec<DrawCommand>,
-    offscreen: Vec<OffscreenCommand>,
     input: InputManager,
     scale_factor: f64,
     window_logical_size: (Pt, Pt),
@@ -128,7 +122,6 @@ impl Context {
     pub fn new() -> Self {
         Self {
             draw_list: Vec::new(),
-            offscreen: Vec::new(),
             input: InputManager::new(),
             scale_factor: 1.0,
             window_logical_size: (Pt(0.0), Pt(0.0)),
@@ -178,7 +171,6 @@ impl Context {
     /// manually if needed.
     pub(crate) fn begin_frame(&mut self) {
         self.draw_list.clear();
-        self.offscreen.clear();
     }
 
     pub(crate) fn input(&self) -> &InputManager {
@@ -209,18 +201,6 @@ impl Context {
     /// This is used internally by the graphics system to render the scene.
     pub(crate) fn draw_list(&self) -> &[DrawCommand] {
         &self.draw_list
-    }
-
-    pub(crate) fn push_text(&mut self, text: Text, options: DrawOption) {
-        self.push(DrawCommand::Text(text, options));
-    }
-
-    pub(crate) fn push_offscreen(&mut self, cmd: OffscreenCommand) {
-        self.offscreen.push(cmd);
-    }
-
-    pub(crate) fn take_offscreen(&mut self) -> Vec<OffscreenCommand> {
-        std::mem::take(&mut self.offscreen)
     }
 }
 
@@ -284,6 +264,10 @@ pub fn ime_preedit(context: &Context) -> Option<&str> {
     context.input().ime_preedit()
 }
 
+pub fn register_image_shader(wgsl_source: &str) -> u32 {
+    with_graphics(|g| g.register_image_shader(wgsl_source))
+}
+
 type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot> + Send>;
 
 static GLOBAL_GRAPHICS: OnceLock<Mutex<Graphics>> = OnceLock::new();
@@ -338,7 +322,7 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
 /// # use spottedcat::{Context, Spot};
 /// # struct MyApp;
 /// # impl Spot for MyApp {
-/// #     fn initialize(_: Context) -> Self { MyApp }
+/// #     fn initialize(_: &mut Context) -> Self { MyApp }
 /// #     fn draw(&mut self, _: &mut Context) {}
 /// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
@@ -367,13 +351,13 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
 /// # struct MenuScene;
 /// # struct GameScene;
 /// # impl Spot for MenuScene {
-/// #     fn initialize(_: Context) -> Self { MenuScene }
+/// #     fn initialize(_: &mut Context) -> Self { MenuScene }
 /// #     fn draw(&mut self, _: &mut Context) {}
 /// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}
 /// # }
 /// # impl Spot for GameScene {
-/// #     fn initialize(_: Context) -> Self { GameScene }
+/// #     fn initialize(_: &mut Context) -> Self { GameScene }
 /// #     fn draw(&mut self, _: &mut Context) {}
 /// #     fn update(&mut self, _: &mut Context, _dt: std::time::Duration) {}
 /// #     fn remove(&self) {}

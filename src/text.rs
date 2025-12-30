@@ -28,8 +28,10 @@ impl Text {
     ///
     /// # Example
     /// ```no_run
-    /// # use spottedcat::Text;
-    /// let text = Text::new("Hello, World!");
+    /// # use spottedcat::{Text, load_font_from_bytes};
+    /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+    /// let font_data = load_font_from_bytes(FONT);
+    /// let text = Text::new("Hello, World!", font_data);
     /// ```
     pub fn new(content: impl Into<String>, font_data: Vec<u8>) -> Self {
         Self {
@@ -75,12 +77,12 @@ impl Text {
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
     /// let font_data = load_font_from_bytes(FONT);
     /// let mut opts = DrawOption::new();
-    /// opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
+    /// opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)];
     /// Text::new("Hello, World!", font_data)
-    ///     .with_font_size(spottedcat::Pt(32.0))
+    ///     .with_font_size(spottedcat::Pt::from(32.0))
     ///     .draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut Context, options: DrawOption) {
-        context.push(crate::drawable::DrawCommand::Text(self, options));
+        context.push(crate::drawable::DrawCommand::Text(Box::new(self), options));
     }
 }

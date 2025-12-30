@@ -1,16 +1,11 @@
-use crate::{Image, Pt};
+use crate::Pt;
+use crate::ShaderOpts;
 use crate::Text;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum DrawAble {
-    Image(Image),
-    Text(Text),
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand {
-    Image(Image, DrawOption),
-    Text(Text, DrawOption),
+    Image(u32, DrawOption, u32, ShaderOpts),
+    Text(Box<Text>, DrawOption),
 }
 
 
@@ -20,25 +15,66 @@ pub(crate) enum DrawCommand {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawOption {
     /// Position in screen pixels (top-left corner). Origin is at top-left of window.
-    pub position: [Pt; 2],
+    position: [Pt; 2],
     /// Rotation in radians.
-    pub rotation: f32,
+    rotation: f32,
     /// Scale factors (x, y). Applied after size.
-    pub scale: [f32; 2],
+    scale: [f32; 2],
+    /// Optional clipping rectangle [x, y, width, height] in screen pixels.
+    clip: Option<[Pt; 4]>,
 }
 
 impl Default for DrawOption {
     fn default() -> Self {
         Self {
-            position: [Pt(10.0), Pt(10.0)],
+            position: [Pt(0.0), Pt(0.0)],
             scale: [1.0, 1.0],
             rotation: 0.0,
+            clip: None,
         }
     }
 }
 
 impl DrawOption {
-    pub fn new() -> Self {
-        Self::default()
+
+    pub fn new(position: [Pt; 2], rotation: f32, scale: [f32; 2]) -> Self {
+        Self {
+            position,
+            rotation,
+            scale,
+            clip: None,
+        }
+    }
+
+    pub fn position(&self) -> [Pt; 2] {
+        self.position
+    }
+
+    pub fn set_position(&mut self, position: [Pt; 2]) {
+        self.position = position;
+    }
+
+    pub fn rotation(&self) -> f32 {
+        self.rotation
+    }
+
+    pub fn set_rotation(&mut self, rotation: f32) {
+        self.rotation = rotation;
+    }
+
+    pub fn scale(&self) -> [f32; 2] {
+        self.scale
+    }
+
+    pub fn set_scale(&mut self, scale: [f32; 2]) {
+        self.scale = scale;
+    }
+
+    pub(crate) fn clip(&self) -> Option<[Pt; 4]> {
+        self.clip
+    }
+
+    pub(crate) fn set_clip(&mut self, clip: Option<[Pt; 4]>) {
+        self.clip = clip;
     }
 }

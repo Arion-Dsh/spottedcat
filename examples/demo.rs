@@ -44,22 +44,22 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             let mut opts = DrawOption::default();
-            opts.position = [Pt::from(20.0), Pt::from(300.0)];
+            opts.set_position([Pt::from(20.0), Pt::from(300.0)]);
             self.tree.draw(context, opts);
 
             let mut opts = DrawOption::default();
-            opts.position = [Pt::from(50.0), Pt::from(50.0)];
-            opts.scale = [10.0, 10.0];
+            opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+            opts.set_scale([10.0, 10.0]);
             self.image.draw(context, opts);
 
             let mut opts = DrawOption::default();
-            opts.position = [Pt::from(300.0), Pt::from(50.0)];
-            opts.scale = [20.0, 20.0];
+            opts.set_position([Pt::from(300.0), Pt::from(50.0)]);
+            opts.set_scale([20.0, 20.0]);
             self.image_sub.draw(context, opts);
 
             let mut opts = DrawOption::default();
-            opts.position = [Pt::from(550.0), Pt::from(50.0)];
-            opts.scale = [10.0, 10.0];
+            opts.set_position([Pt::from(550.0), Pt::from(50.0)]);
+            opts.set_scale([10.0, 10.0]);
             self.image_clone.draw(context, opts);
         }
 

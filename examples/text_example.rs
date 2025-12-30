@@ -31,15 +31,15 @@ impl Spot for TextApp {
         let font_data = font_data.unwrap_or_else(|| load_font_from_bytes(FALLBACK_FONT));
 
         // 使用 Text::draw() - 传入字体数据
-        let mut opts = DrawOption::new();
-        opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)];
+        let mut opts = DrawOption::default();
+        opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
         Text::new("Provided Font", font_data.clone())
             .with_font_size(spottedcat::Pt::from(32.0))
             .with_color([1.0, 1.0, 1.0, 1.0])
             .draw(context, opts);
         
-        let mut custom_opts = DrawOption::new();
-        custom_opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(150.0)];
+        let mut custom_opts = DrawOption::default();
+        custom_opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(150.0)]);
         Text::new("使用嵌入字体 - Embedded Font", font_data.clone())
             .with_font_size(spottedcat::Pt::from(28.0))
             .with_color([1.0, 0.5, 0.0, 1.0])
@@ -53,23 +53,23 @@ impl Spot for TextApp {
             None => spottedcat::load_font_from_file("assets/DejaVuSans.ttf")
                 .unwrap_or_else(|_| font_data.clone()),
         };
-        let mut file_opts = DrawOption::new();
-        file_opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(200.0)];
+        let mut file_opts = DrawOption::default();
+        file_opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(200.0)]);
         Text::new("从文件加载字体 - Loaded from File", file_font)
             .with_font_size(spottedcat::Pt::from(24.0))
             .with_color([0.0, 1.0, 0.5, 1.0])
             .draw(context, file_opts);
 
         // 使用 Text::draw() - 不同颜色和大小
-        let mut small_opts = DrawOption::new();
-        small_opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(250.0)];
+        let mut small_opts = DrawOption::default();
+        small_opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(340.0)]);
         Text::new("小字体 - Small Font Size", font_data.clone())
             .with_font_size(spottedcat::Pt::from(18.0))
             .with_color([0.5, 0.5, 1.0, 1.0])
             .draw(context, small_opts);
 
-        let mut large_opts = DrawOption::new();
-        large_opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(300.0)];
+        let mut large_opts = DrawOption::default();
+        large_opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(300.0)]);
         Text::new("大字体 - Large Font", font_data)
             .with_font_size(spottedcat::Pt::from(48.0))
             .with_color([1.0, 0.0, 0.5, 1.0])

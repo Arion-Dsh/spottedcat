@@ -59,9 +59,6 @@ impl Pt {
         Pt(v as f32)
     }
 
-    pub(crate) fn to_physical_px(self, scale_factor: f64) -> f64 {
-        (self.0 as f64) * scale_factor
-    }
 }
 
 impl From<u32> for Pt {

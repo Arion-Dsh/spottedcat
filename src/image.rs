@@ -1,8 +1,4 @@
  
-use crate::DrawAble;
-use crate::DrawOption;
-use crate::drawable::DrawCommand;
-use crate::texture::Texture;
 use crate::with_graphics;
 use crate::Pt;
 
@@ -83,19 +79,7 @@ impl Image {
     /// # Errors
     /// Returns an error if the data length doesn't match width * height * 4.
     pub fn new_from_rgba8(width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Self> {
-        with_graphics(|g| {
-            let (device, queue) = g.device_queue();
-            let texture = Texture::from_rgba8_with_format(
-                device,
-                queue,
-                width,
-                height,
-                rgba,
-                g.surface_format(),
-            )?;
-            let bg = g.create_texture_bind_group_from_texture(&texture);
-            Ok(g.insert_image_entry(ImageEntry::new(texture, bg)))
-        })
+        with_graphics(|g| g.create_image(width, height, rgba))
     }
 
     /// Creates a copy of an existing image.
@@ -103,7 +87,10 @@ impl Image {
     /// # Arguments
     /// * `image` - The source image to copy
     pub fn new_from_image(image: Image) -> anyhow::Result<Self> {
-        with_graphics(|g| g.insert_sub_image(image, None))
+        with_graphics(|g| {
+            let bounds = g.image_bounds(image)?;
+            g.create_sub_image(image, bounds)
+        })
     }
 
     /// Creates a sub-image from a region of an existing image.
@@ -118,7 +105,7 @@ impl Image {
     /// # Errors
     /// Returns an error if the bounds are out of range.
     pub fn sub_image(image: Image, bounds: Bounds) -> anyhow::Result<Self> {
-        with_graphics(|g| g.insert_sub_image(image, Some(bounds)))
+        with_graphics(|g| g.create_sub_image(image, bounds))
     }
 
     /// Draws this image to the context with the specified options.
@@ -132,78 +119,34 @@ impl Image {
     /// # use spottedcat::{Context, Image, DrawOption};
     /// # let mut context = Context::new();
     /// # let rgba = vec![255u8; 2 * 2 * 4];
-    /// # let image = Image::new_from_rgba8(2, 2, &rgba).unwrap();
+    /// # let image = Image::new_from_rgba8(2u32.into(), 2u32.into(), &rgba).unwrap();
     /// let mut opts = DrawOption::default();
-    /// opts.position = [spottedcat::Pt(100.0), spottedcat::Pt(100.0)];
+    /// opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)];
     /// opts.scale = [2.0, 2.0];
     /// image.draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut crate::Context, options: crate::DrawOption) {
-        context.push(crate::drawable::DrawCommand::Image(self, options));
+        context.push(crate::drawable::DrawCommand::Image(
+            self.id,
+            options,
+            0,
+            crate::ShaderOpts::default(),
+        ));
     }
 
-    /// Draws a drawable onto this image as a render target.
-    ///
-    /// # Arguments
-    /// * `drawable` - The drawable to render onto this image
-    /// * `option` - Draw options controlling position, rotation, scale
-    ///
-    /// # Note
-    /// For `DrawAble::Image` and `DrawAble::Text`, the same `DrawOption` is used.
-    ///
-    /// # Example
-    /// ```no_run
-    /// use spottedcat::{Context, Image, DrawAble, DrawOption};
-    /// # let mut context = Context::new();
-    ///
-    /// // Load two images
-    /// let rgba = vec![255u8; 2 * 2 * 4];
-    /// let canvas = Image::new_from_rgba8(2, 2, &rgba).unwrap();
-    /// let sprite = Image::new_from_rgba8(2, 2, &rgba).unwrap();
-    ///
-    /// // Create draw options for positioning sprite on canvas
-    /// let mut option = DrawOption::default();
-    /// option.position = [spottedcat::Pt(50.0), spottedcat::Pt(50.0)];
-    ///
-    /// // Draw sprite onto canvas at specified position
-    /// let sprite_drawable = DrawAble::Image(sprite);
-    /// canvas.draw_sub(&mut context, sprite_drawable, option, None).unwrap();
-    /// ```
-    pub fn draw_sub(
+    pub fn draw_with_shader(
         self,
         context: &mut crate::Context,
-        drawable: DrawAble,
-        option: DrawOption,
-    ) -> anyhow::Result<()> {
-
-        if matches!(drawable, DrawAble::Image(img) if img == self) {
-            return Err(anyhow::anyhow!(
-                "cannot draw an image into itself; use a separate target image"
-            ));
-        }
-
-        let drawable_with_options = match drawable {
-            DrawAble::Image(img) => DrawCommand::Image(img, option.clone()),
-            DrawAble::Text(text) => DrawCommand::Text(text, option.clone()),
-        };
-
-    
-
-        context.push_offscreen(crate::OffscreenCommand {
-            target: self,
-            drawables: vec![drawable_with_options],
-            option,
-        });
-        Ok(())
-    }
-
-    pub fn draw_to(
-        self,
-        context: &mut crate::Context,
-        drawable: DrawAble,
-        option: DrawOption,
-    ) -> anyhow::Result<()> {
-        self.draw_sub(context, drawable, option)
+        shader_id: u32,
+        options: crate::DrawOption,
+        shader_opts: crate::ShaderOpts,
+    ) {
+        context.push(crate::drawable::DrawCommand::Image(
+            self.id,
+            options,
+            shader_id,
+            shader_opts,
+        ));
     }
 
     pub fn clear(self, color: [f32; 4]) -> anyhow::Result<()> {
@@ -229,66 +172,119 @@ impl Image {
     pub fn destroy(self) -> bool {
         with_graphics(|g| g.take_image_entry(self).is_some())
     }
+
+    /// Returns the global screen-space bounds of this image when drawn.
+    /// 
+    /// # Arguments
+    /// * `options` - The same DrawOption used when calling `draw()`
+    pub(crate) fn screen_bounds(self, options: crate::DrawOption) -> [Pt; 4] {
+        let pos = options.position();
+        let scale = options.scale();
+        let x = pos[0];
+        let y = pos[1];
+        let w = self.width * scale[0];
+        let h = self.height * scale[1];
+        [x, y, w, h]
+    }
+
+    /// Draws a child image clipped to this image's screen-space bounds.
+    ///
+    /// The `child_options.position` is interpreted as **relative to the parent's position**.
+    ///
+    /// If the parent already has a clip area defined, the child will be clipped
+    /// to the intersection of the parent's clip and the parent's bounds,
+    /// enabling nested clipping.
+    /// 
+    /// Returns the **absolute screen-space DrawOption** used to draw the child,
+    /// which can be passed as `parent_options` to subsequent `draw_image` or `draw_text` calls
+    /// for deeper nesting.
+    ///
+    /// # Arguments
+    /// * `context` - The drawing context
+    /// * `parent_options` - The DrawOption used to draw THIS image (the parent)
+    /// * `child` - The child image to draw
+    /// * `child_options` - The DrawOption for the child image (position is relative)
+    pub fn draw_image(
+        self,
+        context: &mut crate::Context,
+        parent_options: crate::DrawOption,
+        child: Image,
+        child_options: crate::DrawOption,
+    ) -> crate::DrawOption {
+        let final_options = self.compute_child_options(parent_options, child_options);
+        child.draw(context, final_options);
+        final_options
+    }
+
+    /// Draws a child text clipped to this image's screen-space bounds.
+    ///
+    /// Similar to `draw_image`, but for `Text`.
+    pub fn draw_text(
+        self,
+        context: &mut crate::Context,
+        parent_options: crate::DrawOption,
+        text: crate::Text,
+        child_options: crate::DrawOption,
+    ) -> crate::DrawOption {
+        let final_options = self.compute_child_options(parent_options, child_options);
+        text.draw(context, final_options);
+        final_options
+    }
+
+    fn compute_child_options(
+        self,
+        parent_options: crate::DrawOption,
+        mut child_options: crate::DrawOption,
+    ) -> crate::DrawOption {
+        let parent_bounds = self.screen_bounds(parent_options);
+        
+        // Convert child's relative position to absolute screen position
+        let mut child_pos = child_options.position();
+        let parent_pos = parent_options.position();
+        child_pos[0] += parent_pos[0];
+        child_pos[1] += parent_pos[1];
+        child_options.set_position(child_pos);
+
+        let final_clip = if let Some(parent_clip) = parent_options.clip() {
+            // Compute intersection of parent's clip and parent's own bounds
+            let x = parent_bounds[0].as_f32().max(parent_clip[0].as_f32());
+            let y = parent_bounds[1].as_f32().max(parent_clip[1].as_f32());
+            
+            let parent_right = parent_bounds[0].as_f32() + parent_bounds[2].as_f32();
+            let parent_bottom = parent_bounds[1].as_f32() + parent_bounds[3].as_f32();
+            let clip_right = parent_clip[0].as_f32() + parent_clip[2].as_f32();
+            let clip_bottom = parent_clip[1].as_f32() + parent_clip[3].as_f32();
+            
+            let right = parent_right.min(clip_right);
+            let bottom = parent_bottom.min(clip_bottom);
+            
+            let width = (right - x).max(0.0);
+            let height = (bottom - y).max(0.0);
+            
+            [Pt::from(x), Pt::from(y), Pt::from(width), Pt::from(height)]
+        } else {
+            parent_bounds
+        };
+
+        child_options.set_clip(Some(final_clip));
+        child_options
+    }
 }
 
 pub(crate) struct ImageEntry {
-    pub(crate) texture: Texture,
+    pub(crate) atlas_index: u32,
     pub(crate) bounds: Bounds,
-    pub(crate) uvp: [[f32; 4]; 4],
-    pub(crate) texture_bind_group: wgpu::BindGroup,
+    pub(crate) uv_rect: [f32; 4], // [u, v, w, h]
     pub(crate) visible: bool,
 }
 
 impl ImageEntry {
-    pub(crate) fn new(texture: Texture, texture_bind_group: wgpu::BindGroup) -> Self {
-        let bounds = Bounds {
-            x: Pt(0.0),
-            y: Pt(0.0),
-            width: Pt::from(texture.0.width),
-            height: Pt::from(texture.0.height),
-        };
-        let uvp = Self::uvp_from(texture.0.width, texture.0.height, bounds);
+    pub(crate) fn new(atlas_index: u32, bounds: Bounds, uv_rect: [f32; 4]) -> Self {
         Self {
-            texture,
+            atlas_index,
             bounds,
-            uvp,
-            texture_bind_group,
+            uv_rect,
             visible: true,
         }
-    }
-
-    pub(crate) fn new_with_bounds(
-        texture: Texture,
-        texture_bind_group: wgpu::BindGroup,
-        bounds: Bounds,
-    ) -> Self {
-        let uvp = Self::uvp_from(texture.0.width, texture.0.height, bounds);
-        Self {
-            texture,
-            bounds,
-            uvp,
-            texture_bind_group,
-            visible: true,
-        }
-    }
-
-    fn uvp_from(tex_w: u32, tex_h: u32, bounds: Bounds) -> [[f32; 4]; 4] {
-        let tw = tex_w as f32;
-        let th = tex_h as f32;
-
-        let u0 = bounds.x.as_f32() / tw;
-        let v0 = bounds.y.as_f32() / th;
-        let u1 = (bounds.x + bounds.width).as_f32() / tw;
-        let v1 = (bounds.y + bounds.height).as_f32() / th;
-
-        let sx = u1 - u0;
-        let sy = v1 - v0;
-
-        [
-            [sx, 0.0, 0.0, 0.0],
-            [0.0, sy, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [u0, v0, 0.0, 1.0],
-        ]
     }
 }
