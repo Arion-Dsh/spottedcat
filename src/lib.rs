@@ -49,12 +49,19 @@ mod mouse;
 mod pt;
 mod packer;
 mod shader_opts;
+mod platform;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
+#[cfg(not(target_os = "android"))]
 use winit::event_loop::EventLoop;
+#[cfg(target_os = "android")]
+use winit::event_loop::EventLoop;
+
+#[cfg(target_arch = "wasm32")]
+use console_error_panic_hook;
 
 pub use image::{Bounds, Image};
 pub use drawable::DrawOption;
@@ -73,6 +80,8 @@ pub struct WindowConfig {
     pub width: Pt,
     pub height: Pt,
     pub resizable: bool,
+    #[cfg(target_arch = "wasm32")]
+    pub canvas_id: Option<String>,
 }
 
 impl Default for WindowConfig {
@@ -82,6 +91,8 @@ impl Default for WindowConfig {
             width: Pt(800.0),
             height: Pt(600.0),
             resizable: true,
+            #[cfg(target_arch = "wasm32")]
+            canvas_id: None,
         }
     }
 }
@@ -270,22 +281,10 @@ pub fn register_image_shader(wgsl_source: &str) -> u32 {
 
 type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot> + Send>;
 
-static GLOBAL_GRAPHICS: OnceLock<Mutex<Graphics>> = OnceLock::new();
 static SCENE_SWITCH_REQUEST: OnceLock<Mutex<Option<SceneFactory>>> = OnceLock::new();
 
-fn set_global_graphics(graphics: Graphics) -> Result<(), Graphics> {
-    GLOBAL_GRAPHICS
-        .set(Mutex::new(graphics))
-        .map_err(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()))
-}
-
-fn global_graphics() -> &'static Mutex<Graphics> {
-    GLOBAL_GRAPHICS.get().expect("global Graphics not initialized")
-}
-
 fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
-    let mut g = global_graphics().lock().expect("Graphics mutex poisoned");
-    f(&mut g)
+    platform::with_graphics(f)
 }
 
 fn init_scene_switch() {
@@ -329,9 +328,34 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
 /// # }
 /// spottedcat::run::<MyApp>(spottedcat::WindowConfig::default());
 /// ```
+#[cfg(not(target_os = "android"))]
 pub fn run<T: Spot + 'static>(window: WindowConfig) {
     init_scene_switch();
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        console_error_panic_hook::set_once();
+    }
+
     let event_loop = EventLoop::new().expect("failed to create winit EventLoop");
+    #[cfg(target_arch = "wasm32")]
+    let mut app = window::App::new_wasm::<T>(window.clone(), window.canvas_id.clone());
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut app = window::App::new::<T>(window);
+    event_loop.run_app(&mut app).expect("event loop error");
+}
+
+#[cfg(target_os = "android")]
+pub fn run<T: Spot + 'static>(window: WindowConfig, app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    init_scene_switch();
+
+    let event_loop = EventLoop::builder()
+        .with_android_app(app)
+        .build()
+        .expect("failed to create winit EventLoop for Android");
+
     let mut app = window::App::new::<T>(window);
     event_loop.run_app(&mut app).expect("event loop error");
 }

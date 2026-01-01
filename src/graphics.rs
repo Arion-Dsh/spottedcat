@@ -2,6 +2,7 @@ use crate::{Context, DrawCommand, DrawOption};
 use crate::image::{Bounds, Image, ImageEntry};
 use crate::image_raw::{ImageRenderer, InstanceData};
 use crate::packer::AtlasPacker;
+use crate::platform;
 use crate::texture::Texture;
 use crate::text_renderer::TextRenderer;
 use crate::pt::Pt;
@@ -185,12 +186,14 @@ impl Graphics {
             })
             .await?;
 
+        let adapter_limits = adapter.limits();
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
                     required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
+                    required_limits: adapter_limits,
                     experimental_features: wgpu::ExperimentalFeatures::default(),
                     memory_hints: wgpu::MemoryHints::default(),
                     trace: wgpu::Trace::Off,
@@ -205,6 +208,8 @@ impl Graphics {
             .copied()
             .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
+
+        let usage = platform::surface_usage(&surface_caps);
 
         let present_mode = pick_present_mode(&surface_caps);
         let profile_enabled = *PROFILE_RENDER.get_or_init(|| {
@@ -225,7 +230,7 @@ impl Graphics {
         }
 
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+            usage,
             format: surface_format,
             width: width.max(1),
             height: height.max(1),
@@ -362,7 +367,6 @@ impl Graphics {
     pub fn resize(&mut self, surface: &wgpu::Surface<'_>, width: u32, height: u32) {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
-        self.config.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST;
         surface.configure(&self.device, &self.config);
     }
 
@@ -389,6 +393,11 @@ impl Graphics {
 
         let (tx, ty, tw, th) = atlas.packer.get_write_info(&rect);
 
+        let bytes_per_row = 4 * tw;
+
+        let (data, bytes_per_row) =
+            platform::align_write_texture_bytes(bytes_per_row, th, extruded_data);
+
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &atlas.texture.0.texture,
@@ -396,10 +405,10 @@ impl Graphics {
                 origin: wgpu::Origin3d { x: tx, y: ty, z: 0 },
                 aspect: wgpu::TextureAspect::All,
             },
-            &extruded_data,
+            &data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * tw),
+                bytes_per_row: Some(bytes_per_row),
                 rows_per_image: Some(th),
             },
             wgpu::Extent3d {
@@ -490,7 +499,19 @@ impl Graphics {
         scale_factor: f64,
         context: &Context,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.draw_drawables_internal(surface, drawables, scale_factor, Some(context))
+        let (lw, lh) = context.window_logical_size();
+        let sf = if scale_factor.is_finite() && scale_factor > 0.0 {
+            scale_factor
+        } else {
+            1.0
+        };
+        let expected_w = ((lw.as_f32() as f64) * sf).round().max(1.0) as u32;
+        let expected_h = ((lh.as_f32() as f64) * sf).round().max(1.0) as u32;
+        if expected_w != self.config.width || expected_h != self.config.height {
+            self.resize(surface, expected_w, expected_h);
+        }
+
+        self.draw_drawables_internal(surface, drawables, sf, Some(context))
     }
 
     fn draw_drawables_internal(
@@ -958,6 +979,27 @@ impl Graphics {
         let x = (u0 * aw).round() as u32;
         let y = (v0 * ah).round() as u32;
 
+        let bytes_per_row = 4 * w;
+        #[cfg(target_arch = "wasm32")]
+        let (data, bytes_per_row) = {
+            let align = 256u32;
+            let padded = ((bytes_per_row + align - 1) / align) * align;
+            if padded == bytes_per_row {
+                (data, bytes_per_row)
+            } else {
+                let mut out = vec![0u8; (padded * h) as usize];
+                for row in 0..h {
+                    let src_off = (row * bytes_per_row) as usize;
+                    let dst_off = (row * padded) as usize;
+                    out[dst_off..dst_off + bytes_per_row as usize]
+                        .copy_from_slice(&data[src_off..src_off + bytes_per_row as usize]);
+                }
+                (out, padded)
+            }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let (data, bytes_per_row) = (data, bytes_per_row);
+
         self.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &atlas.texture.0.texture,
@@ -968,7 +1010,7 @@ impl Graphics {
             &data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * w),
+                bytes_per_row: Some(bytes_per_row),
                 rows_per_image: Some(h),
             },
             wgpu::Extent3d {

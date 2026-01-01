@@ -1,0 +1,1 @@
+#import "../../include/spottedcat.h"

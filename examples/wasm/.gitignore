@@ -1,0 +1,5 @@
+.DS_Store
+pkg/
+wasm_demo/target/
+wasm_demo/pkg/
+node_modules/

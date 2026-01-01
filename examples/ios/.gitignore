@@ -1,0 +1,11 @@
+.DS_Store
+.tmp/
+DerivedData/
+build/
+*.xcuserstate
+**/xcuserdata/
+*.ipa
+*.dSYM/
+Spottedcat.xcframework/
+
+spottedcat_ios_wrapper/target/

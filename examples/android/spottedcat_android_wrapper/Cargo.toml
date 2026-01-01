@@ -1,0 +1,12 @@
+[package]
+name = "spottedcat_android_wrapper"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spottedcat = { path = "../../.." }
+winit = "0.30"
+android-activity = { version = "0.6", features = ["game-activity"] }

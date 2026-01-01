@@ -2,3 +2,9 @@
 .DS_Store
 .windsurf
 .cursor
+
+
+/examples/**/target/
+
+**/xcuserdata/
+**/*.xcuserstate

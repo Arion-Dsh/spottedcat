@@ -1,0 +1,12 @@
+.DS_Store
+.idea/
+*.iml
+.gradle/
+**/.gradle/
+**/build/
+**/.cxx/
+**/captures/
+**/*.apk
+**/*.aab
+local.properties
+spottedcat_android_wrapper/target/
