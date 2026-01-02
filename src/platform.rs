@@ -1,6 +1,6 @@
 use crate::graphics::Graphics;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use std::cell::RefCell;
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::Mutex;
@@ -14,7 +14,7 @@ pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] =
 #[allow(dead_code)]
 pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] = &[wgpu::Backends::PRIMARY];
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen_futures;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -26,7 +26,7 @@ use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
 
 pub(crate) enum GraphicsInitState {
     NotStarted,
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     Pending,
     Ready(Option<Graphics>),
     Failed,
@@ -68,7 +68,7 @@ pub(crate) fn begin_graphics_init(
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) fn begin_graphics_init(
     init_state: &mut GraphicsInitState,
     instance: wgpu::Instance,
@@ -124,7 +124,7 @@ pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
         return wgpu::Instance::default();
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         return wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
@@ -133,7 +133,7 @@ pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) fn spawn_graphics_init(
     instance: wgpu::Instance,
     surface_ptr: *const wgpu::Surface<'static>,
@@ -151,7 +151,7 @@ pub(crate) fn spawn_graphics_init(
 #[cfg(not(target_arch = "wasm32"))]
 static GLOBAL_GRAPHICS: OnceLock<Mutex<Graphics>> = OnceLock::new();
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 thread_local! {
     static GLOBAL_GRAPHICS: RefCell<Option<Graphics>> = RefCell::new(None);
 }
@@ -164,7 +164,7 @@ pub(crate) fn set_global_graphics(graphics: Graphics) -> Result<(), Graphics> {
             .map_err(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()));
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         return GLOBAL_GRAPHICS.with(|cell| {
             let mut slot = cell.borrow_mut();
@@ -188,7 +188,7 @@ pub(crate) fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
         return f(&mut g);
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         return GLOBAL_GRAPHICS.with(|cell| {
             let mut slot = cell.borrow_mut();
@@ -203,7 +203,7 @@ pub(crate) fn align_write_texture_bytes(
     height: u32,
     data: Vec<u8>,
 ) -> (Vec<u8>, u32) {
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         let align = 256u32;
         let padded = ((bytes_per_row + align - 1) / align) * align;
@@ -221,7 +221,7 @@ pub(crate) fn align_write_texture_bytes(
         return (out, padded);
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     {
         let _ = height;
         return (data, bytes_per_row);

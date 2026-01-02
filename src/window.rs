@@ -10,12 +10,12 @@ use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use web_time::Instant;
 
 type GraphicsInitState = platform::GraphicsInitState;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 unsafe fn handle_wasm_graphics_init_result(
     app_ptr: *mut App,
     graphics_r: anyhow::Result<crate::graphics::Graphics>,
@@ -46,10 +46,10 @@ pub(crate) struct App {
     spot: Option<Box<dyn Spot>>,
     scene_factory: Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send>,
     window_config: WindowConfig,
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     canvas_id: Option<String>,
     init_state: GraphicsInitState,
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     last_physical_size: Option<(u32, u32)>,
     scale_factor: f64,
     previous: Option<Instant>,
@@ -70,10 +70,10 @@ impl App {
             spot: None,
             scene_factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
             window_config,
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             canvas_id: None,
             init_state: GraphicsInitState::NotStarted,
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             last_physical_size: None,
             scale_factor: 1.0,
             previous: None,
@@ -82,7 +82,7 @@ impl App {
         }
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     pub(crate) fn new_wasm<T: Spot + 'static>(window_config: WindowConfig, canvas_id: Option<String>) -> Self {
         let instance = platform::create_wgpu_instance();
 
@@ -105,7 +105,7 @@ impl App {
         }
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     fn sync_canvas_resize(&mut self) {
         use wasm_bindgen::JsCast;
 
@@ -258,7 +258,7 @@ impl ApplicationHandler for App {
             return;
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             web_sys::console::log_1(&"[spot][wasm] resumed".into());
         }
@@ -267,7 +267,7 @@ impl ApplicationHandler for App {
         let h = (self.window_config.height.0).max(1.0) as f64;
 
         let window = {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             {
                 use winit::platform::web::WindowAttributesExtWebSys;
                 use wasm_bindgen::JsCast;
@@ -293,7 +293,7 @@ impl ApplicationHandler for App {
                     .expect("failed to create window")
             }
 
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
             {
                 event_loop
                     .create_window(
@@ -365,7 +365,7 @@ impl ApplicationHandler for App {
             self.surface = Some(surface);
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             let window = self.window.as_ref().expect("window");
             let surface = unsafe {
@@ -381,7 +381,7 @@ impl ApplicationHandler for App {
             platform::begin_graphics_init(&mut self.init_state, &self.instance, s, size.width, size.height);
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             let s = self.surface.as_ref().expect("surface");
             let instance = self.instance.clone();
@@ -445,7 +445,7 @@ impl ApplicationHandler for App {
                     with_graphics(|g| g.resize(surface, new_size.width, new_size.height));
                 }
 
-                #[cfg(target_arch = "wasm32")]
+                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
                 {
                     self.last_physical_size = Some((new_size.width.max(1), new_size.height.max(1)));
                 }
@@ -524,7 +524,7 @@ impl ApplicationHandler for App {
                     }
                 }
 
-                #[cfg(target_arch = "wasm32")]
+                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
                 {
                     web_sys::console::log_1(&"[spot][wasm] redraw_requested".into());
                     if self.spot.is_some() {
@@ -534,6 +534,7 @@ impl ApplicationHandler for App {
 
                 if let Some(surface) = self.surface.as_ref() {
                     self.context.begin_frame();
+
                     if let Some(spot) = self.spot.as_mut() {
                         spot.draw(&mut self.context);
                     }
@@ -554,8 +555,7 @@ impl ApplicationHandler for App {
                                     wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
                                         if let Some(window) = self.window.as_ref() {
                                             let size = window.inner_size();
-                                            let surface_r =
-                                                self.instance.create_surface(window);
+                                            let surface_r = self.instance.create_surface(window);
                                             match surface_r {
                                                 Ok(s) => {
                                                     let surface = unsafe {
@@ -567,13 +567,7 @@ impl ApplicationHandler for App {
                                                     self.surface = Some(surface);
 
                                                     if let Some(surface) = self.surface.as_ref() {
-                                                        with_graphics(|g| {
-                                                            g.resize(
-                                                                surface,
-                                                                size.width,
-                                                                size.height,
-                                                            )
-                                                        });
+                                                        with_graphics(|g| g.resize(surface, size.width, size.height));
                                                     }
                                                 }
                                                 Err(e) => {
@@ -605,7 +599,7 @@ impl ApplicationHandler for App {
                             }
                         }
 
-                        #[cfg(target_arch = "wasm32")]
+                        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
                         {
                             let r = with_graphics(|g| g.draw_context(surface, &self.context));
                             if let Err(e) = r {

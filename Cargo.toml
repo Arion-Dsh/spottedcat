@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -19,7 +19,7 @@ winit = "0.30"
 image = "0.25"
 ab_glyph = "0.2"
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"

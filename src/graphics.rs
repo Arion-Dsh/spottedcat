@@ -980,7 +980,7 @@ impl Graphics {
         let y = (v0 * ah).round() as u32;
 
         let bytes_per_row = 4 * w;
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         let (data, bytes_per_row) = {
             let align = 256u32;
             let padded = ((bytes_per_row + align - 1) / align) * align;
