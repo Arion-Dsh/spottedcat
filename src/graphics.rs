@@ -751,6 +751,9 @@ impl Graphics {
                         self.text_renderer
                             .queue_text(text, opts, &self.queue)
                             .expect("Text draw requires valid font_data");
+
+                        // Flush immediately so Text respects draw_list ordering relative to Images.
+                        self.text_renderer.flush(&self.device, &mut rpass, &self.queue);
                     }
                 }
             }
@@ -771,9 +774,6 @@ impl Graphics {
             }
 
             self.batch = batch;
-
-            self.text_renderer
-                .flush(&self.device, &mut rpass, &self.queue);
         }
 
         if let Some(t0) = t_prev {

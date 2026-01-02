@@ -17,8 +17,8 @@
 //!
 //!     fn draw(&mut self, context: &mut Context) {
 //!         let mut opts = DrawOption::default();
-//!         opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)];
-//!         opts.scale = [0.78125, 0.78125];
+//!         opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
+//!         opts.set_scale([0.78125, 0.78125]);
 //!         self.image.draw(context, opts);
 //!     }
 //!

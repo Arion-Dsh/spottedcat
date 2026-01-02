@@ -50,31 +50,35 @@ impl DrawOption {
         self.position
     }
 
-    pub fn set_position(&mut self, position: [Pt; 2]) {
+    pub fn set_position(&mut self, position: [Pt; 2]) -> &mut Self {
         self.position = position;
+        self
     }
 
     pub fn rotation(&self) -> f32 {
         self.rotation
     }
 
-    pub fn set_rotation(&mut self, rotation: f32) {
+    pub fn set_rotation(&mut self, rotation: f32) -> &mut Self {
         self.rotation = rotation;
+        self
     }
 
     pub fn scale(&self) -> [f32; 2] {
         self.scale
     }
 
-    pub fn set_scale(&mut self, scale: [f32; 2]) {
+    pub fn set_scale(&mut self, scale: [f32; 2]) -> &mut Self {
         self.scale = scale;
+        self
     }
 
     pub(crate) fn clip(&self) -> Option<[Pt; 4]> {
         self.clip
     }
 
-    pub(crate) fn set_clip(&mut self, clip: Option<[Pt; 4]>) {
+    pub(crate) fn set_clip(&mut self, clip: Option<[Pt; 4]>) -> &mut Self {
         self.clip = clip;
+        self
     }
 }

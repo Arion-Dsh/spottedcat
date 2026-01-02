@@ -121,8 +121,8 @@ impl Image {
     /// # let rgba = vec![255u8; 2 * 2 * 4];
     /// # let image = Image::new_from_rgba8(2u32.into(), 2u32.into(), &rgba).unwrap();
     /// let mut opts = DrawOption::default();
-    /// opts.position = [spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)];
-    /// opts.scale = [2.0, 2.0];
+    /// opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
+    /// opts.set_scale([2.0, 2.0]);
     /// image.draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut crate::Context, options: crate::DrawOption) {
