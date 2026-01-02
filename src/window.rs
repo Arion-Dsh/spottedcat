@@ -175,8 +175,84 @@ impl ApplicationHandler for App {
         self.previous = Some(Instant::now());
         self.lag = Duration::ZERO;
 
+        #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
+        {
+            // Android can keep the winit Window alive while the underlying native surface is
+            // recreated multiple times. Even if we still have a Surface handle, it may be stale.
+            // Recreate and reconfigure the surface on every resume.
+            if let Some(window) = self.window.as_ref() {
+                self.scale_factor = window.scale_factor();
+                self.context.set_scale_factor(self.scale_factor);
+                let size = window.inner_size();
+
+                self.context.set_window_logical_size(
+                    Pt::from_physical_px(size.width as f64, self.scale_factor),
+                    Pt::from_physical_px(size.height as f64, self.scale_factor),
+                );
+
+                let surface_r = self.instance.create_surface(window);
+                match surface_r {
+                    Ok(s) => {
+                        let surface = unsafe {
+                            std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
+                        };
+                        self.surface = Some(surface);
+
+                        if let Some(surface) = self.surface.as_ref() {
+                            with_graphics(|g| g.resize(surface, size.width, size.height));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[spot][android][surface] recreate on resume failed: {:?}", e);
+                        self.surface.take();
+                    }
+                }
+
+                if let Some(spot) = self.spot.as_mut() {
+                    spot.resumed(&mut self.context);
+                }
+                window.request_redraw();
+                return;
+            }
+        }
+
+        // If we already have a window but the surface was dropped (common on Android backgrounding),
+        // recreate just the surface and reconfigure it. Creating a second window here can lead to
+        // invalid surface state and wgpu panics.
+        if self.window.is_some() && self.surface.is_none() {
+            if let Some(window) = self.window.as_ref() {
+                let size = window.inner_size();
+                let surface_r = self.instance.create_surface(window);
+                match surface_r {
+                    Ok(s) => {
+                        let surface = unsafe {
+                            std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
+                        };
+                        self.surface = Some(surface);
+
+                        if let Some(surface) = self.surface.as_ref() {
+                            with_graphics(|g| g.resize(surface, size.width, size.height));
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[spot][android][surface] recreate on resume failed: {:?}", e);
+                        self.surface.take();
+                    }
+                }
+
+                if let Some(spot) = self.spot.as_mut() {
+                    spot.resumed(&mut self.context);
+                }
+                window.request_redraw();
+            }
+            return;
+        }
+
         if self.window.is_some() && self.surface.is_some() {
             if let Some(window) = self.window.as_ref() {
+                if let Some(spot) = self.spot.as_mut() {
+                    spot.resumed(&mut self.context);
+                }
                 window.request_redraw();
             }
             return;
@@ -327,8 +403,20 @@ impl ApplicationHandler for App {
         }
 
         if let Some(window) = self.window.as_ref() {
+            if let Some(spot) = self.spot.as_mut() {
+                spot.resumed(&mut self.context);
+            }
             window.request_redraw();
         }
+    }
+
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        // On Android, the underlying native surface can be destroyed when the app is backgrounded.
+        // Keep the window, but drop the surface so we recreate/configure it on resume/redraw.
+        if let Some(spot) = self.spot.as_mut() {
+            spot.suspended(&mut self.context);
+        }
+        self.surface.take();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -392,6 +480,43 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                // On Android the surface may disappear without a clean suspended/resumed sequence.
+                // If we don't have a surface, try to recreate it lazily and schedule another redraw.
+                #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
+                if self.surface.is_none() {
+                    if let Some(window) = self.window.as_ref() {
+                        let size = window.inner_size();
+                        let surface_r = unsafe { self.instance.create_surface(window) };
+                        match surface_r {
+                            Ok(s) => {
+                                let surface = unsafe {
+                                    std::mem::transmute::<
+                                        wgpu::Surface<'_>,
+                                        wgpu::Surface<'static>,
+                                    >(s)
+                                };
+                                self.surface = Some(surface);
+
+                                if let Some(surface) = self.surface.as_ref() {
+                                    with_graphics(|g| g.resize(surface, size.width, size.height));
+                                }
+                                window.request_redraw();
+                                return;
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "[spot][android][surface] recreate on redraw failed: {:?}",
+                                    e
+                                );
+                                // Surface handle may not be available yet; try again next frame.
+                                self.surface.take();
+                                window.request_redraw();
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 if self.spot.is_none() {
                     if platform::finalize_graphics(&mut self.init_state) {
                         let spot = (self.scene_factory)(&mut self.context);
@@ -423,7 +548,61 @@ impl ApplicationHandler for App {
                     if self.spot.is_some() {
                         #[cfg(not(target_arch = "wasm32"))]
                         {
-                            let _ = with_graphics(|g| g.draw_context(surface, &self.context));
+                            let r = with_graphics(|g| g.draw_context(surface, &self.context));
+                            if let Err(e) = r {
+                                match e {
+                                    wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                                        if let Some(window) = self.window.as_ref() {
+                                            let size = window.inner_size();
+                                            let surface_r =
+                                                self.instance.create_surface(window);
+                                            match surface_r {
+                                                Ok(s) => {
+                                                    let surface = unsafe {
+                                                        std::mem::transmute::<
+                                                            wgpu::Surface<'_>,
+                                                            wgpu::Surface<'static>,
+                                                        >(s)
+                                                    };
+                                                    self.surface = Some(surface);
+
+                                                    if let Some(surface) = self.surface.as_ref() {
+                                                        with_graphics(|g| {
+                                                            g.resize(
+                                                                surface,
+                                                                size.width,
+                                                                size.height,
+                                                            )
+                                                        });
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    eprintln!(
+                                                        "[spot][android][surface] recreate after error failed: {:?}",
+                                                        e
+                                                    );
+                                                    self.surface.take();
+                                                }
+                                            }
+                                            window.request_redraw();
+                                        }
+                                    }
+                                    wgpu::SurfaceError::OutOfMemory => {
+                                        event_loop.exit();
+                                    }
+                                    wgpu::SurfaceError::Timeout => {
+                                        if let Some(window) = self.window.as_ref() {
+                                            window.request_redraw();
+                                        }
+                                    }
+                                    wgpu::SurfaceError::Other => {
+                                        eprintln!("[spot][surface] other error: {:?}", e);
+                                        if let Some(window) = self.window.as_ref() {
+                                            window.request_redraw();
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         #[cfg(target_arch = "wasm32")]

@@ -420,6 +420,10 @@ pub trait Spot {
     
     fn update(&mut self, context: &mut Context, dt: Duration);
     
+    fn resumed(&mut self, _context: &mut Context) {}
+
+    fn suspended(&mut self, _context: &mut Context) {}
+    
     /// Cleanup when the application is shutting down.
     fn remove(&self);
 }
