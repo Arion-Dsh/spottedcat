@@ -245,7 +245,7 @@ impl Image {
         child_pos[1] += parent_pos[1];
         child_options.set_position(child_pos);
 
-        let final_clip = if let Some(parent_clip) = parent_options.clip() {
+        let final_clip = if let Some(parent_clip) = parent_options.get_clip() {
             // Compute intersection of parent's clip and parent's own bounds
             let x = parent_bounds[0].as_f32().max(parent_clip[0].as_f32());
             let y = parent_bounds[1].as_f32().max(parent_clip[1].as_f32());
@@ -271,6 +271,7 @@ impl Image {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct ImageEntry {
     pub(crate) atlas_index: u32,
     pub(crate) bounds: Bounds,

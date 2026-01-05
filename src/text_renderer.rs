@@ -2,7 +2,6 @@ use crate::{DrawOption, Text};
 use ab_glyph::{Font as _, FontArc, Glyph, GlyphId, PxScale, ScaleFont as _};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -74,12 +73,6 @@ struct GlyphEntry {
     bmax: [f32; 2],
 }
 
-fn hash_bytes(bytes: &[u8]) -> u64 {
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    bytes.hash(&mut h);
-    h.finish()
-}
-
 pub struct TextRenderer {
     pipeline: wgpu::RenderPipeline,
 
@@ -102,9 +95,14 @@ pub struct TextRenderer {
     instances: Vec<GlyphInstance>,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
+    last_instance_count: usize,
 
     font_cache: HashMap<u64, FontArc>,
     glyph_cache: HashMap<GlyphKey, GlyphEntry>,
+    font_data_cache: HashMap<u64, Vec<u8>>,
+    alpha_buffer_pool: Vec<Vec<u8>>,
+    instances_dirty: bool,
+    last_screen_size: [u32; 2],
 }
 
 impl TextRenderer {
@@ -144,8 +142,8 @@ impl TextRenderer {
             }],
         });
 
-        let atlas_w = 1024u32;
-        let atlas_h = 1024u32;
+        let atlas_w = 2048u32;  // Increased from 1024 for better performance
+        let atlas_h = 2048u32;  // Increased from 1024 for better performance
         let atlas_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("text_atlas"),
             size: wgpu::Extent3d {
@@ -375,20 +373,53 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             instances: Vec::new(),
             instance_buffer,
             instance_capacity,
+            last_instance_count: 0,
             font_cache: HashMap::new(),
             glyph_cache: HashMap::new(),
+            font_data_cache: HashMap::new(),
+            alpha_buffer_pool: Vec::new(),
+            instances_dirty: false,
+            last_screen_size: [0, 0],
         }
     }
 
-    fn get_font(&mut self, font_data: &Vec<u8>) -> anyhow::Result<(u64, FontArc)> {
-        let h = hash_bytes(font_data);
-        if let Some(f) = self.font_cache.get(&h) {
-            return Ok((h, f.clone()));
+    fn get_font(&mut self, font_hash: u64, font_data: &Vec<u8>) -> anyhow::Result<FontArc> {
+        if let Some(f) = self.font_cache.get(&font_hash) {
+            return Ok(f.clone());
         }
-        let font = FontArc::try_from_vec(font_data.clone())
+        
+        // Cache font data to avoid repeated cloning
+        let cached_data = if let Some(cached) = self.font_data_cache.get(&font_hash) {
+            cached
+        } else {
+            self.font_data_cache.insert(font_hash, font_data.clone());
+            self.font_data_cache.get(&font_hash).unwrap()
+        };
+        
+        let font = FontArc::try_from_vec(cached_data.clone())
             .map_err(|e| anyhow::anyhow!("Failed to parse font: {}", e))?;
-        self.font_cache.insert(h, font.clone());
-        Ok((h, font))
+        self.font_cache.insert(font_hash, font.clone());
+        Ok(font)
+    }
+
+    fn get_alpha_buffer(&mut self, size: usize) -> Vec<u8> {
+        // Try to find a suitable buffer from the pool
+        for i in 0..self.alpha_buffer_pool.len() {
+            if self.alpha_buffer_pool[i].len() >= size {
+                return self.alpha_buffer_pool.swap_remove(i);
+            }
+        }
+        // No suitable buffer found, create a new one
+        vec![0u8; size]
+    }
+
+    fn return_alpha_buffer(&mut self, mut buffer: Vec<u8>) {
+        // Clear the buffer and return it to the pool if the pool isn't too large
+        if self.alpha_buffer_pool.len() < 10 {
+            buffer.clear();
+            self.alpha_buffer_pool.push(buffer);
+        }
+        // Otherwise, let it drop
     }
 
     fn alloc_atlas(&mut self, w: u32, h: u32) -> Option<AtlasRect> {
@@ -491,12 +522,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     pub fn begin_frame(&mut self, screen_w: u32, screen_h: u32, queue: &wgpu::Queue) {
-        let u = TextUniforms {
-            screen_size: [screen_w as f32, screen_h as f32],
-            _pad: [0.0, 0.0],
-        };
-        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&u));
-        self.instances.clear();
+        // Only update uniform buffer if screen size changed
+        if self.last_screen_size != [screen_w, screen_h] {
+            let u = TextUniforms {
+                screen_size: [screen_w as f32, screen_h as f32],
+                _pad: [0.0, 0.0],
+            };
+            queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&u));
+            self.last_screen_size = [screen_w, screen_h];
+        }
+        
+        // Only clear instances if we actually need to rebuild them
+        // This prevents unnecessary clearing when text content hasn't changed
+        if self.instances_dirty {
+            self.instances.clear();
+            self.instances_dirty = false;
+        }
     }
 
     pub fn queue_text(
@@ -505,149 +546,184 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         opts: &DrawOption,
         queue: &wgpu::Queue,
     ) -> anyhow::Result<()> {
-        let (font_hash, font) = self.get_font(&text.font_data)?;
+        // Mark instances as dirty since we're adding new text
+        self.instances_dirty = true;
+        
+        let font_hash = text.font_hash;
+        let font = self.get_font(font_hash, &text.font_data)?;
         // Scaling is applied via per-glyph basis vectors so that X/Y scale and rotation
         // work consistently.
         let px_size = text.font_size.as_f32().max(1.0);
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
 
-        let mut caret_x = 0.0f32;
+        // Handle text wrapping
+        let lines = text.get_wrapped_lines(&scaled);
         let baseline_y = scaled.ascent();
-        let mut prev: Option<GlyphId> = None;
+        let line_height = scaled.ascent() - scaled.descent();
+        
+        for (line_index, line_content) in lines.iter().enumerate() {
+            let mut caret_x = 0.0f32;
+            let line_y = baseline_y + (line_index as f32 * line_height);
+            let mut prev: Option<GlyphId> = None;
 
-        for ch in text.content.chars() {
-            let id = scaled.glyph_id(ch);
-            if let Some(p) = prev {
-                caret_x += scaled.kern(p, id);
-            }
-
-            // Ensure cached in atlas (upload if needed)
-            let entry = {
-                let key = GlyphKey {
-                    font_hash,
-                    px_size_bits: px_size.to_bits(),
-                    glyph_id: id.0 as u32,
-                };
-                if let Some(e) = self.glyph_cache.get(&key) {
-                    *e
-                } else {
-                    // Re-outline at origin for stable bitmap.
-                    let g0: Glyph = Glyph {
-                        id,
-                        scale,
-                        position: ab_glyph::point(0.0, 0.0),
-                    };
-                    let outlined0 = match scaled.outline_glyph(g0) {
-                        None => {
-                            // Non-drawable glyph (e.g. space). Skip caching and drawing.
-                            caret_x += scaled.h_advance(id);
-                            prev = Some(id);
-                            continue;
-                        }
-                        Some(o) => o,
-                    };
-                    let b0 = outlined0.px_bounds();
-                    let w0 = (b0.max.x - b0.min.x).ceil().max(1.0) as u32;
-                    let h0 = (b0.max.y - b0.min.y).ceil().max(1.0) as u32;
-                    let rect = self
-                        .alloc_atlas(w0, h0)
-                        .ok_or_else(|| anyhow::anyhow!("text atlas full"))?;
-                    let mut alpha = vec![0u8; (w0 * h0) as usize];
-                    outlined0.draw(|x, y, v| {
-                        if x >= w0 || y >= h0 {
-                            return;
-                        }
-                        let idx = (y * w0 + x) as usize;
-                        let a = (v * 255.0).round().clamp(0.0, 255.0) as u8;
-                        alpha[idx] = alpha[idx].max(a);
-                    });
-                    self.upload_alpha(queue, rect, &alpha, w0, h0);
-                    let e = GlyphEntry {
-                        rect,
-                        bmin: [b0.min.x, b0.min.y],
-                        bmax: [b0.max.x, b0.max.y],
-                    };
-                    self.glyph_cache.insert(key, e);
-                    e
+            for ch in line_content.chars() {
+                let id = scaled.glyph_id(ch);
+                if let Some(p) = prev {
+                    caret_x += scaled.kern(p, id);
                 }
-            };
 
-            let (uv_min, uv_max) = entry.rect.uv(self.atlas_w, self.atlas_h);
+                // Early exit for common whitespace characters to avoid expensive rasterization
+                if ch.is_whitespace() && ch != ' ' {
+                    caret_x += scaled.h_advance(id);
+                    prev = Some(id);
+                    continue;
+                }
 
-            let w = (entry.bmax[0] - entry.bmin[0]).ceil().max(1.0);
-            let h = (entry.bmax[1] - entry.bmin[1]).ceil().max(1.0);
-
-            let r = opts.rotation();
-            let sinr = r.sin();
-            let cosr = r.cos();
-            let c = cosr;
-            let s = sinr;
-            let scale = opts.scale();
-            let sx = scale[0];
-            let sy = scale[1];
-
-            // Position is defined at the text's top-left corner in screen pixels.
-            // Apply child local offset (caret/bounds/baseline), then scale+rotate around the
-            // top-left anchor, then translate by opts.position.
-            let local_x = caret_x + entry.bmin[0];
-            let local_y = baseline_y + entry.bmin[1];
-            let scaled_x = local_x * sx;
-            let scaled_y = local_y * sy;
-            let rot_x = cosr * scaled_x - sinr * scaled_y;
-            let rot_y = sinr * scaled_x + cosr * scaled_y;
-            let pos = opts.position();
-            let px = pos[0].as_f32();
-            let py = pos[1].as_f32();
-            let base_pos = [
-                px + rot_x,
-                py + rot_y,
-            ];
-
-            // Basis vectors for the glyph quad in screen pixels.
-            let basis_x = [cosr * w * sx, sinr * w * sx];
-            let basis_y = [-sinr * h * sy, cosr * h * sy];
-
-            let stroke_w = text.stroke_width.as_f32();
-            if stroke_w > 0.0 {
-                let r = stroke_w.ceil().max(1.0) as i32;
-                for dy in -r..=r {
-                    for dx in -r..=r {
-                        if dx == 0 && dy == 0 {
-                            continue;
-                        }
-                        if (dx * dx + dy * dy) as f32 > stroke_w * stroke_w {
-                            continue;
-                        }
-                        // Stroke offset is in local (unrotated) pixel space.
-                        let sox = (dx as f32) * sx;
-                        let soy = (dy as f32) * sy;
-                        let srx = c * sox - s * soy;
-                        let sry = s * sox + c * soy;
-
-                        self.instances.push(GlyphInstance {
-                            pos: [base_pos[0] + srx, base_pos[1] + sry],
-                            basis_x,
-                            basis_y,
-                            uv_min,
-                            uv_max,
-                            color: text.stroke_color,
+                // Ensure cached in atlas (upload if needed)
+                let entry = {
+                    let key = GlyphKey {
+                        font_hash,
+                        px_size_bits: px_size.to_bits(),
+                        glyph_id: id.0 as u32,
+                    };
+                    if let Some(e) = self.glyph_cache.get(&key) {
+                        *e
+                    } else {
+                        // Cache miss - need to rasterize glyph
+                        // Re-outline at origin for stable bitmap.
+                        let g0: Glyph = Glyph {
+                            id,
+                            scale,
+                            position: ab_glyph::point(0.0, 0.0),
+                        };
+                        let outlined0 = match scaled.outline_glyph(g0) {
+                            None => {
+                                // Non-drawable glyph (e.g. space). Skip caching and drawing.
+                                caret_x += scaled.h_advance(id);
+                                prev = Some(id);
+                                continue;
+                            }
+                            Some(o) => o,
+                        };
+                        let b0 = outlined0.px_bounds();
+                        let w0 = (b0.max.x - b0.min.x).ceil().max(1.0) as u32;
+                        let h0 = (b0.max.y - b0.min.y).ceil().max(1.0) as u32;
+                        let rect = self
+                            .alloc_atlas(w0, h0)
+                            .ok_or_else(|| anyhow::anyhow!("text atlas full"))?;
+                        // Optimized alpha buffer allocation - reuse from pool
+                        let alpha_size = (w0 * h0) as usize;
+                        let mut alpha = self.get_alpha_buffer(alpha_size);
+                        alpha.resize(alpha_size, 0);
+                        
+                        // Optimized pixel drawing with bounds checking
+                        outlined0.draw(|x, y, v| {
+                            let x = x as u32;
+                            let y = y as u32;
+                            if x < w0 && y < h0 {
+                                let idx = (y * w0 + x) as usize;
+                                let a = (v * 255.0).round().clamp(0.0, 255.0) as u8;
+                                // Use max to handle overlapping draws properly
+                                alpha[idx] = alpha[idx].max(a);
+                            }
                         });
+                        
+                        // Batch upload for better performance
+                        self.upload_alpha(queue, rect, &alpha, w0, h0);
+                        
+                        // Return buffer to pool
+                        self.return_alpha_buffer(alpha);
+                        let e = GlyphEntry {
+                            rect,
+                            bmin: [b0.min.x, b0.min.y],
+                            bmax: [b0.max.x, b0.max.y],
+                        };
+                        self.glyph_cache.insert(key, e);
+                        e
+                    }
+                };
+
+                let (uv_min, uv_max) = entry.rect.uv(self.atlas_w, self.atlas_h);
+
+                let w = (entry.bmax[0] - entry.bmin[0]).ceil().max(1.0);
+                let h = (entry.bmax[1] - entry.bmin[1]).ceil().max(1.0);
+
+                let r = opts.rotation();
+                let sinr = r.sin();
+                let cosr = r.cos();
+                let c = cosr;
+                let s = sinr;
+                let scale = opts.scale();
+                let sx = scale[0];
+                let sy = scale[1];
+
+                // Position is defined at the text's top-left corner in screen pixels.
+                // Apply child local offset (caret/bounds/baseline), then scale+rotate around the
+                // top-left anchor, then translate by opts.position.
+                let local_x = caret_x + entry.bmin[0];
+                let local_y = line_y + entry.bmin[1];
+                let scaled_x = local_x * sx;
+                let scaled_y = local_y * sy;
+                let rot_x = cosr * scaled_x - sinr * scaled_y;
+                let rot_y = sinr * scaled_x + cosr * scaled_y;
+                let pos = opts.position();
+                let px = pos[0].as_f32();
+                let py = pos[1].as_f32();
+                let base_pos = [
+                    px + rot_x,
+                    py + rot_y,
+                ];
+
+                // Basis vectors for the glyph quad in screen pixels.
+                let basis_x = [cosr * w * sx, sinr * w * sx];
+                let basis_y = [-sinr * h * sy, cosr * h * sy];
+
+                let stroke_w = text.stroke_width.as_f32();
+                if stroke_w > 0.0 {
+                    // Optimized stroke rendering: use fewer samples for better performance
+                    let r = stroke_w.ceil().max(1.0) as i32;
+                    let step = if r > 3 { 2 } else { 1 }; // Skip some samples for large strokes
+                    
+                    for dy in (-r..=r).step_by(step) {
+                        for dx in (-r..=r).step_by(step) {
+                            if dx == 0 && dy == 0 {
+                                continue;
+                            }
+                            let dist_sq = (dx * dx + dy * dy) as f32;
+                            if dist_sq > stroke_w * stroke_w {
+                                continue;
+                            }
+                            // Stroke offset is in local (unrotated) pixel space.
+                            let sox = (dx as f32) * sx;
+                            let soy = (dy as f32) * sy;
+                            let srx = c * sox - s * soy;
+                            let sry = s * sox + c * soy;
+
+                            self.instances.push(GlyphInstance {
+                                pos: [base_pos[0] + srx, base_pos[1] + sry],
+                                basis_x,
+                                basis_y,
+                                uv_min,
+                                uv_max,
+                                color: text.stroke_color,
+                            });
+                        }
                     }
                 }
+
+                self.instances.push(GlyphInstance {
+                    pos: base_pos,
+                    basis_x,
+                    basis_y,
+                    uv_min,
+                    uv_max,
+                    color: text.color,
+                });
+
+                caret_x += scaled.h_advance(id);
+                prev = Some(id);
             }
-
-            self.instances.push(GlyphInstance {
-                pos: base_pos,
-                basis_x,
-                basis_y,
-                uv_min,
-                uv_max,
-                color: text.color,
-            });
-
-            caret_x += scaled.h_advance(id);
-            prev = Some(id);
         }
 
         Ok(())
@@ -663,21 +739,26 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             return;
         }
 
-        if self.instances.len() > self.instance_capacity {
-            self.instance_capacity = self.instances.len().next_power_of_two();
-            self.instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("text_instance_buffer_grow"),
-                size: (self.instance_capacity * std::mem::size_of::<GlyphInstance>()) as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        }
+        // Only upload to GPU if instances changed
+        if self.instances_dirty || self.instances.len() != self.last_instance_count {
+            if self.instances.len() > self.instance_capacity {
+                self.instance_capacity = self.instances.len().next_power_of_two();
+                self.instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("text_instance_buffer_grow"),
+                    size: (self.instance_capacity * std::mem::size_of::<GlyphInstance>()) as u64,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+            }
 
-        queue.write_buffer(
-            &self.instance_buffer,
-            0,
-            bytemuck::cast_slice(&self.instances),
-        );
+            queue.write_buffer(
+                &self.instance_buffer,
+                0,
+                bytemuck::cast_slice(&self.instances),
+            );
+            
+            self.last_instance_count = self.instances.len();
+        }
 
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.uniform_bg, &[]);
@@ -695,6 +776,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         queue: &wgpu::Queue,
     ) {
         self.draw(device, pass, queue);
-        self.instances.clear();
+        // Clear dirty flag after drawing
+        self.instances_dirty = false;
     }
 }

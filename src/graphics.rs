@@ -7,10 +7,12 @@ use crate::texture::Texture;
 use crate::text_renderer::TextRenderer;
 use crate::pt::Pt;
 use crate::ShaderOpts;
+use crate::Text;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::Instant;
 use std::sync::Mutex;
+use ab_glyph::FontArc;
 
 static PROFILE_RENDER: OnceLock<bool> = OnceLock::new();
 
@@ -484,6 +486,125 @@ impl Graphics {
             .ok_or_else(|| anyhow::anyhow!("invalid image"))
     }
 
+    pub(crate) fn render_text_to_image(&mut self, text: &Text, _opts: &DrawOption) -> anyhow::Result<Option<ImageEntry>> {
+        use ab_glyph::{Font as _, FontArc, Glyph, PxScale, ScaleFont as _};
+        
+        // Get or create font
+        let font_hash = text.font_hash;
+        let font = if let Some(cached_font) = self.get_cached_font(font_hash) {
+            cached_font
+        } else {
+            let font = FontArc::try_from_vec(text.font_data.clone())
+                .map_err(|e| anyhow::anyhow!("Failed to parse font: {}", e))?;
+            self.cache_font(font_hash, font.clone());
+            font
+        };
+
+        // Calculate text dimensions with wrapping support
+        let px_size = text.font_size.as_f32().max(1.0);
+        let scale = PxScale::from(px_size);
+        let scaled = font.as_scaled(scale);
+        
+        // Handle text wrapping
+        let lines = text.get_wrapped_lines(&scaled);
+        let line_height = scaled.ascent() - scaled.descent();
+        
+        let mut max_width = 0.0f32;
+        let mut min_y = scaled.ascent();
+        let mut max_y = scaled.descent();
+        
+        for line in &lines {
+            let mut line_width = 0.0f32;
+            let mut prev: Option<ab_glyph::GlyphId> = None;
+            
+            for ch in line.chars() {
+                let id = scaled.glyph_id(ch);
+                if let Some(p) = prev {
+                    line_width += scaled.kern(p, id);
+                }
+                line_width += scaled.h_advance(id);
+                prev = Some(id);
+                
+                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
+                    let bounds = glyph.px_bounds();
+                    min_y = min_y.min(bounds.min.y);
+                    max_y = max_y.max(bounds.max.y);
+                }
+            }
+            max_width = max_width.max(line_width);
+        }
+        
+        let text_width = max_width.ceil().max(1.0) as u32;
+        let text_height = (lines.len() as f32 * line_height).ceil().max(1.0) as u32;
+        
+        // Create RGBA data for text
+        let mut rgba_data = vec![0u8; (text_width * text_height * 4) as usize];
+        
+        // Render text to RGBA buffer with line wrapping
+        let baseline_y = scaled.ascent();
+        let mut pixels_filled = 0;
+        
+        for (line_index, line) in lines.iter().enumerate() {
+            let mut caret_x = 0.0f32;
+            let line_y = baseline_y + (line_index as f32 * line_height);
+            let mut prev: Option<ab_glyph::GlyphId> = None;
+            
+            for ch in line.chars() {
+                let id = scaled.glyph_id(ch);
+                if let Some(p) = prev {
+                    caret_x += scaled.kern(p, id);
+                }
+                
+                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
+                    let bounds = glyph.px_bounds();
+                    let glyph_x = caret_x + bounds.min.x;
+                    // Adjust glyph_y to be relative to buffer top
+                    let glyph_y = line_y + (bounds.min.y - min_y);
+                    
+                    glyph.draw(|x, y, v| {
+                        let px = x as i32 + glyph_x as i32;
+                        let py = y as i32 + glyph_y as i32;
+                        
+                        if px >= 0 && py >= 0 && px < text_width as i32 && py < text_height as i32 {
+                            let idx = ((py as u32 * text_width + px as u32) * 4) as usize;
+                            let alpha = (v * 255.0).round().clamp(0.0, 255.0) as u8;
+                            
+                            // Apply color to RGB channels
+                            rgba_data[idx] = (text.color[2] * 255.0) as u8;     // B
+                            rgba_data[idx + 1] = (text.color[1] * 255.0) as u8; // G  
+                            rgba_data[idx + 2] = (text.color[0] * 255.0) as u8; // R
+                            // For text, alpha should be the coverage value directly
+                            rgba_data[idx + 3] = alpha; // A
+                            pixels_filled += 1;
+                        }
+                    });
+                }
+                
+                caret_x += scaled.h_advance(id);
+                prev = Some(id);
+            }
+        }
+        
+        // Create image in atlas
+        let width = crate::pt::Pt::from(text_width as f32);
+        let height = crate::pt::Pt::from(text_height as f32);
+        let image = self.create_image(width, height, &rgba_data)?;
+        if let Some(entry) = self.images.get(image.index()).and_then(|e| e.as_ref()) {
+            Ok(Some(*entry))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn get_cached_font(&self, _font_hash: u64) -> Option<FontArc> {
+        // This would need a font cache in Graphics
+        None // For now, always recreate
+    }
+    
+    fn cache_font(&mut self, _font_hash: u64, _font: FontArc) {
+        // This would need a font cache in Graphics
+    }
+
     pub fn draw_context(
         &mut self,
         surface: &wgpu::Surface<'_>,
@@ -599,25 +720,43 @@ impl Graphics {
                 occlusion_query_set: None,
             });
 
-            self.batch.clear();
-            self.batch.reserve(drawables.len());
-            // Set initial scissor to full screen
-            rpass.set_scissor_rect(0, 0, self.config.width.max(1), self.config.height.max(1));
-            let mut current_clip: Option<[Pt; 4]> = None;
+            // Pre-process all text commands to convert them to images
+        let mut text_images = Vec::new();
+        for drawable in drawables {
+            if let DrawCommand::Text(text, opts) = drawable {
+                if let Ok(Some(text_image)) = self.render_text_to_image(text, opts) {
+                    text_images.push((text_image, opts));
+                }
+            }
+        }
 
-            let mut batch = std::mem::take(&mut self.batch);
-            let (image_renderer, queue, atlases) = (&mut self.image_renderer, &self.queue, &self.atlases);
+        self.batch.clear();
+        self.batch.reserve(drawables.len());
+        // Set initial scissor to full screen
+        rpass.set_scissor_rect(0, 0, self.config.width.max(1), self.config.height.max(1));
+        let mut current_clip: Option<[Pt; 4]> = None;
 
-            let mut current_atlas_index: Option<u32> = None;
-            let mut current_pipeline: Option<*const wgpu::RenderPipeline> = None;
-            let mut current_globals: ShaderOpts = ShaderOpts::default();
-            let mut current_globals_offset: u32 = image_renderer
-                .upload_globals_bytes(queue, current_globals.as_bytes())
-                .unwrap_or(0);
+        let mut batch = std::mem::take(&mut self.batch);
+        let (image_renderer, queue, atlases) = (&mut self.image_renderer, &self.queue, &self.atlases);
 
-            for drawable in drawables {
+        let mut current_atlas_index: Option<u32> = None;
+        let mut current_pipeline: Option<*const wgpu::RenderPipeline> = None;
+        let mut current_globals: ShaderOpts = ShaderOpts::default();
+        let mut current_globals_offset: u32 = image_renderer
+            .upload_globals_bytes(queue, current_globals.as_bytes())
+            .unwrap_or(0);
+        let mut has_pending_text = false;
+        let mut text_image_index = 0;
+
+        for drawable in drawables {
                 match drawable {
                     DrawCommand::Image(id, opts, shader_id, shader_opts) => {
+                        // Flush pending text before rendering images to maintain draw order
+                        if has_pending_text {
+                            self.text_renderer.flush(&self.device, &mut rpass, &self.queue);
+                            has_pending_text = false;
+                        }
+                        
                         let Some(Some(img)) = self.images.get(*id as usize) else {
                             continue;
                         };
@@ -636,7 +775,7 @@ impl Graphics {
                             p as *const wgpu::RenderPipeline
                         };
 
-                        if current_clip != opts.clip() 
+                        if current_clip != opts.get_clip() 
                             || (current_atlas_index.is_some() && current_atlas_index != Some(img.atlas_index))
                             || (current_pipeline.is_some() && current_pipeline != Some(pipeline_ptr))
                             || current_globals != effective_globals
@@ -663,26 +802,31 @@ impl Graphics {
                                     .unwrap_or(current_globals_offset);
                             }
 
-                            if current_clip != opts.clip() {
-                                current_clip = opts.clip();
+                            if current_clip != opts.get_clip() {
+                                current_clip = opts.get_clip();
                                 if let Some(clip) = current_clip {
-                                    let cx = (clip[0].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    let cy = (clip[1].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    let cw = (clip[2].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    let ch = (clip[3].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    
                                     let sw = self.config.width;
                                     let sh = self.config.height;
-                                    
-                                    let final_x = cx.min(sw);
-                                    let final_y = cy.min(sh);
-                                    let final_w = cw.min(sw - final_x);
-                                    let final_h = ch.min(sh - final_y);
-                                    
+
+                                    let x0 = clip[0].as_f32() * scale_factor as f32;
+                                    let y0 = clip[1].as_f32() * scale_factor as f32;
+                                    let x1 = x0 + clip[2].as_f32() * scale_factor as f32;
+                                    let y1 = y0 + clip[3].as_f32() * scale_factor as f32;
+
+                                    let x0 = x0.clamp(0.0, sw as f32);
+                                    let y0 = y0.clamp(0.0, sh as f32);
+                                    let x1 = x1.clamp(0.0, sw as f32);
+                                    let y1 = y1.clamp(0.0, sh as f32);
+
+                                    let final_x = x0 as u32;
+                                    let final_y = y0 as u32;
+                                    let final_w = (x1 - x0).max(0.0) as u32;
+                                    let final_h = (y1 - y0).max(0.0) as u32;
+
                                     if final_w > 0 && final_h > 0 {
                                         rpass.set_scissor_rect(final_x, final_y, final_w, final_h);
                                     } else {
-                                        rpass.set_scissor_rect(0, 0, 1, 1); 
+                                        rpass.set_scissor_rect(0, 0, 1, 1);
                                     }
                                 } else {
                                     rpass.set_scissor_rect(0, 0, self.config.width, self.config.height);
@@ -702,63 +846,97 @@ impl Graphics {
                             uv_rect: img.uv_rect,
                         });
                     }
-                    DrawCommand::Text(text, opts) => {
-                        if current_clip != opts.clip() || current_atlas_index.is_some() {
-                            if let Some(ai) = current_atlas_index {
-                                let atlas_bg = &atlases.get(ai as usize).expect("atlas").bind_group;
-                                let prev_pipeline_ptr = current_pipeline
-                                    .unwrap_or_else(|| std::ptr::addr_of!(image_renderer.pipeline));
-                                flush_image_batch(
-                                    &mut batch,
-                                    &mut rpass,
-                                    image_renderer,
-                                    queue,
-                                    unsafe { &*prev_pipeline_ptr },
-                                    atlas_bg,
-                                    current_globals_offset,
-                                );
-                            }
-                            current_atlas_index = None;
-                            current_pipeline = None;
+                    DrawCommand::Text(_text, _opts) => {
+                        // Use pre-converted text image
+                        if let Some((text_image, text_opts)) = text_images.get(text_image_index) {
+                            // Add to batch as image
+                            let effective_globals = ShaderOpts::default();
+                            let pipeline_ptr: *const wgpu::RenderPipeline = 
+                                std::ptr::addr_of!(image_renderer.pipeline);
 
-                            if current_clip != opts.clip() {
-                                current_clip = opts.clip();
-                                if let Some(clip) = current_clip {
-                                    let cx = (clip[0].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    let cy = (clip[1].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    let cw = (clip[2].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    let ch = (clip[3].as_f32() * scale_factor as f32).max(0.0) as u32;
-                                    
-                                    let sw = self.config.width;
-                                    let sh = self.config.height;
-                                    
-                                    let final_x = cx.min(sw);
-                                    let final_y = cy.min(sh);
-                                    let final_w = cw.min(sw - final_x);
-                                    let final_h = ch.min(sh - final_y);
-                                    
-                                    if final_w > 0 && final_h > 0 {
-                                        rpass.set_scissor_rect(final_x, final_y, final_w, final_h);
+                            if current_clip != text_opts.get_clip() 
+                                || (current_atlas_index.is_some() && current_atlas_index != Some(text_image.atlas_index))
+                                || (current_pipeline.is_some() && current_pipeline != Some(pipeline_ptr))
+                                || current_globals != effective_globals
+                            {
+                                if let Some(ai) = current_atlas_index {
+                                    let atlas_bg = &atlases.get(ai as usize).expect("atlas").bind_group;
+                                    let prev_pipeline_ptr = current_pipeline
+                                        .unwrap_or_else(|| std::ptr::addr_of!(image_renderer.pipeline));
+                                    flush_image_batch(
+                                        &mut batch,
+                                        &mut rpass,
+                                        image_renderer,
+                                        queue,
+                                        unsafe { &*prev_pipeline_ptr },
+                                        atlas_bg,
+                                        current_globals_offset,
+                                    );
+                                }
+
+                                if current_globals != effective_globals {
+                                    current_globals = effective_globals;
+                                    current_globals_offset = image_renderer
+                                        .upload_globals_bytes(queue, current_globals.as_bytes())
+                                        .unwrap_or(current_globals_offset);
+                                }
+
+                                if current_clip != text_opts.get_clip() {
+                                    current_clip = text_opts.get_clip();
+                                    if let Some(clip) = current_clip {
+                                        let sw = self.config.width;
+                                        let sh = self.config.height;
+
+                                        let x0 = clip[0].as_f32() * scale_factor as f32;
+                                        let y0 = clip[1].as_f32() * scale_factor as f32;
+                                        let x1 = x0 + clip[2].as_f32() * scale_factor as f32;
+                                        let y1 = y0 + clip[3].as_f32() * scale_factor as f32;
+
+                                        let x0 = x0.clamp(0.0, sw as f32);
+                                        let y0 = y0.clamp(0.0, sh as f32);
+                                        let x1 = x1.clamp(0.0, sw as f32);
+                                        let y1 = y1.clamp(0.0, sh as f32);
+
+                                        let final_x = x0 as u32;
+                                        let final_y = y0 as u32;
+                                        let final_w = (x1 - x0).max(0.0) as u32;
+                                        let final_h = (y1 - y0).max(0.0) as u32;
+
+                                        if final_w > 0 && final_h > 0 {
+                                            rpass.set_scissor_rect(final_x, final_y, final_w, final_h);
+                                        } else {
+                                            rpass.set_scissor_rect(0, 0, 1, 1);
+                                        }
                                     } else {
-                                        rpass.set_scissor_rect(0, 0, 1, 1);
+                                        rpass.set_scissor_rect(0, 0, self.config.width, self.config.height);
                                     }
-                                } else {
-                                    rpass.set_scissor_rect(0, 0, self.config.width, self.config.height);
                                 }
                             }
+                            current_atlas_index = Some(text_image.atlas_index);
+                            current_pipeline = Some(pipeline_ptr);
+
+                            let base_w_px = text_image.bounds.width.0.max(0.0);
+                            let base_h_px = text_image.bounds.height.0.max(0.0);
+                            let (mvp_col0, mvp_col1, mvp_col3) = mvp_from_draw_options(sw_inv, sh_inv, sw_inv_2, sh_inv_2, base_w_px, base_h_px, **text_opts);
+                            batch.push(InstanceData {
+                                mvp_col0,
+                                mvp_col1,
+                                mvp_col3,
+                                uv_rect: text_image.uv_rect,
+                            });
                         }
-
-                        self.text_renderer
-                            .queue_text(text, opts, &self.queue)
-                            .expect("Text draw requires valid font_data");
-
-                        // Flush immediately so Text respects draw_list ordering relative to Images.
-                        self.text_renderer.flush(&self.device, &mut rpass, &self.queue);
+                        text_image_index += 1;
                     }
                 }
             }
 
             if let Some(ai) = current_atlas_index {
+                // Flush pending text before final image batch
+                if has_pending_text {
+                    self.text_renderer.flush(&self.device, &mut rpass, &self.queue);
+                    has_pending_text = false;
+                }
+                
                 let atlas_bg = &atlases.get(ai as usize).expect("atlas").bind_group;
                 let prev_pipeline_ptr = current_pipeline
                     .unwrap_or_else(|| std::ptr::addr_of!(image_renderer.pipeline));
@@ -773,7 +951,12 @@ impl Graphics {
                 );
             }
 
-            self.batch = batch;
+            // Flush any remaining pending text at the end
+        if has_pending_text {
+            self.text_renderer.flush(&self.device, &mut rpass, &self.queue);
+        }
+
+        self.batch = batch;
         }
 
         if let Some(t0) = t_prev {

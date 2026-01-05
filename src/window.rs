@@ -480,6 +480,7 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                
                 // On Android the surface may disappear without a clean suspended/resumed sequence.
                 // If we don't have a surface, try to recreate it lazily and schedule another redraw.
                 #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]

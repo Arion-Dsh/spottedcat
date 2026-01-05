@@ -73,12 +73,12 @@ impl DrawOption {
         self
     }
 
-    pub(crate) fn clip(&self) -> Option<[Pt; 4]> {
-        self.clip
-    }
-
-    pub(crate) fn set_clip(&mut self, clip: Option<[Pt; 4]>) -> &mut Self {
+    pub fn set_clip(&mut self, clip: Option<[Pt; 4]>) -> &mut Self {
         self.clip = clip;
         self
+    }
+
+    pub fn get_clip(&self) -> Option<[Pt; 4]> {
+        self.clip
     }
 }
