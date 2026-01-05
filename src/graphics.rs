@@ -500,18 +500,98 @@ impl Graphics {
             font
         };
 
-        // Calculate text dimensions with wrapping support
+        // Calculate text dimensions
         let px_size = text.font_size.as_f32().max(1.0);
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
+        
+        // Check if we need to handle wrapping
+        if text.max_width.is_some() {
+            // Use wrapping logic
+            return self.render_text_to_image_with_wrapping(text, &font, &scaled);
+        }
+        
+        // Original single-line logic
+        let mut caret_x = 0.0f32;
+        let mut max_width = 0.0f32;
+        let mut min_y = scaled.ascent();
+        let mut max_y = scaled.descent();
+        
+        for ch in text.content.chars() {
+            let id = scaled.glyph_id(ch);
+            caret_x += scaled.h_advance(id);
+            max_width = max_width.max(caret_x);
+            
+            if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
+                let bounds = glyph.px_bounds();
+                min_y = min_y.min(bounds.min.y);
+                max_y = max_y.max(bounds.max.y);
+            }
+        }
+        
+        let text_width = max_width.ceil().max(1.0) as u32;
+        let text_height = (max_y - min_y).ceil().max(1.0) as u32;
+        
+        // Create RGBA data for text
+        let mut rgba_data = vec![0u8; (text_width * text_height * 4) as usize];
+        
+        // Render text to RGBA buffer
+        caret_x = 0.0f32;
+        let baseline_y = 0.0f32; // Start from top of buffer
+        let mut pixels_filled = 0;
+        
+        for ch in text.content.chars() {
+            let id = scaled.glyph_id(ch);
+            
+            if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
+                let bounds = glyph.px_bounds();
+                let glyph_x = caret_x + bounds.min.x;
+                // Adjust glyph_y to be relative to buffer top
+                let glyph_y = baseline_y + (bounds.min.y - min_y);
+                
+                glyph.draw(|x, y, v| {
+                    let px = x as i32 + glyph_x as i32;
+                    let py = y as i32 + glyph_y as i32;
+                    
+                    if px >= 0 && py >= 0 && px < text_width as i32 && py < text_height as i32 {
+                        let idx = ((py as u32 * text_width + px as u32) * 4) as usize;
+                        let alpha = (v * 255.0).round().clamp(0.0, 255.0) as u8;
+                        
+                        // Apply color to RGB channels
+                        rgba_data[idx] = (text.color[2] * 255.0) as u8;     // B
+                        rgba_data[idx + 1] = (text.color[1] * 255.0) as u8; // G  
+                        rgba_data[idx + 2] = (text.color[0] * 255.0) as u8; // R
+                        // For text, alpha should be the coverage value directly
+                        rgba_data[idx + 3] = alpha; // A
+                        pixels_filled += 1;
+                    }
+                });
+            }
+            
+            caret_x += scaled.h_advance(id);
+        }
+        
+        // Create image in atlas
+        let width = crate::pt::Pt::from(text_width as f32);
+        let height = crate::pt::Pt::from(text_height as f32);
+        let image = self.create_image(width, height, &rgba_data)?;
+        if let Some(entry) = self.images.get(image.index()).and_then(|e| e.as_ref()) {
+            Ok(Some(*entry))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn render_text_to_image_with_wrapping(&mut self, text: &Text, _font: &FontArc, scaled: &ab_glyph::PxScaleFont<&FontArc>) -> anyhow::Result<Option<ImageEntry>> {
+        use ab_glyph::{Glyph, ScaleFont as _};
         
         // Handle text wrapping
         let lines = text.get_wrapped_lines(&scaled);
         let line_height = scaled.ascent() - scaled.descent();
         
         let mut max_width = 0.0f32;
-        let mut min_y = scaled.ascent();
-        let mut max_y = scaled.descent();
+        let mut min_y = f32::MAX;
+        let mut max_y = f32::MIN;
         
         for line in &lines {
             let mut line_width = 0.0f32;
@@ -525,7 +605,7 @@ impl Graphics {
                 line_width += scaled.h_advance(id);
                 prev = Some(id);
                 
-                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
+                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale: scaled.scale(), position: ab_glyph::point(0.0, 0.0) }) {
                     let bounds = glyph.px_bounds();
                     min_y = min_y.min(bounds.min.y);
                     max_y = max_y.max(bounds.max.y);
@@ -534,15 +614,23 @@ impl Graphics {
             max_width = max_width.max(line_width);
         }
         
-        let text_width = max_width.ceil().max(1.0) as u32;
+        // If no glyphs were found, use default values
+        if min_y == f32::MAX {
+            min_y = scaled.descent();
+        }
         let text_height = (lines.len() as f32 * line_height).ceil().max(1.0) as u32;
+        let text_width = max_width.ceil().max(1.0) as u32;
         
         // Create RGBA data for text
         let mut rgba_data = vec![0u8; (text_width * text_height * 4) as usize];
         
         // Render text to RGBA buffer with line wrapping
         let baseline_y = scaled.ascent();
-        let mut pixels_filled = 0;
+        let text_color = [
+            (text.color[2] * 255.0) as u8,     // B
+            (text.color[1] * 255.0) as u8,     // G  
+            (text.color[0] * 255.0) as u8,     // R
+        ];
         
         for (line_index, line) in lines.iter().enumerate() {
             let mut caret_x = 0.0f32;
@@ -555,7 +643,7 @@ impl Graphics {
                     caret_x += scaled.kern(p, id);
                 }
                 
-                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
+                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale: scaled.scale(), position: ab_glyph::point(0.0, 0.0) }) {
                     let bounds = glyph.px_bounds();
                     let glyph_x = caret_x + bounds.min.x;
                     // Adjust glyph_y to be relative to buffer top
@@ -570,12 +658,10 @@ impl Graphics {
                             let alpha = (v * 255.0).round().clamp(0.0, 255.0) as u8;
                             
                             // Apply color to RGB channels
-                            rgba_data[idx] = (text.color[2] * 255.0) as u8;     // B
-                            rgba_data[idx + 1] = (text.color[1] * 255.0) as u8; // G  
-                            rgba_data[idx + 2] = (text.color[0] * 255.0) as u8; // R
-                            // For text, alpha should be the coverage value directly
-                            rgba_data[idx + 3] = alpha; // A
-                            pixels_filled += 1;
+                            rgba_data[idx] = text_color[0];         // B
+                            rgba_data[idx + 1] = text_color[1];     // G  
+                            rgba_data[idx + 2] = text_color[2];     // R
+                            rgba_data[idx + 3] = alpha;            // A
                         }
                     });
                 }

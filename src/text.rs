@@ -1,6 +1,6 @@
 use crate::{Context, DrawOption};
 use std::fmt;
-use ab_glyph::{Font as _, ScaleFont as _};
+use ab_glyph::{ScaleFont as _};
 
 /// Text handle for drawing text to the screen.
 ///
