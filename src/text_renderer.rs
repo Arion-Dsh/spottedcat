@@ -49,6 +49,7 @@ struct GlyphKey {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 struct AtlasRect {
     x: u32,
     y: u32,
@@ -56,7 +57,9 @@ struct AtlasRect {
     h: u32,
 }
 
+#[allow(dead_code)]
 impl AtlasRect {
+    #[allow(dead_code)]
     fn uv(&self, atlas_w: u32, atlas_h: u32) -> ([f32; 2], [f32; 2]) {
         let u0 = self.x as f32 / atlas_w as f32;
         let v0 = self.y as f32 / atlas_h as f32;
@@ -67,12 +70,17 @@ impl AtlasRect {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 struct GlyphEntry {
+    #[allow(dead_code)]
     rect: AtlasRect,
+    #[allow(dead_code)]
     bmin: [f32; 2],
+    #[allow(dead_code)]
     bmax: [f32; 2],
 }
 
+#[allow(dead_code)]
 pub struct TextRenderer {
     pipeline: wgpu::RenderPipeline,
 
@@ -83,13 +91,19 @@ pub struct TextRenderer {
     uniform_buffer: wgpu::Buffer,
     uniform_bg: wgpu::BindGroup,
 
+    #[allow(dead_code)]
     atlas_texture: wgpu::Texture,
     atlas_bg: wgpu::BindGroup,
 
+    #[allow(dead_code)]
     atlas_w: u32,
+    #[allow(dead_code)]
     atlas_h: u32,
+    #[allow(dead_code)]
     next_x: u32,
+    #[allow(dead_code)]
     next_y: u32,
+    #[allow(dead_code)]
     row_h: u32,
 
     instances: Vec<GlyphInstance>,
@@ -97,14 +111,19 @@ pub struct TextRenderer {
     instance_capacity: usize,
     last_instance_count: usize,
 
+    #[allow(dead_code)]
     font_cache: HashMap<u64, FontArc>,
+    #[allow(dead_code)]
     glyph_cache: HashMap<GlyphKey, GlyphEntry>,
+    #[allow(dead_code)]
     font_data_cache: HashMap<u64, Vec<u8>>,
+    #[allow(dead_code)]
     alpha_buffer_pool: Vec<Vec<u8>>,
     instances_dirty: bool,
     last_screen_size: [u32; 2],
 }
 
+#[allow(dead_code)]
 impl TextRenderer {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         let uniforms = TextUniforms {

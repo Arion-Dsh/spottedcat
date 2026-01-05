@@ -10,7 +10,7 @@ fn main() {
         .with_color([1.0, 1.0, 1.0, 1.0]);
     
     // Test the wrapping logic
-    use ab_glyph::{Font as _, FontArc, PxScale, ScaleFont as _};
+    use ab_glyph::{Font as _, FontArc, PxScale};
     
     let font = FontArc::try_from_vec(font_data.clone()).unwrap();
     let px_size = 24.0f32.max(1.0);
