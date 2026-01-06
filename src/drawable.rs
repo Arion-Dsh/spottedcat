@@ -93,4 +93,36 @@ impl DrawOption {
     pub fn get_clip(&self) -> Option<[Pt; 4]> {
         self.clip
     }
+
+    pub(crate) fn apply_state(&self, state: &crate::DrawState) -> Self {
+        let mut new_opts = *self;
+        
+        // Add current state's position to our relative position to get absolute screen position
+        new_opts.position[0] += state.position[0];
+        new_opts.position[1] += state.position[1];
+        
+        // Merge clip
+        if let Some(state_clip_abs) = state.clip {
+            new_opts.clip = if let Some(own_clip_rel) = self.clip {
+                // own_clip is relative to own relative position
+                // Calculate absolute coordinates for our own clip
+                let own_x_abs = new_opts.position[0].as_f32() + own_clip_rel[0].as_f32();
+                let own_y_abs = new_opts.position[1].as_f32() + own_clip_rel[1].as_f32();
+                
+                let x = own_x_abs.max(state_clip_abs[0].as_f32());
+                let y = own_y_abs.max(state_clip_abs[1].as_f32());
+                let right = (own_x_abs + own_clip_rel[2].as_f32()).min(state_clip_abs[0].as_f32() + state_clip_abs[2].as_f32());
+                let bottom = (own_y_abs + own_clip_rel[3].as_f32()).min(state_clip_abs[1].as_f32() + state_clip_abs[3].as_f32());
+                
+                let w = (right - x).max(0.0);
+                let h = (bottom - y).max(0.0);
+                Some([Pt::from(x), Pt::from(y), Pt::from(w), Pt::from(h)])
+            } else {
+                // If we don't have our own clip, we inherit the state clip
+                Some(state_clip_abs)
+            };
+        }
+        
+        new_opts
+    }
 }

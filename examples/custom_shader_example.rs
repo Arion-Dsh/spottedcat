@@ -1,18 +1,17 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig};
 use std::time::Duration;
 
-use bytemuck;
-
 struct CustomShaderScene {
     tree: Image,
     tree2: Image,
     tree3: Image,
     tree4: Image,
+    tree5: Image,
     negative_shader_id: u32,
     grayscale_shader_id: u32,
     ripple_shader_id: u32,
     circle_shader_id: u32,
-    t: f32,
+    ripple_phase: f32,
 }
 
 impl CustomShaderScene {
@@ -30,311 +29,59 @@ impl Spot for CustomShaderScene {
         let tree2 = Image::new_from_image(tree).expect("failed to create happy-tree copy");
         let tree3 = Image::new_from_image(tree).expect("failed to create happy-tree copy");
         let tree4 = Image::new_from_image(tree).expect("failed to create happy-tree copy");
+        let tree5 = Image::new_from_image(tree).expect("failed to create happy-tree copy");
 
         // IMPORTANT: custom image shaders must match the engine's instance vertex layout.
         // That means vs_main takes the same VsIn (locations 0..3) and outputs uv.
+        // Now users can override specific functions instead of rewriting the entire shader.
 
-        // Custom shader 1: Negative effect
         let negative_shader_src = r#"
-@group(0) @binding(0)
-var tex: texture_2d<f32>;
-
-@group(0) @binding(1)
-var samp: sampler;
-
-struct ImageGlobals {
-    data: array<vec4<f32>, 16>,
-};
-
-@group(1) @binding(0)
-var<uniform> g: ImageGlobals;
-
-struct VsIn {
-    @builtin(vertex_index) vertex_index: u32,
-    @location(0) mvp_col0: vec2<f32>,
-    @location(1) mvp_col1: vec2<f32>,
-    @location(2) mvp_col3: vec2<f32>,
-    @location(3) uv_rect: vec4<f32>,
-};
-
-struct VsOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-    @location(1) uv_rect: vec4<f32>,
-};
-
-@vertex
-fn vs_main(in: VsIn) -> VsOut {
-    var out: VsOut;
-
-    // Triangle Strip Quad: BL, BR, TL, TR
-    var pos_arr = array<vec2<f32>, 4>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>( 1.0, -1.0),
-        vec2<f32>(-1.0,  1.0),
-        vec2<f32>( 1.0,  1.0)
-    );
-    // UVs follow pos: (0,1), (1,1), (0,0), (1,0)
-    var uv_arr = array<vec2<f32>, 4>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0)
-    );
-
-    let pos = pos_arr[in.vertex_index];
-    let uv = uv_arr[in.vertex_index];
-
-    // Reconstruct position from compressed MVP columns
-    let x = pos.x * in.mvp_col0.x + pos.y * in.mvp_col1.x + in.mvp_col3.x;
-    let y = pos.x * in.mvp_col0.y + pos.y * in.mvp_col1.y + in.mvp_col3.y;
-    out.clip_pos = vec4<f32>(x, y, 0.0, 1.0);
-
-    // UVs: u = u0 + uv.x * w, v = v0 + uv.y * h
-    out.uv = vec2<f32>(
-        in.uv_rect.x + uv.x * in.uv_rect.z,
-        in.uv_rect.y + uv.y * in.uv_rect.w
-    );
-    out.uv_rect = in.uv_rect;
-    return out;
-}
-
-@fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let color = textureSample(tex, samp, in.uv);
-    let k = g.data[0].y;
-    let kk = clamp(k, 0.0, 1.0);
-    let rgb = mix(color.rgb, vec3<f32>(1.0) - color.rgb, kk);
-    return vec4<f32>(rgb, color.a);
+fn user_fs_hook(in: VsOut, color: vec4<f32>) -> vec4<f32> {
+    return vec4<f32>(vec3<f32>(1.0) - color.rgb, color.a);
 }
 "#;
 
-        // Custom shader 4: Circle mask/outline
+        // Circle mask (outside)
+        // user_globals[0] = [radius, _unused, softness, mix]
+        // user_globals[1] = [r, g, b, a]
         let circle_shader_src = r#"
-@group(0) @binding(0)
-var tex: texture_2d<f32>;
+fn user_fs_hook(in: VsOut, color: vec4<f32>) -> vec4<f32> {
+    let radius = user_globals[0].x;
+    let softness = max(user_globals[0].z, 0.0001);
+    let mixv = clamp(user_globals[0].w, 0.0, 1.0);
+    let ring_color = user_globals[1];
 
-@group(0) @binding(1)
-var samp: sampler;
+    let p = (in.local_uv - vec2<f32>(0.5, 0.5)) * 2.0;
+    let d = length(p);
 
-struct ImageGlobals {
-    data: array<vec4<f32>, 16>,
-};
+    // Outside mask: 0.0 inside the circle, 1.0 outside (with smooth edge)
+    let outside = smoothstep(radius, radius + softness, d);
 
-@group(1) @binding(0)
-var<uniform> g: ImageGlobals;
-
-struct VsIn {
-    @builtin(vertex_index) vertex_index: u32,
-    @location(0) mvp_col0: vec2<f32>,
-    @location(1) mvp_col1: vec2<f32>,
-    @location(2) mvp_col3: vec2<f32>,
-    @location(3) uv_rect: vec4<f32>,
-};
-
-struct VsOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-    @location(1) uv_rect: vec4<f32>,
-};
-
-@vertex
-fn vs_main(in: VsIn) -> VsOut {
-    var out: VsOut;
-
-    var pos_arr = array<vec2<f32>, 4>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>( 1.0, -1.0),
-        vec2<f32>(-1.0,  1.0),
-        vec2<f32>( 1.0,  1.0)
-    );
-    var uv_arr = array<vec2<f32>, 4>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0)
-    );
-
-    let pos = pos_arr[in.vertex_index];
-    let uv = uv_arr[in.vertex_index];
-
-    let x = pos.x * in.mvp_col0.x + pos.y * in.mvp_col1.x + in.mvp_col3.x;
-    let y = pos.x * in.mvp_col0.y + pos.y * in.mvp_col1.y + in.mvp_col3.y;
-    out.clip_pos = vec4<f32>(x, y, 0.0, 1.0);
-
-    out.uv = vec2<f32>(
-        in.uv_rect.x + uv.x * in.uv_rect.z,
-        in.uv_rect.y + uv.y * in.uv_rect.w
-    );
-    out.uv_rect = in.uv_rect;
-    return out;
-}
-
-@fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    // g.data[0] = [radius, thickness, softness, mix]
-    // g.data[1] = [r, g, b, a]
-    let radius = g.data[0].x;
-    let thickness = g.data[0].y;
-    let softness = max(g.data[0].z, 0.0001);
-    let mixv = clamp(g.data[0].w, 0.0, 1.0);
-    let ring_color = g.data[1];
-
-    let base = textureSample(tex, samp, in.uv);
-    let local_uv = (in.uv - in.uv_rect.xy) / in.uv_rect.zw;
-    let d = distance(local_uv, vec2<f32>(0.5, 0.5));
-    let half_t = 0.5 * thickness;
-    let dist_to_ring = abs(d - radius);
-    let ring = 1.0 - smoothstep(half_t, half_t + softness, dist_to_ring);
-    let overlay = vec4<f32>(ring_color.rgb, ring_color.a) * ring;
-    return mix(base, overlay, mixv);
+    let base = color;
+    let overlay = vec4<f32>(ring_color.rgb, ring_color.a);
+    return mix(base, overlay, outside * mixv);
 }
 "#;
 
-        // Custom shader 2: Grayscale
         let grayscale_shader_src = r#"
-@group(0) @binding(0)
-var tex: texture_2d<f32>;
-
-@group(0) @binding(1)
-var samp: sampler;
-
-struct ImageGlobals {
-    data: array<vec4<f32>, 16>,
-};
-
-@group(1) @binding(0)
-var<uniform> g: ImageGlobals;
-
-struct VsIn {
-    @builtin(vertex_index) vertex_index: u32,
-    @location(0) mvp_col0: vec2<f32>,
-    @location(1) mvp_col1: vec2<f32>,
-    @location(2) mvp_col3: vec2<f32>,
-    @location(3) uv_rect: vec4<f32>,
-};
-
-struct VsOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
-
-@vertex
-fn vs_main(in: VsIn) -> VsOut {
-    var out: VsOut;
-
-    var pos_arr = array<vec2<f32>, 4>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>( 1.0, -1.0),
-        vec2<f32>(-1.0,  1.0),
-        vec2<f32>( 1.0,  1.0)
-    );
-    var uv_arr = array<vec2<f32>, 4>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0)
-    );
-
-    let pos = pos_arr[in.vertex_index];
-    let uv = uv_arr[in.vertex_index];
-
-    let x = pos.x * in.mvp_col0.x + pos.y * in.mvp_col1.x + in.mvp_col3.x;
-    let y = pos.x * in.mvp_col0.y + pos.y * in.mvp_col1.y + in.mvp_col3.y;
-    out.clip_pos = vec4<f32>(x, y, 0.0, 1.0);
-
-    out.uv = vec2<f32>(
-        in.uv_rect.x + uv.x * in.uv_rect.z,
-        in.uv_rect.y + uv.y * in.uv_rect.w
-    );
-    return out;
-}
-
-@fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let color = textureSample(tex, samp, in.uv);
+fn user_fs_hook(in: VsOut, color: vec4<f32>) -> vec4<f32> {
     let l = dot(color.rgb, vec3<f32>(0.299, 0.587, 0.114));
-    let k = clamp(g.data[0].x, 0.0, 1.0);
-    return vec4<f32>(mix(color.rgb, vec3<f32>(l), k), color.a);
+    return vec4<f32>(vec3<f32>(l), color.a);
 }
 "#;
 
-        // Custom shader 3: Ripple (water wave) distortion
+        // user_globals[0] = [amp, freq, phase, _]
         let ripple_shader_src = r#"
-@group(0) @binding(0)
-var tex: texture_2d<f32>;
+fn user_fs_hook(in: VsOut, color: vec4<f32>) -> vec4<f32> {
+    let amp = user_globals[0].x;
+    let freq = user_globals[0].y;
+    let phase = user_globals[0].z;
 
-@group(0) @binding(1)
-var samp: sampler;
-
-struct ImageGlobals {
-    data: array<vec4<f32>, 16>,
-};
-
-@group(1) @binding(0)
-var<uniform> g: ImageGlobals;
-
-struct VsIn {
-    @builtin(vertex_index) vertex_index: u32,
-    @location(0) mvp_col0: vec2<f32>,
-    @location(1) mvp_col1: vec2<f32>,
-    @location(2) mvp_col3: vec2<f32>,
-    @location(3) uv_rect: vec4<f32>,
-};
-
-struct VsOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-};
-
-@vertex
-fn vs_main(in: VsIn) -> VsOut {
-    var out: VsOut;
-
-    var pos_arr = array<vec2<f32>, 4>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>( 1.0, -1.0),
-        vec2<f32>(-1.0,  1.0),
-        vec2<f32>( 1.0,  1.0)
-    );
-    var uv_arr = array<vec2<f32>, 4>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 0.0)
-    );
-
-    let pos = pos_arr[in.vertex_index];
-    let uv = uv_arr[in.vertex_index];
-
-    let x = pos.x * in.mvp_col0.x + pos.y * in.mvp_col1.x + in.mvp_col3.x;
-    let y = pos.x * in.mvp_col0.y + pos.y * in.mvp_col1.y + in.mvp_col3.y;
-    out.clip_pos = vec4<f32>(x, y, 0.0, 1.0);
-
-    out.uv = vec2<f32>(
-        in.uv_rect.x + uv.x * in.uv_rect.z,
-        in.uv_rect.y + uv.y * in.uv_rect.w
-    );
-    return out;
-}
-
-@fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    // g.data[0] = [t, amp, freq, speed]
-    let t = g.data[0].x;
-    let amp = g.data[0].y;
-    let freq = g.data[0].z;
-    let speed = g.data[0].w;
-
-    let center = vec2<f32>(0.5, 0.5);
-    let d = in.uv - center;
-    let r = length(d);
-    let dir = select(vec2<f32>(0.0, 0.0), d / r, r > 0.0001);
-
-    let w = sin(r * freq - t * speed);
-    let uv2 = in.uv + dir * (w * amp);
-    let c = textureSample(tex, samp, clamp(uv2, vec2<f32>(0.0), vec2<f32>(1.0)));
-    return c;
+    let wave = sin(in.local_uv.y * freq + phase) * amp;
+    // Offset in atlas UV space: scale by the sub-rect size to keep sampling within the image.
+    let uv2 = in.uv + vec2<f32>(wave * in.uv_scale.x, 0.0);
+    let c2 = textureSample(tex, samp, uv2);
+    return vec4<f32>(c2.rgb, color.a);
 }
 "#;
 
@@ -348,109 +95,67 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             tree2,
             tree3,
             tree4,
+            tree5,
             negative_shader_id,
             grayscale_shader_id,
             ripple_shader_id,
             circle_shader_id,
-            t: 0.0,
+            ripple_phase: 0.0,
         }
     }
 
     fn draw(&mut self, context: &mut Context) {
-        #[repr(C)]
-        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-        struct GrayscaleGlobals {
-            k: f32,
-            _pad: [f32; 3],
-        }
-
-        #[repr(C)]
-        #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-        struct RippleGlobals {
-            t: f32,
-            amp: f32,
-            freq: f32,
-            speed: f32,
-        }
-
-        // Baseline (no shader) vs custom shader.
-
+        // Default rendering
         let opts_a = DrawOption::default()
-            .with_position([Pt::from(80.0), Pt::from(120.0)])
+            .with_position([Pt::from(80.0), Pt::from(80.0)])
             .with_scale([0.8, 0.8])
-            .with_rotation(self.t);
+            .with_rotation(0.0);
         self.tree.draw(context, opts_a);
 
+        // Negative
         let opts_b = DrawOption::default()
-            .with_position([Pt::from(420.0), Pt::from(120.0)])
+            .with_position([Pt::from(300.0), Pt::from(80.0)])
             .with_scale([0.8, 0.8])
-            .with_rotation(-self.t);
-        self.tree2.draw_with_shader(
-            context,
-            self.negative_shader_id,
-            opts_b,
-            spottedcat::ShaderOpts::from_bytes(bytemuck::cast_slice(&[
-                0.0f32,
-                1.0f32,
-                0.0f32,
-                0.0f32,
-            ])),
-        );
+            .with_rotation(0.0);
+        let mut shader_opts_b = spottedcat::ShaderOpts::default();
+        shader_opts_b.set_opacity(1.0);
+        self.tree2.draw_with_shader(context, self.negative_shader_id, opts_b, shader_opts_b);
 
+        // Grayscale
         let opts_c = DrawOption::default()
-            .with_position([Pt::from(240.0), Pt::from(380.0)])
+            .with_position([Pt::from(520.0), Pt::from(80.0)])
             .with_scale([0.8, 0.8])
-            .with_rotation(self.t * 0.5);
+            .with_rotation(0.0);
+        let mut shader_opts_c = spottedcat::ShaderOpts::default();
+        shader_opts_c.set_opacity(1.0);
+        self.tree3.draw_with_shader(context, self.grayscale_shader_id, opts_c, shader_opts_c);
 
-        let globals_c = GrayscaleGlobals { k: 1.0, _pad: [0.0; 3] };
-        self.tree2.draw_with_shader(
-            context,
-            self.grayscale_shader_id,
-            opts_c,
-            spottedcat::ShaderOpts::from_pod(&globals_c),
-        );
-
+        // Ripple (static)
         let opts_d = DrawOption::default()
-            .with_position([Pt::from(520.0), Pt::from(380.0)])
+            .with_position([Pt::from(80.0), Pt::from(300.0)])
             .with_scale([0.8, 0.8])
             .with_rotation(0.0);
-        let globals_d = RippleGlobals {
-            t: self.t,
-            amp: 0.02,
-            freq: 28.0,
-            speed: 6.0,
-        };
-        self.tree3.draw_with_shader(
-            context,
-            self.ripple_shader_id,
-            opts_d,
-            spottedcat::ShaderOpts::from_pod(&globals_d),
-        );
+        let mut shader_opts_d = spottedcat::ShaderOpts::default();
+        // user_globals[0] = [amp, freq, phase, _]
+        shader_opts_d.set_vec4(0, [0.02, 40.0, self.ripple_phase, 0.0]);
+        shader_opts_d.set_opacity(1.0);
+        self.tree4.draw_with_shader(context, self.ripple_shader_id, opts_d, shader_opts_d);
 
+        // Circle outside mask
         let opts_e = DrawOption::default()
-            .with_position([Pt::from(80.0), Pt::from(420.0)])
+            .with_position([Pt::from(300.0), Pt::from(300.0)])
             .with_scale([0.8, 0.8])
             .with_rotation(0.0);
-        let circle_bytes: &[u8] = bytemuck::cast_slice(&[
-            0.33f32, // radius
-            0.01f32, // thickness
-            0.02f32, // softness
-            1.0f32,  // mix
-            1.0f32,  // r
-            0.2f32,  // g
-            0.2f32,  // b
-            1.0f32,  // a
-        ]);
-        self.tree4.draw_with_shader(
-            context,
-            self.circle_shader_id,
-            opts_e,
-            spottedcat::ShaderOpts::from_bytes(circle_bytes),
-        );
+        let mut shader_opts_e = spottedcat::ShaderOpts::default();
+        shader_opts_e.set_vec4(0, [0.55, 0.0, 0.02, 1.0]);
+        shader_opts_e.set_vec4(1, [1.0, 0.2, 0.2, 1.0]);
+        shader_opts_e.set_opacity(1.0);
+        self.tree5.draw_with_shader(context, self.circle_shader_id, opts_e, shader_opts_e);
     }
 
     fn update(&mut self, _context: &mut Context, dt: Duration) {
-        self.t += dt.as_secs_f32();
+        // Advance phase to animate the ripple without affecting other shaders.
+        self.ripple_phase += dt.as_secs_f32() * 4.0;
     }
 
     fn remove(&self) {}

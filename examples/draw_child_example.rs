@@ -30,17 +30,13 @@ impl Spot for DrawChildScene {
         // 2. Draw parent
         self.parent_image.draw(context, parent_opts);
 
-        // 3. Draw child using draw_image - it will automatically clip to parent
+        // 3. Draw child using with_clip_scope - it will automatically clip to parent
         let child_opts = DrawOption::default()
             .with_position([Pt::from(250.0), Pt::from(250.0)]); // Bottom-right corner of parent
-        
-        // Automatically calculate clip based on parent's position and size
-        self.parent_image.draw_image(
-            context,
-            parent_opts,
-            self.child_image,
-            child_opts,
-        );
+
+        self.parent_image.with_clip_scope(context, parent_opts, |context| {
+            self.child_image.draw(context, child_opts);
+        });
     }
 
     fn update(&mut self, _context: &mut Context, _dt: Duration) {}

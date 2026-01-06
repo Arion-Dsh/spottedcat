@@ -33,22 +33,17 @@ impl Spot for StressTestScene {
         let cols = 400;
         let spacing = 2.0;
 
-        for i in 0..total {
-            let x = (i % cols) as f32 * spacing;
-            let y = (i / cols) as f32 * spacing;
-            
-            let child_opts = DrawOption::default()
-                .with_position([Pt::from(x), Pt::from(y)]);
-            
-            // All children share the same parent and same clip area
-            // This tests both logic overhead and batching efficiency
-            self.container.draw_image(
-                context,
-                parent_opts,
-                self.child,
-                child_opts,
-            );
-        }
+        self.container.with_clip_scope(context, parent_opts, |context| {
+            for i in 0..total {
+                let x = (i % cols) as f32 * spacing;
+                let y = (i / cols) as f32 * spacing;
+                
+                let child_opts = DrawOption::default()
+                    .with_position([Pt::from(x), Pt::from(y)]);
+
+                self.child.draw(context, child_opts);
+            }
+        });
     }
 
     fn update(&mut self, _context: &mut Context, _dt: Duration) {}

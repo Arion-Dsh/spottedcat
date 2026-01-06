@@ -99,6 +99,21 @@ impl Default for WindowConfig {
 
 use crate::graphics::Graphics;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DrawState {
+    pub position: [Pt; 2],
+    pub clip: Option<[Pt; 4]>,
+}
+
+impl Default for DrawState {
+    fn default() -> Self {
+        Self {
+            position: [Pt(0.0), Pt(0.0)],
+            clip: None,
+        }
+    }
+}
+
 /// Drawing context for managing render commands.
 ///
 /// The context accumulates drawing commands during a frame and is used by the
@@ -110,6 +125,15 @@ pub struct Context {
     scale_factor: f64,
     window_logical_size: (Pt, Pt),
     resources: ResourceMap,
+    state_stack: Vec<DrawState>,
+    current_state: DrawState,
+    last_image_opts: HashMap<u32, LastImageDrawInfo>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LastImageDrawInfo {
+    pub(crate) opts: DrawOption,
+    pub(crate) origin: [Pt; 2],
 }
 
 #[derive(Default)]
@@ -137,6 +161,9 @@ impl Context {
             scale_factor: 1.0,
             window_logical_size: (Pt(0.0), Pt(0.0)),
             resources: ResourceMap::default(),
+            state_stack: Vec::new(),
+            current_state: DrawState::default(),
+            last_image_opts: HashMap::new(),
         }
     }
 
@@ -149,6 +176,7 @@ impl Context {
     pub fn window_logical_size(&self) -> (Pt, Pt) {
         self.window_logical_size
     }
+
 
     pub fn vw(&self, percent: f32) -> Pt {
         let (w, _) = self.window_logical_size;
@@ -182,6 +210,9 @@ impl Context {
     /// manually if needed.
     pub(crate) fn begin_frame(&mut self) {
         self.draw_list.clear();
+        self.state_stack.clear();
+        self.current_state = DrawState::default();
+        self.last_image_opts.clear();
     }
 
     pub(crate) fn input(&self) -> &InputManager {
@@ -203,8 +234,86 @@ impl Context {
     /// Adds a drawable item to the draw list.
     ///
     /// This is used internally by Image::draw() and other drawing methods.
-    pub(crate) fn push(&mut self, drawable: DrawCommand) {
+    pub(crate) fn push(&mut self, mut drawable: DrawCommand) {
+        let origin = self.current_state.position;
+        // Apply current state to the drawable
+        match &mut drawable {
+            DrawCommand::Image(_, opts, _, _) | DrawCommand::Text(_, opts) => {
+                *opts = opts.apply_state(&self.current_state);
+            }
+        }
+        if let DrawCommand::Image(id, opts, _, _) = &drawable {
+            self.last_image_opts.insert(
+                *id,
+                LastImageDrawInfo {
+                    opts: *opts,
+                    origin,
+                },
+            );
+        }
+        if std::env::var("SPOT_DEBUG_DRAW").is_ok() {
+            match &drawable {
+                DrawCommand::Image(id, opts, shader_id, _shader_opts) => {
+                    eprintln!(
+                        "[spot][debug] draw image id={} shader_id={} pos={:?} clip={:?}",
+                        id,
+                        shader_id,
+                        opts.position(),
+                        opts.get_clip()
+                    );
+                }
+                DrawCommand::Text(_text, opts) => {
+                    eprintln!(
+                        "[spot][debug] draw text pos={:?} clip={:?}",
+                        opts.position(),
+                        opts.get_clip()
+                    );
+                }
+            }
+        }
         self.draw_list.push(drawable);
+    }
+
+    pub(crate) fn current_draw_state(&self) -> DrawState {
+        self.current_state
+    }
+
+    pub(crate) fn last_image_draw_info(&self, image_id: u32) -> Option<LastImageDrawInfo> {
+        self.last_image_opts.get(&image_id).copied()
+    }
+
+    pub(crate) fn push_state(&mut self, state: DrawState) {
+        self.state_stack.push(self.current_state);
+        
+        // Accumulate position correctly: 
+        // state.position passed from draw_image is the LOCAL relative position of the parent.
+        // We add it to the current absolute position to get the new origin for children.
+        self.current_state.position[0] += state.position[0];
+        self.current_state.position[1] += state.position[1];
+        
+        // Merge clip: clip in state is already absolute screen-space bounds
+        if let Some(new_clip_abs) = state.clip {
+            let merged_clip = if let Some(old_clip_abs) = self.current_state.clip {
+                // Intersect absolute clips
+                let x = old_clip_abs[0].as_f32().max(new_clip_abs[0].as_f32());
+                let y = old_clip_abs[1].as_f32().max(new_clip_abs[1].as_f32());
+                let right = (old_clip_abs[0].as_f32() + old_clip_abs[2].as_f32()).min(new_clip_abs[0].as_f32() + new_clip_abs[2].as_f32());
+                let bottom = (old_clip_abs[1].as_f32() + old_clip_abs[3].as_f32()).min(new_clip_abs[1].as_f32() + new_clip_abs[3].as_f32());
+                
+                let w = (right - x).max(0.0);
+                let h = (bottom - y).max(0.0);
+                Some([Pt::from(x), Pt::from(y), Pt::from(w), Pt::from(h)])
+            } else {
+                Some(new_clip_abs)
+            };
+            self.current_state.clip = merged_clip;
+        }
+    }
+
+    pub(crate) fn pop_state(&mut self) {
+        if let Some(prev_state) = self.state_stack.pop() {
+            self.current_state = prev_state;
+        }
     }
 
     /// Returns the list of drawing commands accumulated so far.

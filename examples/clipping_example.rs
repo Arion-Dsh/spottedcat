@@ -32,8 +32,10 @@ impl Spot for ClippingScene {
         // Parent bounds in screen space: [100, 100, 200, 200]
         let child_opts = DrawOption::default()
             .with_position([Pt::from(150.0), Pt::from(150.0)]); // Relative to parent
-        self.parent_image
-            .draw_image(context, parent_opts, self.child_image, child_opts);
+
+        self.parent_image.with_clip_scope(context, parent_opts, |context| {
+            self.child_image.draw(context, child_opts);
+        });
     }
 
     fn update(&mut self, _context: &mut Context, _dt: Duration) {}

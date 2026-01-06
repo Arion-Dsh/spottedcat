@@ -187,86 +187,42 @@ impl Image {
         [x, y, w, h]
     }
 
-    /// Draws a child image clipped to this image's screen-space bounds.
-    ///
-    /// The `child_options.position` is interpreted as **relative to the parent's position**.
-    ///
-    /// If the parent already has a clip area defined, the child will be clipped
-    /// to the intersection of the parent's clip and the parent's bounds,
-    /// enabling nested clipping.
-    /// 
-    /// Returns the **absolute screen-space DrawOption** used to draw the child,
-    /// which can be passed as `parent_options` to subsequent `draw_image` or `draw_text` calls
-    /// for deeper nesting.
-    ///
-    /// # Arguments
-    /// * `context` - The drawing context
-    /// * `parent_options` - The DrawOption used to draw THIS image (the parent)
-    /// * `child` - The child image to draw
-    /// * `child_options` - The DrawOption for the child image (position is relative)
-    pub fn draw_image(
+    pub fn with_clip_scope<F>(
         self,
         context: &mut crate::Context,
-        parent_options: crate::DrawOption,
-        child: Image,
-        child_options: crate::DrawOption,
-    ) -> crate::DrawOption {
-        let final_options = self.compute_child_options(parent_options, child_options);
-        child.draw(context, final_options);
-        final_options
-    }
-
-    /// Draws a child text clipped to this image's screen-space bounds.
-    ///
-    /// Similar to `draw_image`, but for `Text`.
-    pub fn draw_text(
-        self,
-        context: &mut crate::Context,
-        parent_options: crate::DrawOption,
-        text: crate::Text,
-        child_options: crate::DrawOption,
-    ) -> crate::DrawOption {
-        let final_options = self.compute_child_options(parent_options, child_options);
-        text.draw(context, final_options);
-        final_options
-    }
-
-    fn compute_child_options(
-        self,
-        parent_options: crate::DrawOption,
-        child_options: crate::DrawOption,
-    ) -> crate::DrawOption {
-        let parent_bounds = self.screen_bounds(parent_options);
-        
-        // Convert child's relative position to absolute screen position
-        let mut child_pos = child_options.position();
-        let parent_pos = parent_options.position();
-        child_pos[0] += parent_pos[0];
-        child_pos[1] += parent_pos[1];
-        let child_options = child_options.with_position(child_pos);
-
-        let final_clip = if let Some(parent_clip) = parent_options.get_clip() {
-            // Compute intersection of parent's clip and parent's own bounds
-            let x = parent_bounds[0].as_f32().max(parent_clip[0].as_f32());
-            let y = parent_bounds[1].as_f32().max(parent_clip[1].as_f32());
-            
-            let parent_right = parent_bounds[0].as_f32() + parent_bounds[2].as_f32();
-            let parent_bottom = parent_bounds[1].as_f32() + parent_bounds[3].as_f32();
-            let clip_right = parent_clip[0].as_f32() + parent_clip[2].as_f32();
-            let clip_bottom = parent_clip[1].as_f32() + parent_clip[3].as_f32();
-            
-            let right = parent_right.min(clip_right);
-            let bottom = parent_bottom.min(clip_bottom);
-            
-            let width = (right - x).max(0.0);
-            let height = (bottom - y).max(0.0);
-            
-            [Pt::from(x), Pt::from(y), Pt::from(width), Pt::from(height)]
+        options: crate::DrawOption,
+        f: F,
+    ) where
+        F: FnOnce(&mut crate::Context),
+    {
+        let (parent_opts_abs, parent_origin_abs) = if let Some(info) = context.last_image_draw_info(self.id)
+        {
+            (info.opts, info.origin)
         } else {
-            parent_bounds
+            let state = context.current_draw_state();
+            (options.apply_state(&state), state.position)
         };
 
-        child_options.with_clip(Some(final_clip))
+        let parent_pos_abs = parent_opts_abs.position();
+        let parent_pos_local = [
+            parent_pos_abs[0] - parent_origin_abs[0],
+            parent_pos_abs[1] - parent_origin_abs[1],
+        ];
+        let parent_bounds = self.screen_bounds(parent_opts_abs);
+
+        let state = crate::DrawState {
+            position: parent_pos_local,
+            clip: Some([
+                parent_bounds[0],
+                parent_bounds[1],
+                parent_bounds[2],
+                parent_bounds[3],
+            ]),
+        };
+
+        context.push_state(state);
+        f(context);
+        context.pop_state();
     }
 }
 

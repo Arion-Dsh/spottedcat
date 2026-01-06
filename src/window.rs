@@ -55,6 +55,7 @@ pub(crate) struct App {
     previous: Option<Instant>,
     lag: Duration,
     fixed_dt: Duration,
+    start_time: Instant,
 }
 
 impl App {
@@ -78,7 +79,8 @@ impl App {
             scale_factor: 1.0,
             previous: None,
             lag: Duration::ZERO,
-            fixed_dt: Duration::from_nanos(8_333_333),
+            fixed_dt: Duration::from_secs_f64(1.0 / 60.0),
+            start_time: Instant::now(),
         }
     }
 

@@ -47,9 +47,10 @@ fn main() {
                 // Then draw green text clipped to the red square bounds
                 let text_opts = DrawOption::default()
                     .with_position([Pt::from(50.0), Pt::from(80.0)]); // Relative to square position
-                
-                // Use draw_text to apply clipping
-                self.red_square.draw_text(context, square_opts, self.text.clone(), text_opts);
+
+                self.red_square.with_clip_scope(context, square_opts, |context| {
+                    self.text.clone().draw(context, text_opts);
+                });
             }
         }
 

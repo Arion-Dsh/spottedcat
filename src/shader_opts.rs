@@ -41,6 +41,34 @@ impl ShaderOpts {
         Self::from_bytes(bytemuck::bytes_of(value))
     }
 
+    pub fn as_vec4_mut(&mut self) -> Vec<[f32; 4]> {
+        self.bytes
+            .chunks_exact(16)
+            .map(|chunk| {
+                let mut array = [0.0f32; 4];
+                for i in 0..4 {
+                    array[i] = f32::from_le_bytes([
+                        chunk[i * 4],
+                        chunk[i * 4 + 1],
+                        chunk[i * 4 + 2],
+                        chunk[i * 4 + 3],
+                    ]);
+                }
+                array
+            })
+            .collect()
+    }
+
+    pub fn set_vec4(&mut self, index: usize, value: [f32; 4]) {
+        if index < 16 {
+            let start = index * 16;
+            for i in 0..4 {
+                let bytes = value[i].to_le_bytes();
+                self.bytes[start + i*4..start + i*4 + 4].copy_from_slice(&bytes);
+            }
+        }
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }

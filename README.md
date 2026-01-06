@@ -35,10 +35,10 @@ impl Spot for MyApp {
     }
 
     fn draw(&mut self, context: &mut Context) {
-        let mut opts = DrawOptions::default();
-        opts.position = [100.0, 100.0];
-        opts.scale = [2.0, 2.0];
-        context.draw_image(self.image, opts);
+        let opts = DrawOption::default()
+            .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)])
+            .with_scale([2.0, 2.0]);
+        self.image.draw(context, opts);
     }
 
     fn update(&mut self, _context: &mut spottedcat::Context, _dt: std::time::Duration) {}
@@ -60,7 +60,7 @@ Drawing context for managing render commands. Accumulates drawing operations dur
 **Methods:**
 - `new()` - Create a new context
 - `begin_frame()` - Clear previous frame's commands
-- `draw_image(image, options)` - Queue an image for drawing
+- Use `Image::draw(context, options)` to queue an image for drawing
 
 #### `Spot` (trait)
 Main application trait defining the lifecycle of your app.
@@ -123,11 +123,11 @@ let sprite = Image::sub_image(
 ### Drawing with Transformations
 
 ```rust
-let mut opts = DrawOptions::default();
-opts.position = [400.0, 300.0];
-opts.rotation = std::f32::consts::PI / 4.0; // 45 degrees
-opts.scale = [2.0, 2.0]; // Double size
-context.draw_image(image, opts);
+let opts = DrawOption::default()
+    .with_position([spottedcat::Pt::from(400.0), spottedcat::Pt::from(300.0)])
+    .with_rotation(std::f32::consts::PI / 4.0) // 45 degrees
+    .with_scale([2.0, 2.0]); // Double size
+image.draw(&mut context, opts);
 ```
 
 ### Creating Images from Raw Data
