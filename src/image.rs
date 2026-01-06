@@ -121,8 +121,8 @@ impl Image {
     /// # let rgba = vec![255u8; 2 * 2 * 4];
     /// # let image = Image::new_from_rgba8(2u32.into(), 2u32.into(), &rgba).unwrap();
     /// let mut opts = DrawOption::default();
-    /// opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
-    /// opts.set_scale([2.0, 2.0]);
+    /// opts = opts.with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
+    /// opts = opts.with_scale([2.0, 2.0]);
     /// image.draw(&mut context, opts);
     /// ```
     pub fn draw(self, context: &mut crate::Context, options: crate::DrawOption) {
@@ -234,7 +234,7 @@ impl Image {
     fn compute_child_options(
         self,
         parent_options: crate::DrawOption,
-        mut child_options: crate::DrawOption,
+        child_options: crate::DrawOption,
     ) -> crate::DrawOption {
         let parent_bounds = self.screen_bounds(parent_options);
         
@@ -243,7 +243,7 @@ impl Image {
         let parent_pos = parent_options.position();
         child_pos[0] += parent_pos[0];
         child_pos[1] += parent_pos[1];
-        child_options.set_position(child_pos);
+        let child_options = child_options.with_position(child_pos);
 
         let final_clip = if let Some(parent_clip) = parent_options.get_clip() {
             // Compute intersection of parent's clip and parent's own bounds
@@ -266,8 +266,7 @@ impl Image {
             parent_bounds
         };
 
-        child_options.set_clip(Some(final_clip));
-        child_options
+        child_options.with_clip(Some(final_clip))
     }
 }
 

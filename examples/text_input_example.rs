@@ -63,8 +63,8 @@ impl Spot for TextInputExample {
     }
 
     fn draw(&mut self, ctx: &mut Context) {
-        let mut title_opts = DrawOption::default();
-        title_opts.set_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
+        let title_opts = DrawOption::default()
+            .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
         let status = if self.capture_enabled { "ON" } else { "OFF" };
         Text::new(
             format!(
@@ -77,8 +77,8 @@ impl Spot for TextInputExample {
         .with_color([1.0, 1.0, 1.0, 1.0])
         .draw(ctx, title_opts);
 
-        let mut input_opts = DrawOption::default();
-        input_opts.set_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
+        let input_opts = DrawOption::default()
+            .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
 
         let mut composed = self.committed.clone();
         if !self.preedit.is_empty() {
@@ -90,8 +90,8 @@ impl Spot for TextInputExample {
             .draw(ctx, input_opts);
 
         if !self.preedit.is_empty() {
-            let mut ime_opts = DrawOption::default();
-            ime_opts.set_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(130.0)]);
+            let ime_opts = DrawOption::default()
+                .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(130.0)]);
             Text::new(
                 format!("IME preedit: {}", self.preedit),
                 self.font_data.clone(),

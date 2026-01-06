@@ -36,13 +36,13 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             // Draw wrapped text
-            let mut wrapped_opts = DrawOption::default();
-            wrapped_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+            let wrapped_opts = DrawOption::default()
+                .with_position([Pt::from(50.0), Pt::from(50.0)]);
             self.wrapped_text.draw(context, wrapped_opts);
 
             // Draw normal text for comparison
-            let mut normal_opts = DrawOption::default();
-            normal_opts.set_position([Pt::from(50.0), Pt::from(200.0)]);
+            let normal_opts = DrawOption::default()
+                .with_position([Pt::from(50.0), Pt::from(200.0)]);
             self.normal_text.draw(context, normal_opts);
         }
 

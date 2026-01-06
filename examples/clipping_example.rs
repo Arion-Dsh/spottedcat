@@ -24,14 +24,14 @@ impl Spot for ClippingScene {
 
     fn draw(&mut self, context: &mut Context) {
         // 1. Draw parent image at (100, 100)
-        let mut parent_opts = DrawOption::default();
-        parent_opts.set_position([Pt::from(100.0), Pt::from(100.0)]);
+        let parent_opts = DrawOption::default()
+            .with_position([Pt::from(100.0), Pt::from(100.0)]);
         self.parent_image.draw(context, parent_opts);
 
         // 2. Draw child image partially outside parent, with clipping
         // Parent bounds in screen space: [100, 100, 200, 200]
-        let mut child_opts = DrawOption::default();
-        child_opts.set_position([Pt::from(150.0), Pt::from(150.0)]); // Relative to parent
+        let child_opts = DrawOption::default()
+            .with_position([Pt::from(150.0), Pt::from(150.0)]); // Relative to parent
         self.parent_image
             .draw_image(context, parent_opts, self.child_image, child_opts);
     }

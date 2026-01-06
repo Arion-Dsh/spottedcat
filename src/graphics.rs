@@ -850,7 +850,8 @@ impl Graphics {
                             continue;
                         }
 
-                        let effective_globals = *shader_opts;
+                        let mut effective_globals = *shader_opts;
+                        effective_globals.set_opacity(opts.opacity());
 
                         let pipeline_ptr: *const wgpu::RenderPipeline = if *shader_id == 0 {
                             std::ptr::addr_of!(image_renderer.pipeline)
@@ -936,7 +937,8 @@ impl Graphics {
                         // Use pre-converted text image
                         if let Some((text_image, text_opts)) = text_images.get(text_image_index) {
                             // Add to batch as image
-                            let effective_globals = ShaderOpts::default();
+                            let mut effective_globals = ShaderOpts::default();
+                            effective_globals.set_opacity(text_opts.opacity());
                             let pipeline_ptr: *const wgpu::RenderPipeline = 
                                 std::ptr::addr_of!(image_renderer.pipeline);
 

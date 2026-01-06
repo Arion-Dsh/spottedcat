@@ -16,9 +16,9 @@
 //!     }
 //!
 //!     fn draw(&mut self, context: &mut Context) {
-//!         let mut opts = DrawOption::default();
-//!         opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
-//!         opts.set_scale([0.78125, 0.78125]);
+//!         let opts = DrawOption::default()
+//!             .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)])
+//!             .with_scale([0.78125, 0.78125]);
 //!         self.image.draw(context, opts);
 //!     }
 //!

@@ -20,9 +20,9 @@ impl Spot for StressTestScene {
     }
 
     fn draw(&mut self, context: &mut Context) {
-        let mut parent_opts = DrawOption::default();
-        parent_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
-        parent_opts.set_scale([7.0, 5.0]); // Make a large 700x500 container
+        let parent_opts = DrawOption::default()
+            .with_position([Pt::from(50.0), Pt::from(50.0)])
+            .with_scale([7.0, 5.0]); // Make a large 700x500 container
         
         // Draw the parent container
         self.container.draw(context, parent_opts);
@@ -37,8 +37,8 @@ impl Spot for StressTestScene {
             let x = (i % cols) as f32 * spacing;
             let y = (i / cols) as f32 * spacing;
             
-            let mut child_opts = DrawOption::default();
-            child_opts.set_position([Pt::from(x), Pt::from(y)]);
+            let child_opts = DrawOption::default()
+                .with_position([Pt::from(x), Pt::from(y)]);
             
             // All children share the same parent and same clip area
             // This tests both logic overhead and batching efficiency

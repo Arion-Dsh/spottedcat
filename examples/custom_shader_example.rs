@@ -375,16 +375,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
         // Baseline (no shader) vs custom shader.
 
-        let mut opts_a = DrawOption::default();
-        opts_a.set_position([Pt::from(80.0), Pt::from(120.0)]);
-        opts_a.set_scale([0.8, 0.8]);
-        opts_a.set_rotation(self.t);
+        let opts_a = DrawOption::default()
+            .with_position([Pt::from(80.0), Pt::from(120.0)])
+            .with_scale([0.8, 0.8])
+            .with_rotation(self.t);
         self.tree.draw(context, opts_a);
 
-        let mut opts_b = DrawOption::default();
-        opts_b.set_position([Pt::from(420.0), Pt::from(120.0)]);
-        opts_b.set_scale([0.8, 0.8]);
-        opts_b.set_rotation(-self.t);
+        let opts_b = DrawOption::default()
+            .with_position([Pt::from(420.0), Pt::from(120.0)])
+            .with_scale([0.8, 0.8])
+            .with_rotation(-self.t);
         self.tree2.draw_with_shader(
             context,
             self.negative_shader_id,
@@ -397,10 +397,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             ])),
         );
 
-        let mut opts_c = DrawOption::default();
-        opts_c.set_position([Pt::from(240.0), Pt::from(380.0)]);
-        opts_c.set_scale([0.8, 0.8]);
-        opts_c.set_rotation(self.t * 0.5);
+        let opts_c = DrawOption::default()
+            .with_position([Pt::from(240.0), Pt::from(380.0)])
+            .with_scale([0.8, 0.8])
+            .with_rotation(self.t * 0.5);
 
         let globals_c = GrayscaleGlobals { k: 1.0, _pad: [0.0; 3] };
         self.tree2.draw_with_shader(
@@ -410,10 +410,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             spottedcat::ShaderOpts::from_pod(&globals_c),
         );
 
-        let mut opts_d = DrawOption::default();
-        opts_d.set_position([Pt::from(520.0), Pt::from(380.0)]);
-        opts_d.set_scale([0.8, 0.8]);
-        opts_d.set_rotation(0.0);
+        let opts_d = DrawOption::default()
+            .with_position([Pt::from(520.0), Pt::from(380.0)])
+            .with_scale([0.8, 0.8])
+            .with_rotation(0.0);
         let globals_d = RippleGlobals {
             t: self.t,
             amp: 0.02,
@@ -427,10 +427,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             spottedcat::ShaderOpts::from_pod(&globals_d),
         );
 
-        let mut opts_e = DrawOption::default();
-        opts_e.set_position([Pt::from(80.0), Pt::from(420.0)]);
-        opts_e.set_scale([0.8, 0.8]);
-        opts_e.set_rotation(0.0);
+        let opts_e = DrawOption::default()
+            .with_position([Pt::from(80.0), Pt::from(420.0)])
+            .with_scale([0.8, 0.8])
+            .with_rotation(0.0);
         let circle_bytes: &[u8] = bytemuck::cast_slice(&[
             0.33f32, // radius
             0.01f32, // thickness

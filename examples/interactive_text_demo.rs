@@ -38,15 +38,15 @@ fn main() {
         fn draw(&mut self, context: &mut Context) {
             // Draw red square if visible
             if self.square_visible {
-                let mut square_opts = DrawOption::default();
-                square_opts.set_position([Pt::from(300.0), Pt::from(200.0)]);
+                let square_opts = DrawOption::default()
+                    .with_position([Pt::from(300.0), Pt::from(200.0)]);
                 
                 // Draw the red square first
                 self.red_square.draw(context, square_opts);
                 
                 // Then draw green text clipped to the red square bounds
-                let mut text_opts = DrawOption::default();
-                text_opts.set_position([Pt::from(50.0), Pt::from(80.0)]); // Relative to square position
+                let text_opts = DrawOption::default()
+                    .with_position([Pt::from(50.0), Pt::from(80.0)]); // Relative to square position
                 
                 // Use draw_text to apply clipping
                 self.red_square.draw_text(context, square_opts, self.text.clone(), text_opts);

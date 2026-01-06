@@ -24,15 +24,15 @@ impl Spot for DrawChildScene {
 
     fn draw(&mut self, context: &mut Context) {
         // 1. Setup parent options
-        let mut parent_opts = DrawOption::default();
-        parent_opts.set_position([Pt::from(100.0), Pt::from(100.0)]);
+        let parent_opts = DrawOption::default()
+            .with_position([Pt::from(100.0), Pt::from(100.0)]);
         
         // 2. Draw parent
         self.parent_image.draw(context, parent_opts);
 
         // 3. Draw child using draw_image - it will automatically clip to parent
-        let mut child_opts = DrawOption::default();
-        child_opts.set_position([Pt::from(250.0), Pt::from(250.0)]); // Bottom-right corner of parent
+        let child_opts = DrawOption::default()
+            .with_position([Pt::from(250.0), Pt::from(250.0)]); // Bottom-right corner of parent
         
         // Automatically calculate clip based on parent's position and size
         self.parent_image.draw_image(

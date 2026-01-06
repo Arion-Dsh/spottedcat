@@ -18,8 +18,8 @@ fn main() {
         }
 
         fn draw(&mut self, context: &mut Context) {
-            let mut opts = DrawOption::default();
-            opts.set_position([Pt::from(100.0), Pt::from(100.0)]);
+            let opts = DrawOption::default()
+                .with_position([Pt::from(100.0), Pt::from(100.0)]);
             self.text.draw(context, opts);
         }
 

@@ -26,9 +26,9 @@ impl Spot for WasmDemo {
     }
 
     fn draw(&mut self, context: &mut Context) {
-        let mut opts = DrawOption::default();
-        opts.set_position([Pt::from(40.0), Pt::from(40.0)]);
-        opts.set_scale([5.0, 5.0]);
+        let opts = DrawOption::default()
+            .with_position([Pt::from(40.0), Pt::from(40.0)])
+            .with_scale([5.0, 5.0]);
         self.image.draw(context, opts);
     }
 

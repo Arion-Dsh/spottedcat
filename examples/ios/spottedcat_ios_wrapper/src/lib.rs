@@ -38,23 +38,23 @@ pub extern "C" fn spottedcat_ios_start() {
         }
 
         fn draw(&mut self, context: &mut Context) {
-            let mut grandpa_opts = DrawOption::default();
-            grandpa_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+            let grandpa_opts = DrawOption::default()
+                .with_position([Pt::from(50.0), Pt::from(50.0)]);
             self.grandpa.draw(context, grandpa_opts);
 
-            let mut father_opts = DrawOption::default();
-            father_opts.set_position([Pt::from(150.0), Pt::from(150.0)]);
+            let father_opts = DrawOption::default()
+                .with_position([Pt::from(150.0), Pt::from(150.0)]);
             let father_screen_opts =
                 self.grandpa
                     .draw_image(context, grandpa_opts, self.father, father_opts);
 
-            let mut son_opts = DrawOption::default();
-            son_opts.set_position([Pt::from(100.0), Pt::from(100.0)]);
+            let son_opts = DrawOption::default()
+                .with_position([Pt::from(100.0), Pt::from(100.0)]);
             self.father
                 .draw_image(context, father_screen_opts, self.son, son_opts);
 
-            let mut text_opts = DrawOption::default();
-            text_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+            let text_opts = DrawOption::default()
+                .with_position([Pt::from(50.0), Pt::from(50.0)]);
             self.father
                 .draw_text(context, father_screen_opts, self.text.clone(), text_opts);
         }

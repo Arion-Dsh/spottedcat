@@ -48,8 +48,8 @@ fn main() {
                 }
             }
             
-            let mut opts = DrawOption::default();
-            opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+            let opts = DrawOption::default()
+                .with_position([Pt::from(50.0), Pt::from(50.0)]);
             self.wrapped_text.draw(context, opts);
             
             self.frame_count += 1;

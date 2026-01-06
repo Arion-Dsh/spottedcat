@@ -110,8 +110,8 @@ impl Text {
     /// # let mut context = Context::new();
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
     /// let font_data = load_font_from_bytes(FONT);
-    /// let mut opts = DrawOption::default();
-    /// opts.set_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
+    /// let opts = DrawOption::default()
+    ///     .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
     /// Text::new("Hello, World!", font_data)
     ///     .with_font_size(spottedcat::Pt::from(32.0))
     ///     .draw(&mut context, opts);

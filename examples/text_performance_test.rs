@@ -31,8 +31,8 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             for (i, text) in self.texts.iter().enumerate() {
-                let mut opts = DrawOption::default();
-                opts.set_position([Pt::from(50.0), Pt::from(50.0 + i as f32 * 40.0)]);
+                let opts = DrawOption::default()
+                    .with_position([Pt::from(50.0), Pt::from(50.0 + i as f32 * 40.0)]);
                 text.draw(context, opts);
             }
         }

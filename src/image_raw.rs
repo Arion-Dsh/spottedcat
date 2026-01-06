@@ -104,6 +104,10 @@ var tex: texture_2d<f32>;
 @group(0) @binding(1)
 var samp: sampler;
 
+// 256 bytes = 16 * vec4<f32>. The last vec4's .w is reserved for DrawOption opacity.
+@group(1) @binding(0)
+var<uniform> globals: array<vec4<f32>, 16>;
+
 struct VsIn {
     @builtin(vertex_index) vertex_index: u32,
     @location(0) mvp_col0: vec2<f32>,
@@ -158,7 +162,8 @@ fn vs_main(in: VsIn) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, in.uv);
-    return c;
+    let opacity = clamp(globals[15].w, 0.0, 1.0);
+    return vec4<f32>(c.rgb, c.a * opacity);
 }
 "#
                 .into(),

@@ -41,8 +41,8 @@ impl Spot for InputExample {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_data = spottedcat::load_font_from_bytes(FONT);
 
-        let mut title_opts = DrawOption::default();
-        title_opts.set_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
+        let title_opts = DrawOption::default()
+            .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
         Text::new(
             "Input Example (Use WASD or Arrow keys)",
             font_data.clone(),
@@ -51,15 +51,15 @@ impl Spot for InputExample {
         .with_color([1.0, 1.0, 1.0, 1.0])
         .draw(context, title_opts);
 
-        let mut keys_opts = DrawOption::default();
-        keys_opts.set_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
+        let keys_opts = DrawOption::default()
+            .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
         Text::new(format!("Position: ({:.1}, {:.1})", self.x, self.y), font_data.clone())
             .with_font_size(spottedcat::Pt::from(20.0))
             .with_color([0.7, 0.9, 1.0, 1.0])
             .draw(context, keys_opts);
 
-        let mut mouse_opts = DrawOption::default();
-        mouse_opts.set_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(160.0)]);
+        let mouse_opts = DrawOption::default()
+            .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(160.0)]);
         Text::new(
             "Tip: hold keys for continuous movement; press ESC to reset.",
             font_data,

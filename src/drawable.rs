@@ -20,6 +20,7 @@ pub struct DrawOption {
     rotation: f32,
     /// Scale factors (x, y). Applied after size.
     scale: [f32; 2],
+    opacity: f32,
     /// Optional clipping rectangle [x, y, width, height] in screen pixels.
     clip: Option<[Pt; 4]>,
 }
@@ -30,6 +31,7 @@ impl Default for DrawOption {
             position: [Pt(0.0), Pt(0.0)],
             scale: [1.0, 1.0],
             rotation: 0.0,
+            opacity: 1.0,
             clip: None,
         }
     }
@@ -42,6 +44,7 @@ impl DrawOption {
             position,
             rotation,
             scale,
+            opacity: 1.0,
             clip: None,
         }
     }
@@ -50,7 +53,7 @@ impl DrawOption {
         self.position
     }
 
-    pub fn set_position(&mut self, position: [Pt; 2]) -> &mut Self {
+    pub fn with_position(mut self, position: [Pt; 2]) -> Self {
         self.position = position;
         self
     }
@@ -59,7 +62,7 @@ impl DrawOption {
         self.rotation
     }
 
-    pub fn set_rotation(&mut self, rotation: f32) -> &mut Self {
+    pub fn with_rotation(mut self, rotation: f32) -> Self {
         self.rotation = rotation;
         self
     }
@@ -68,12 +71,21 @@ impl DrawOption {
         self.scale
     }
 
-    pub fn set_scale(&mut self, scale: [f32; 2]) -> &mut Self {
+    pub fn with_scale(mut self, scale: [f32; 2]) -> Self {
         self.scale = scale;
         self
     }
 
-    pub fn set_clip(&mut self, clip: Option<[Pt; 4]>) -> &mut Self {
+    pub fn opacity(&self) -> f32 {
+        self.opacity
+    }
+
+    pub fn with_opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn with_clip(mut self, clip: Option<[Pt; 4]>) -> Self {
         self.clip = clip;
         self
     }

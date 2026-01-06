@@ -38,13 +38,13 @@ fn main() {
 
         fn draw(&mut self, context: &mut Context) {
             // Draw background box first
-            let mut bg_opts = DrawOption::default();
-            bg_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+            let bg_opts = DrawOption::default()
+                .with_position([Pt::from(50.0), Pt::from(50.0)]);
             self.background.draw(context, bg_opts);
 
             // Draw wrapped text on top of background
-            let mut text_opts = DrawOption::default();
-            text_opts.set_position([Pt::from(75.0), Pt::from(75.0)]);
+            let text_opts = DrawOption::default()
+                .with_position([Pt::from(75.0), Pt::from(75.0)]);
             self.wrapped_text.draw(context, text_opts);
         }
 

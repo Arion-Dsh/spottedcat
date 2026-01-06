@@ -586,6 +586,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let line_y = baseline_y + (line_index as f32 * line_height);
             let mut prev: Option<GlyphId> = None;
 
+            let opacity = opts.opacity();
+
             for ch in line_content.chars() {
                 let id = scaled.glyph_id(ch);
                 if let Some(p) = prev {
@@ -725,7 +727,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
                                 basis_y,
                                 uv_min,
                                 uv_max,
-                                color: text.stroke_color,
+                                color: {
+                                    let mut c = text.stroke_color;
+                                    c[3] *= opacity;
+                                    c
+                                },
                             });
                         }
                     }
@@ -737,7 +743,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
                     basis_y,
                     uv_min,
                     uv_max,
-                    color: text.color,
+                    color: {
+                        let mut c = text.color;
+                        c[3] *= opacity;
+                        c
+                    },
                 });
 
                 caret_x += scaled.h_advance(id);

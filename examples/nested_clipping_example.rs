@@ -29,13 +29,13 @@ impl Spot for NestedClippingScene {
 
     fn draw(&mut self, context: &mut Context) {
         // 1. Grandpa at (50, 50)
-        let mut grandpa_opts = DrawOption::default();
-        grandpa_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+        let grandpa_opts = DrawOption::default()
+            .with_position([Pt::from(50.0), Pt::from(50.0)]);
         self.grandpa.draw(context, grandpa_opts);
 
         // 2. Father relative to Grandpa at (150, 150)
-        let mut father_opts = DrawOption::default();
-        father_opts.set_position([Pt::from(150.0), Pt::from(150.0)]);
+        let father_opts = DrawOption::default()
+            .with_position([Pt::from(150.0), Pt::from(150.0)]);
         
         // draw_image returns the final DrawOption used for Father,
         // which includes absolute screen position and clipping.
@@ -47,8 +47,8 @@ impl Spot for NestedClippingScene {
         );
 
         // 3. Son relative to Father at (100, 100)
-        let mut son_opts = DrawOption::default();
-        son_opts.set_position([Pt::from(100.0), Pt::from(100.0)]);
+        let son_opts = DrawOption::default()
+            .with_position([Pt::from(100.0), Pt::from(100.0)]);
         
         // Use father_screen_opts as parent_options to draw Son
         self.father.draw_image(
@@ -60,8 +60,8 @@ impl Spot for NestedClippingScene {
 
         // 4. Text relative to Father at (50, 50)
         // This is inside Father and Grandpa.
-        let mut text_opts = DrawOption::default();
-        text_opts.set_position([Pt::from(50.0), Pt::from(50.0)]);
+        let text_opts = DrawOption::default()
+            .with_position([Pt::from(50.0), Pt::from(50.0)]);
         self.father.draw_text(context, father_screen_opts, self.text.clone(), text_opts);
     }
 
