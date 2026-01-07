@@ -450,6 +450,9 @@ impl Graphics {
             },
         );
 
+        // Generate mipmaps for the atlas texture
+        atlas.texture.generate_mipmaps(&self.device, &self.queue);
+
         let uv_param = atlas.packer.get_uv_param(&rect);
         let uv_rect = [uv_param[0], uv_param[1], uv_param[2], uv_param[3]];
         let bounds = Bounds::new(Pt(0.0), Pt(0.0), width, height);
@@ -1047,7 +1050,7 @@ impl Graphics {
                 s.min_total_ms = s.min_total_ms.min(total_ms);
                 s.max_total_ms = s.max_total_ms.max(total_ms);
 
-                if s.frame % 60 == 0 {
+                if s.frame % 30 == 0 {
                     let n = s.frame as f64;
                     eprintln!(
                         "[spot][render][avg@{}] total={:.3}ms work={:.3} wait={:.3} min={:.3} max={:.3}",
