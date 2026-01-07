@@ -9,6 +9,7 @@ description = "Rusty SpottedCat simple game engine"
 readme = "README.md"
 exclude = [
     "examples/**",
+    "assets/**",
 ]
 
 [[example]]
