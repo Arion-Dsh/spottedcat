@@ -11,6 +11,72 @@ exclude = [
     "examples/**",
 ]
 
+[[example]]
+name = "auto_clip_demo"
+path = "examples/auto_clip_demo.rs"
+publish = false
+
+[[example]]
+name = "clipping_example"
+path = "examples/clipping_example.rs"
+publish = false
+
+[[example]]
+name = "custom_shader_example"
+path = "examples/custom_shader_example.rs"
+publish = false
+
+[[example]]
+name = "debug_clipping_bounds"
+path = "examples/debug_clipping_bounds.rs"
+publish = false
+
+[[example]]
+name = "debug_clipping_text"
+path = "examples/debug_clipping_text.rs"
+publish = false
+
+[[example]]
+name = "debug_obvious_wrap"
+path = "examples/debug_obvious_wrap.rs"
+publish = false
+
+[[example]]
+name = "debug_render_wrap"
+path = "examples/debug_render_wrap.rs"
+publish = false
+
+[[example]]
+name = "debug_text_height"
+path = "examples/debug_text_height.rs"
+publish = false
+
+[[example]]
+name = "debug_wrapping"
+path = "examples/debug_wrapping.rs"
+publish = false
+
+[[example]]
+name = "demo"
+path = "examples/demo.rs"
+publish = false
+
+[[example]]
+name = "draw_child_example"
+path = "examples/draw_child_example.rs"
+publish = false
+
+[[example]]
+name = "extreme_wrap_test"
+path = "examples/extreme_wrap_test.rs"
+publish = false
+
+[[example]]
+name = "input_example"
+path = "examples/input_example.rs"
+publish = false
+
+
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
 

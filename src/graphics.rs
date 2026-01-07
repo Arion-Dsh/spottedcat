@@ -792,7 +792,7 @@ impl Graphics {
             let shader_id = resolved.shader_id;
             let shader_opts = resolved.shader_opts;
 
-            let mut effective_user_globals = shader_opts;
+            let effective_user_globals = shader_opts;
             let draw_opacity = opts.opacity();
 
             let state_changed = current_atlas_index != Some(img_entry.atlas_index)
