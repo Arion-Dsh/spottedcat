@@ -274,7 +274,7 @@ impl Context {
         self.draw_list.push(drawable);
     }
 
-    pub(crate) fn current_draw_state(&self) -> DrawState {
+    fn current_draw_state(&self) -> DrawState {
         self.current_state
     }
 
@@ -282,7 +282,7 @@ impl Context {
         self.last_image_opts.get(&image_id).copied()
     }
 
-    pub(crate) fn push_state(&mut self, state: DrawState) {
+    fn push_state(&mut self, state: DrawState) {
         self.state_stack.push(self.current_state);
         
         // Accumulate position correctly: 
@@ -310,7 +310,7 @@ impl Context {
         }
     }
 
-    pub(crate) fn pop_state(&mut self) {
+    fn pop_state(&mut self) {
         if let Some(prev_state) = self.state_stack.pop() {
             self.current_state = prev_state;
         }

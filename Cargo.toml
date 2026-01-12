@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -32,116 +32,20 @@ web-sys = { version = "0.3", features = ["console", "Document", "Element", "Html
 
 
 [[example]]
-name = "auto_clip_demo"
-path = "examples/auto_clip_demo.rs"
-
-[[example]]
-name = "clipping_example"
-path = "examples/clipping_example.rs"
-
-[[example]]
-name = "custom_shader_example"
-path = "examples/custom_shader_example.rs"
-
-[[example]]
-name = "debug_clipping_bounds"
-path = "examples/debug_clipping_bounds.rs"
-
-[[example]]
-name = "debug_clipping_text"
-path = "examples/debug_clipping_text.rs"
-
-[[example]]
-name = "debug_obvious_wrap"
-path = "examples/debug_obvious_wrap.rs"
-
-[[example]]
-name = "debug_render_wrap"
-path = "examples/debug_render_wrap.rs"
-
-[[example]]
-name = "debug_text_height"
-path = "examples/debug_text_height.rs"
-
-[[example]]
-name = "debug_wrapping"
-path = "examples/debug_wrapping.rs"
-
-[[example]]
-name = "demo"
-path = "examples/demo.rs"
-
-[[example]]
-name = "draw_child_example"
-path = "examples/draw_child_example.rs"
-
-[[example]]
-name = "extreme_wrap_test"
-path = "examples/extreme_wrap_test.rs"
-
-[[example]]
 name = "input_example"
 path = "examples/input_example.rs"
 
 [[example]]
-name = "interactive_text_demo"
-path = "examples/interactive_text_demo.rs"
+name = "centered_text_test"
+path = "examples/centered_text_test.rs"
 
 [[example]]
-name = "mouse_click_example"
-path = "examples/mouse_click_example.rs"
-
-[[example]]
-name = "nested_clipping_example"
-path = "examples/nested_clipping_example.rs"
-
-[[example]]
-name = "obvious_wrap_test"
-path = "examples/obvious_wrap_test.rs"
-
-[[example]]
-name = "simple_text_render"
-path = "examples/simple_text_render.rs"
-
-[[example]]
-name = "simple_text_test"
-path = "examples/simple_text_test.rs"
-
-[[example]]
-name = "simple_wrap_test"
-path = "examples/simple_wrap_test.rs"
-
-[[example]]
-name = "stress_test_clipping"
-path = "examples/stress_test_clipping.rs"
-
-[[example]]
-name = "subimage_example"
-path = "examples/subimage_example.rs"
-
-[[example]]
-name = "text_example"
-path = "examples/text_example.rs"
-
-[[example]]
-name = "text_input_example"
-path = "examples/text_input_example.rs"
+name = "seven_level_test"
+path = "examples/seven_level_test.rs"
 
 [[example]]
 name = "text_performance_test"
 path = "examples/text_performance_test.rs"
-
-[[example]]
-name = "text_test"
-path = "examples/text_test.rs"
-
-[[example]]
-name = "text_wrapping_demo"
-path = "examples/text_wrapping_demo.rs"
-
-[[example]]
-name = "visual_wrap_test"
-path = "examples/visual_wrap_test.rs"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]

@@ -195,23 +195,29 @@ impl Image {
     ) where
         F: FnOnce(&mut crate::Context),
     {
-        let (parent_opts_abs, parent_origin_abs) = if let Some(info) = context.last_image_draw_info(self.id)
-        {
-            (info.opts, info.origin)
+        // First, draw the parent image to establish the clip region
+        self.draw(context, options);
+        
+        // Then set up the clipping state for child elements
+        let parent_opts_abs = if let Some(info) = context.last_image_draw_info(self.id) {
+            info.opts
         } else {
             let state = context.current_draw_state();
-            (options.apply_state(&state), state.position)
+            options.apply_state(&state)
         };
 
         let parent_pos_abs = parent_opts_abs.position();
-        let parent_pos_local = [
-            parent_pos_abs[0] - parent_origin_abs[0],
-            parent_pos_abs[1] - parent_origin_abs[1],
-        ];
         let parent_bounds = self.screen_bounds(parent_opts_abs);
+        
+        // Get the current origin to calculate relative position
+        let current_origin = context.current_draw_state().position;
+        let parent_pos_relative = [
+            parent_pos_abs[0] - current_origin[0],
+            parent_pos_abs[1] - current_origin[1],
+        ];
 
         let state = crate::DrawState {
-            position: parent_pos_local,
+            position: parent_pos_relative,
             clip: Some([
                 parent_bounds[0],
                 parent_bounds[1],

@@ -42,6 +42,11 @@ impl Pt {
         self.0
     }
 
+    pub fn as_i32(self) -> i32 {
+        let v = if self.0.is_finite() { self.0 } else { 0.0 };
+        v.round() as i32
+    }
+
     pub(crate) fn to_u32_clamped(self) -> u32 {
         let v = if self.0.is_finite() { self.0 } else { 0.0 };
         if v <= 0.0 {
