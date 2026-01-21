@@ -21,6 +21,12 @@ impl Bounds {
     pub fn height(&self) -> Pt {
         self.height
     }
+    pub fn x(&self) -> Pt {
+        self.x
+    }
+    pub fn y(&self) -> Pt {
+        self.y
+    }
 }
 
 impl Bounds {
@@ -46,6 +52,18 @@ pub struct Image {
     pub(crate) y: Pt,
     pub(crate) width: Pt,
     pub(crate) height: Pt,
+}
+
+impl Image {
+    pub fn width(&self) -> Pt {
+        self.width
+    }
+    pub fn height(&self) -> Pt {
+        self.height
+    }
+    pub fn id(&self) -> u32 {
+        self.id
+    }
 }
 
 impl Image {

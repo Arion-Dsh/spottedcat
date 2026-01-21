@@ -34,22 +34,22 @@
 //! // switch_scene::<NewScene>();  // Switches to NewScene
 //! ```
 
-mod graphics;
-mod window;
-mod image_raw;
-mod image;
-mod texture;
 mod drawable;
 mod font;
-mod text;
-mod text_renderer;
+mod graphics;
+mod image;
+mod image_raw;
 mod input;
 mod key;
 mod mouse;
-mod pt;
 mod packer;
-mod shader_opts;
 mod platform;
+mod pt;
+mod shader_opts;
+mod text;
+mod text_renderer;
+mod texture;
+mod window;
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -63,16 +63,16 @@ use winit::event_loop::EventLoop;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use console_error_panic_hook;
 
-pub use image::{Bounds, Image};
-pub use drawable::DrawOption;
 use drawable::DrawCommand;
-pub use font::{load_font_from_file, load_font_from_bytes};
-pub use text::Text;
+pub use drawable::DrawOption;
+pub use font::{load_font_from_bytes, load_font_from_file};
+pub use image::{Bounds, Image};
 pub use input::InputManager;
 pub use key::Key;
 pub use mouse::MouseButton;
 pub use pt::Pt;
 pub use shader_opts::ShaderOpts;
+pub use text::Text;
 
 #[derive(Debug, Clone)]
 pub struct WindowConfig {
@@ -176,7 +176,6 @@ impl Context {
     pub fn window_logical_size(&self) -> (Pt, Pt) {
         self.window_logical_size
     }
-
 
     pub fn vw(&self, percent: f32) -> Pt {
         let (w, _) = self.window_logical_size;
@@ -284,22 +283,24 @@ impl Context {
 
     fn push_state(&mut self, state: DrawState) {
         self.state_stack.push(self.current_state);
-        
-        // Accumulate position correctly: 
+
+        // Accumulate position correctly:
         // state.position passed from draw_image is the LOCAL relative position of the parent.
         // We add it to the current absolute position to get the new origin for children.
         self.current_state.position[0] += state.position[0];
         self.current_state.position[1] += state.position[1];
-        
+
         // Merge clip: clip in state is already absolute screen-space bounds
         if let Some(new_clip_abs) = state.clip {
             let merged_clip = if let Some(old_clip_abs) = self.current_state.clip {
                 // Intersect absolute clips
                 let x = old_clip_abs[0].as_f32().max(new_clip_abs[0].as_f32());
                 let y = old_clip_abs[1].as_f32().max(new_clip_abs[1].as_f32());
-                let right = (old_clip_abs[0].as_f32() + old_clip_abs[2].as_f32()).min(new_clip_abs[0].as_f32() + new_clip_abs[2].as_f32());
-                let bottom = (old_clip_abs[1].as_f32() + old_clip_abs[3].as_f32()).min(new_clip_abs[1].as_f32() + new_clip_abs[3].as_f32());
-                
+                let right = (old_clip_abs[0].as_f32() + old_clip_abs[2].as_f32())
+                    .min(new_clip_abs[0].as_f32() + new_clip_abs[2].as_f32());
+                let bottom = (old_clip_abs[1].as_f32() + old_clip_abs[3].as_f32())
+                    .min(new_clip_abs[1].as_f32() + new_clip_abs[3].as_f32());
+
                 let w = (right - x).max(0.0);
                 let h = (bottom - y).max(0.0);
                 Some([Pt::from(x), Pt::from(y), Pt::from(w), Pt::from(h)])
@@ -455,7 +456,10 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
 }
 
 #[cfg(target_os = "android")]
-pub fn run<T: Spot + 'static>(window: WindowConfig, app: winit::platform::android::activity::AndroidApp) {
+pub fn run<T: Spot + 'static>(
+    window: WindowConfig,
+    app: winit::platform::android::activity::AndroidApp,
+) {
     use winit::platform::android::EventLoopBuilderExtAndroid;
 
     init_scene_switch();
@@ -526,13 +530,13 @@ pub trait Spot {
     /// # Arguments
     /// * `context` - Drawing context to add render commands to
     fn draw(&mut self, context: &mut Context);
-    
+
     fn update(&mut self, context: &mut Context, dt: Duration);
-    
+
     fn resumed(&mut self, _context: &mut Context) {}
 
     fn suspended(&mut self, _context: &mut Context) {}
-    
+
     /// Cleanup when the application is shutting down.
     fn remove(&self);
 }
