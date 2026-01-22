@@ -56,6 +56,10 @@ impl DrawOption {
         self
     }
 
+    pub fn set_position(&mut self, x: Pt, y: Pt) {
+        self.position = [x, y];
+    }
+
     pub fn rotation(&self) -> f32 {
         self.rotation
     }

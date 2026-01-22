@@ -1,18 +1,18 @@
-use crate::{Context, DrawCommand, DrawOption};
+use crate::ShaderOpts;
+use crate::Text;
+use crate::glyph_cache::{GlyphCache, GlyphCacheKey, GlyphEntry};
 use crate::image::{Bounds, Image, ImageEntry};
 use crate::image_raw::{ImageRenderer, InstanceData};
 use crate::packer::AtlasPacker;
 use crate::platform;
-use crate::texture::Texture;
-use crate::text_renderer::TextRenderer;
 use crate::pt::Pt;
-use crate::ShaderOpts;
-use crate::Text;
+use crate::texture::Texture;
+use crate::{Context, DrawCommand, DrawOption};
+use ab_glyph::FontArc;
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
-use std::sync::Mutex;
-use ab_glyph::FontArc;
 
 static PROFILE_RENDER: OnceLock<bool> = OnceLock::new();
 
@@ -88,12 +88,14 @@ pub struct Graphics {
     image_pipelines: HashMap<u32, wgpu::RenderPipeline>,
     next_image_shader_id: u32,
     images: Vec<Option<ImageEntry>>,
-    text_renderer: TextRenderer,
     atlases: Vec<AtlasSlot>,
     batch: Vec<InstanceData>,
     font_cache: HashMap<u64, FontArc>,
+    font_registry: HashMap<u32, Vec<u8>>,
+    next_font_id: u32,
+    glyph_cache: GlyphCache, // Cache for individual glyphs
     resolved_draws: Vec<ResolvedDraw>,
-    text_image_cache: HashMap<TextImageKey, ImageEntry>,
+    text_shader_id: u32,
 }
 
 #[derive(Clone, Copy)]
@@ -102,15 +104,6 @@ struct ResolvedDraw {
     opts: DrawOption,
     shader_id: u32,
     shader_opts: ShaderOpts,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct TextImageKey {
-    content: String,
-    font_hash: u64,
-    font_size_bits: u32,
-    color_bits: [u32; 4],
-    max_width_bits: Option<u32>,
 }
 
 impl Graphics {
@@ -131,16 +124,14 @@ impl Graphics {
         let adapter_limits = adapter.limits();
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::empty(),
-                    required_limits: adapter_limits,
-                    experimental_features: wgpu::ExperimentalFeatures::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: wgpu::Trace::Off,
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: adapter_limits,
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
@@ -153,7 +144,7 @@ impl Graphics {
 
         let usage = platform::surface_usage(&surface_caps);
         let present_mode = pick_present_mode(&surface_caps);
-        
+
         let config = wgpu::SurfaceConfiguration {
             usage,
             format: surface_format,
@@ -169,7 +160,6 @@ impl Graphics {
         let image_renderer = ImageRenderer::new(&device, config.format, 200000);
         let image_pipelines = HashMap::new();
         let next_image_shader_id = 1;
-        let text_renderer = TextRenderer::new(&device, config.format);
 
         let atlas_size = 4096;
         let packer = AtlasPacker::new(atlas_size, atlas_size, 2);
@@ -190,9 +180,9 @@ impl Graphics {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("image_pipeline_layout"),
             bind_group_layouts: &[
-                &image_renderer.texture_bind_group_layout, 
-                &image_renderer.user_globals_bind_group_layout, 
-                &image_renderer.engine_globals_bind_group_layout
+                &image_renderer.texture_bind_group_layout,
+                &image_renderer.user_globals_bind_group_layout,
+                &image_renderer.engine_globals_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -231,7 +221,7 @@ impl Graphics {
             cache: None,
         });
 
-        Ok(Self {
+        let mut graphics = Self {
             device,
             queue,
             config,
@@ -240,13 +230,26 @@ impl Graphics {
             image_pipelines,
             next_image_shader_id,
             images: Vec::new(),
-            text_renderer,
             atlases,
             batch: Vec::with_capacity(10000),
             font_cache: HashMap::new(),
+            font_registry: HashMap::new(),
+            next_font_id: 1,
+            glyph_cache: GlyphCache::new(),
             resolved_draws: Vec::with_capacity(10000),
-            text_image_cache: HashMap::new(),
-        })
+            text_shader_id: 0,
+        };
+
+        // Register default text shader for tinting
+        let text_shader_src = r#"
+            fn user_fs_hook() {
+                let tint = user_globals[0];
+                color = vec4<f32>(tint.rgb, tint.a * color.a);
+            }
+        "#;
+        graphics.text_shader_id = graphics.register_image_shader(text_shader_src);
+
+        Ok(graphics)
     }
 
     pub(crate) fn register_image_shader(&mut self, user_functions: &str) -> u32 {
@@ -260,7 +263,10 @@ impl Graphics {
         let mut combined_shader = base_template.to_string();
 
         if let Some(vs_start) = user_functions.find("fn user_vs_hook") {
-            let vs_body_start = user_functions[vs_start..].find('{').map(|i| vs_start + i + 1).unwrap_or(vs_start);
+            let vs_body_start = user_functions[vs_start..]
+                .find('{')
+                .map(|i| vs_start + i + 1)
+                .unwrap_or(vs_start);
             let vs_end = user_functions[vs_body_start..]
                 .find("fn user_fs_hook")
                 .map(|rel| vs_body_start + rel)
@@ -277,7 +283,10 @@ impl Graphics {
         }
 
         if let Some(fs_start) = user_functions.find("fn user_fs_hook") {
-            let fs_body_start = user_functions[fs_start..].find('{').map(|i| fs_start + i + 1).unwrap_or(fs_start);
+            let fs_body_start = user_functions[fs_start..]
+                .find('{')
+                .map(|i| fs_start + i + 1)
+                .unwrap_or(fs_start);
             let fs_end = user_functions.len();
             let fs_body_end = user_functions[..fs_end].rfind('}').unwrap_or(fs_end);
             let fs_src = user_functions[fs_body_start..fs_body_end].trim();
@@ -295,25 +304,36 @@ impl Graphics {
             let fs_marker = "// USER_FS_HOOK";
 
             let vs_block = if let Some(pos) = combined_shader.find(vs_marker) {
-                let end = combined_shader[pos..].find("return").map(|i| pos + i).unwrap_or(combined_shader.len());
+                let end = combined_shader[pos..]
+                    .find("return")
+                    .map(|i| pos + i)
+                    .unwrap_or(combined_shader.len());
                 &combined_shader[pos..end]
             } else {
                 "<missing vs hook marker>"
             };
             let fs_block = if let Some(pos) = combined_shader.find(fs_marker) {
-                let end = combined_shader[pos..].find("return").map(|i| pos + i).unwrap_or(combined_shader.len());
+                let end = combined_shader[pos..]
+                    .find("return")
+                    .map(|i| pos + i)
+                    .unwrap_or(combined_shader.len());
                 &combined_shader[pos..end]
             } else {
                 "<missing fs hook marker>"
             };
 
-            eprintln!("[spot][debug][shader] register_image_shader id={}\n{}\n{}", shader_id, vs_block, fs_block);
+            eprintln!(
+                "[spot][debug][shader] register_image_shader id={}\n{}\n{}",
+                shader_id, vs_block, fs_block
+            );
         }
 
-        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("custom_image_shader"),
-            source: wgpu::ShaderSource::Wgsl(combined_shader.into()),
-        });
+        let shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("custom_image_shader"),
+                source: wgpu::ShaderSource::Wgsl(combined_shader.into()),
+            });
 
         let pipeline_layout = self
             .device
@@ -327,45 +347,137 @@ impl Graphics {
                 push_constant_ranges: &[],
             });
 
-        let _pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("custom_image_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[InstanceData::layout()],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: self.config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-            cache: None,
-        });
+        let _pipeline = self
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("custom_image_pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[InstanceData::layout()],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview: None,
+                cache: None,
+            });
 
         self.image_pipelines.insert(shader_id, _pipeline);
         shader_id
     }
 
-    fn ensure_atlas_for_image(&mut self, w: u32, h: u32) -> anyhow::Result<(u32, crate::packer::PackerRect)> {
+    pub(crate) fn register_font(&mut self, font_data: Vec<u8>) -> u32 {
+        let font_id = self.next_font_id;
+        self.next_font_id = self.next_font_id.saturating_add(1);
+        self.font_registry.insert(font_id, font_data);
+        font_id
+    }
+
+    pub(crate) fn get_font(&self, font_id: u32) -> Option<&Vec<u8>> {
+        self.font_registry.get(&font_id)
+    }
+
+    /// Render a single glyph to the atlas and cache it
+    fn render_single_glyph(
+        &mut self,
+        font_id: u32,
+        font_size: f32,
+        glyph_id: u32,
+    ) -> anyhow::Result<GlyphEntry> {
+        use ab_glyph::{Font as _, FontArc, Glyph, PxScale, ScaleFont as _};
+
+        let font_data = self
+            .get_font(font_id)
+            .ok_or_else(|| anyhow::anyhow!("Font ID {} not found", font_id))?;
+
+        let font = if let Some(cached_font) = self.get_cached_font(font_id as u64) {
+            cached_font
+        } else {
+            let font = FontArc::try_from_vec(font_data.clone())
+                .map_err(|e| anyhow::anyhow!("Failed to parse font: {:?}", e))?;
+            self.cache_font(font_id as u64, font.clone());
+            font
+        };
+
+        let px_size = font_size.max(1.0);
+        let scale = PxScale::from(px_size);
+        let scaled = font.as_scaled(scale);
+
+        let glyph = Glyph {
+            id: ab_glyph::GlyphId(glyph_id as u16),
+            scale,
+            position: ab_glyph::point(0.0, 0.0),
+        };
+
+        let h_advance = scaled.h_advance(glyph.id);
+
+        let outlined = scaled
+            .outline_glyph(glyph)
+            .ok_or_else(|| anyhow::anyhow!("Cannot outline glyph"))?;
+
+        let bounds = outlined.px_bounds();
+        let glyph_width = (bounds.max.x - bounds.min.x).ceil().max(1.0) as u32;
+        let glyph_height = (bounds.max.y - bounds.min.y).ceil().max(1.0) as u32;
+
+        let mut rgba_data = vec![0u8; (glyph_width * glyph_height * 4) as usize];
+
+        outlined.draw(|x, y, v| {
+            if x < glyph_width && y < glyph_height {
+                let idx = ((y * glyph_width + x) * 4) as usize;
+                let alpha = (v * 255.0).round().clamp(0.0, 255.0) as u8;
+                rgba_data[idx] = 255;
+                rgba_data[idx + 1] = 255;
+                rgba_data[idx + 2] = 255;
+                rgba_data[idx + 3] = alpha;
+            }
+        });
+
+        let image = self.create_image(
+            Pt::from(glyph_width as f32),
+            Pt::from(glyph_height as f32),
+            &rgba_data,
+        )?;
+
+        let image_entry = self
+            .images
+            .get(image.index())
+            .and_then(|e| e.as_ref())
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get created glyph image"))?;
+
+        Ok(GlyphEntry {
+            image: image_entry,
+            offset: [bounds.min.x, bounds.min.y],
+            advance: h_advance,
+        })
+    }
+
+    fn ensure_atlas_for_image(
+        &mut self,
+        w: u32,
+        h: u32,
+    ) -> anyhow::Result<(u32, crate::packer::PackerRect)> {
         let Some(last) = self.atlases.last_mut() else {
             return Err(anyhow::anyhow!("no atlas"));
         };
@@ -377,7 +489,8 @@ impl Graphics {
 
         let atlas_size = 4096;
         let packer = AtlasPacker::new(atlas_size, atlas_size, 2);
-        let texture = Texture::create_empty(&self.device, atlas_size, atlas_size, self.config.format);
+        let texture =
+            Texture::create_empty(&self.device, atlas_size, atlas_size, self.config.format);
         let bind_group = self
             .image_renderer
             .create_texture_bind_group(&self.device, &texture.0.view);
@@ -404,15 +517,17 @@ impl Graphics {
         surface.configure(&self.device, &self.config);
     }
 
-    pub(crate) fn create_image(&mut self, width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Image> {
+    pub(crate) fn create_image(
+        &mut self,
+        width: Pt,
+        height: Pt,
+        rgba: &[u8],
+    ) -> anyhow::Result<Image> {
         let w = width.to_u32_clamped();
         let h = height.to_u32_clamped();
 
         let (atlas_index, rect) = self.ensure_atlas_for_image(w, h)?;
-        let atlas = self
-            .atlases
-            .get(atlas_index as usize)
-            .expect("atlas");
+        let atlas = self.atlases.get(atlas_index as usize).expect("atlas");
 
         let mut extruded_data = atlas.packer.extrude_rgba8(rgba, w, h);
 
@@ -459,30 +574,36 @@ impl Graphics {
         let entry = ImageEntry::new(atlas_index, bounds, uv_rect);
         Ok(self.insert_image_entry(entry))
     }
-    
-    pub(crate) fn create_sub_image(&mut self, image: Image, bounds: Bounds) -> anyhow::Result<Image> {
-        let parent_entry = self.images.get(image.index())
+
+    pub(crate) fn create_sub_image(
+        &mut self,
+        image: Image,
+        bounds: Bounds,
+    ) -> anyhow::Result<Image> {
+        let parent_entry = self
+            .images
+            .get(image.index())
             .and_then(|v| v.as_ref())
             .ok_or_else(|| anyhow::anyhow!("Invalid parent image"))?;
-            
+
         let p_u0 = parent_entry.uv_rect[0];
         let p_v0 = parent_entry.uv_rect[1];
         let p_w = parent_entry.uv_rect[2];
         let p_h = parent_entry.uv_rect[3];
-        
+
         let parent_w = parent_entry.bounds.width.as_f32();
         let parent_h = parent_entry.bounds.height.as_f32();
-        
+
         let nx = bounds.x.as_f32() / parent_w;
         let ny = bounds.y.as_f32() / parent_h;
         let nw = bounds.width.as_f32() / parent_w;
         let nh = bounds.height.as_f32() / parent_h;
-        
+
         let g_u0 = p_u0 + nx * p_w;
         let g_v0 = p_v0 + ny * p_h;
         let g_w = nw * p_w;
         let g_h = nh * p_h;
-        
+
         let uv_rect = [g_u0, g_v0, g_w, g_h];
         let entry = ImageEntry::new(parent_entry.atlas_index, bounds, uv_rect);
         Ok(self.insert_image_entry(entry))
@@ -513,141 +634,117 @@ impl Graphics {
             .ok_or_else(|| anyhow::anyhow!("invalid image"))
     }
 
-    pub(crate) fn render_text_to_image(&mut self, text: &Text, _opts: &DrawOption) -> anyhow::Result<Option<ImageEntry>> {
-        use ab_glyph::{Font as _, Glyph, PxScale, ScaleFont as _};
-        
-        let font_hash = text.font_hash;
-        let font = if let Some(cached_font) = self.get_cached_font(font_hash) {
+    pub(crate) fn layout_and_queue_text(
+        &mut self,
+        text: &Text,
+        opts: &DrawOption,
+        viewport_rect: [f32; 4],
+    ) -> anyhow::Result<()> {
+        use ab_glyph::{Font as _, PxScale, ScaleFont as _};
+
+        let font_id = text.font_id;
+        let font_data = self
+            .get_font(font_id)
+            .ok_or_else(|| anyhow::anyhow!("Font ID {} not found", font_id))?;
+
+        let font = if let Some(cached_font) = self.get_cached_font(font_id as u64) {
             cached_font
         } else {
-            let font = FontArc::try_from_vec(text.font_data.clone())
+            let font = FontArc::try_from_vec(font_data.clone())
                 .map_err(|e| anyhow::anyhow!("Failed to parse font: {}", e))?;
-            self.cache_font(font_hash, font.clone());
+            self.cache_font(font_id as u64, font.clone());
             font
         };
 
         let px_size = text.font_size.as_f32().max(1.0);
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
-        
-        if text.max_width.is_some() {
-            return self.render_text_to_image_with_wrapping(text, &font, &scaled);
-        }
-        
-        let mut caret_x = 0.0f32;
-        let mut max_width = 0.0f32;
-        let mut min_y = scaled.ascent();
-        let mut max_y = scaled.descent();
-        
-        for ch in text.content.chars() {
-            let id = scaled.glyph_id(ch);
-            caret_x += scaled.h_advance(id);
-            max_width = max_width.max(caret_x);
-            
-            if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
-                let bounds = glyph.px_bounds();
-                min_y = min_y.min(bounds.min.y);
-                max_y = max_y.max(bounds.max.y);
-            }
-        }
-        
-        let text_width = max_width.ceil().max(1.0) as u32;
-        let text_height = (max_y - min_y).ceil().max(1.0) as u32;
-        let mut rgba_data = vec![0u8; (text_width * text_height * 4) as usize];
-        
-        caret_x = 0.0f32;
-        let baseline_y = 0.0f32;
-        
-        for ch in text.content.chars() {
-            let id = scaled.glyph_id(ch);
-            if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale, position: ab_glyph::point(0.0, 0.0) }) {
-                let bounds = glyph.px_bounds();
-                let glyph_x = caret_x + bounds.min.x;
-                let glyph_y = baseline_y + (bounds.min.y - min_y);
-                
-                glyph.draw(|x, y, v| {
-                    let px = x as i32 + glyph_x as i32;
-                    let py = y as i32 + glyph_y as i32;
-                    if px >= 0 && py >= 0 && px < text_width as i32 && py < text_height as i32 {
-                        let idx = ((py as u32 * text_width + px as u32) * 4) as usize;
-                        let alpha = (v * 255.0).round().clamp(0.0, 255.0) as u8;
-                        rgba_data[idx] = (text.color[2] * 255.0) as u8;
-                        rgba_data[idx + 1] = (text.color[1] * 255.0) as u8;
-                        rgba_data[idx + 2] = (text.color[0] * 255.0) as u8;
-                        rgba_data[idx + 3] = alpha;
-                    }
-                });
-            }
-            caret_x += scaled.h_advance(id);
-        }
-        
-        let image = self.create_image(Pt::from(text_width as f32), Pt::from(text_height as f32), &rgba_data)?;
-        Ok(self.images.get(image.index()).and_then(|e| e.as_ref()).copied())
-    }
 
-    fn render_text_to_image_with_wrapping(&mut self, text: &Text, _font: &FontArc, scaled: &ab_glyph::PxScaleFont<&FontArc>) -> anyhow::Result<Option<ImageEntry>> {
-        use ab_glyph::{Glyph, ScaleFont as _};
-        
-        let lines = text.get_wrapped_lines(&scaled);
-        let line_height = scaled.ascent() - scaled.descent();
-        let mut max_width = 0.0f32;
-        let mut min_y = f32::MAX;
-        let mut max_y = f32::MIN;
-        
-        for line in &lines {
-            let mut line_width = 0.0f32;
+        let lines = if text.max_width.is_some() {
+            text.get_wrapped_lines(&scaled)
+                .into_iter()
+                .map(|s| std::borrow::Cow::Owned(s))
+                .collect()
+        } else {
+            vec![std::borrow::Cow::Borrowed(text.content.as_str())]
+        };
+
+        let start_pos = opts.position();
+        let mut caret_pos = start_pos;
+        let ascent = scaled.ascent();
+        let descent = scaled.descent();
+        let line_height = ascent - descent + scaled.line_gap();
+
+        let image_scale = opts.scale();
+        let sx = image_scale[0];
+        let sy = image_scale[1];
+
+        for line in lines {
             let mut prev: Option<ab_glyph::GlyphId> = None;
             for ch in line.chars() {
-                let id = scaled.glyph_id(ch);
-                if let Some(p) = prev { line_width += scaled.kern(p, id); }
-                line_width += scaled.h_advance(id);
-                prev = Some(id);
-                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale: scaled.scale(), position: ab_glyph::point(0.0, 0.0) }) {
-                    let bounds = glyph.px_bounds();
-                    min_y = min_y.min(bounds.min.y);
-                    max_y = max_y.max(bounds.max.y);
+                let glyph_id = scaled.glyph_id(ch);
+
+                if let Some(p) = prev {
+                    caret_pos[0] += Pt::from(scaled.kern(p, glyph_id));
                 }
-            }
-            max_width = max_width.max(line_width);
-        }
-        
-        if min_y == f32::MAX { min_y = scaled.descent(); }
-        let text_height = (lines.len() as f32 * line_height).ceil().max(1.0) as u32;
-        let text_width = max_width.ceil().max(1.0) as u32;
-        let mut rgba_data = vec![0u8; (text_width * text_height * 4) as usize];
-        let baseline_y = scaled.ascent();
-        
-        for (line_index, line) in lines.iter().enumerate() {
-            let mut caret_x = 0.0f32;
-            let line_y = baseline_y + (line_index as f32 * line_height);
-            let mut prev: Option<ab_glyph::GlyphId> = None;
-            for ch in line.chars() {
-                let id = scaled.glyph_id(ch);
-                if let Some(p) = prev { caret_x += scaled.kern(p, id); }
-                if let Some(glyph) = scaled.outline_glyph(Glyph { id, scale: scaled.scale(), position: ab_glyph::point(0.0, 0.0) }) {
-                    let bounds = glyph.px_bounds();
-                    let glyph_x = caret_x + bounds.min.x;
-                    let glyph_y = line_y + (bounds.min.y - min_y);
-                    glyph.draw(|x, y, v| {
-                        let px = x as i32 + glyph_x as i32;
-                        let py = y as i32 + glyph_y as i32;
-                        if px >= 0 && py >= 0 && px < text_width as i32 && py < text_height as i32 {
-                            let idx = ((py as u32 * text_width + px as u32) * 4) as usize;
-                            let alpha = (v * 255.0).round().clamp(0.0, 255.0) as u8;
-                            rgba_data[idx] = (text.color[2] * 255.0) as u8;
-                            rgba_data[idx + 1] = (text.color[1] * 255.0) as u8;
-                            rgba_data[idx + 2] = (text.color[0] * 255.0) as u8;
-                            rgba_data[idx + 3] = alpha;
-                        }
+                prev = Some(glyph_id);
+
+                let cache_key = GlyphCacheKey {
+                    font_id,
+                    font_size_bits: px_size.to_bits(),
+                    glyph_id: glyph_id.0 as u32,
+                };
+
+                let entry = if let Some(e) = self.glyph_cache.get(&cache_key) {
+                    *e
+                } else {
+                    if let Ok(e) = self.render_single_glyph(font_id, px_size, glyph_id.0 as u32) {
+                        self.glyph_cache.insert(cache_key, e);
+                        e
+                    } else {
+                        caret_pos[0] += Pt::from(scaled.h_advance(glyph_id));
+                        continue;
+                    }
+                };
+
+                let baseline_y = caret_pos[1] + Pt::from(ascent);
+                let draw_x = caret_pos[0] + Pt::from(entry.offset[0]);
+                let draw_y = baseline_y + Pt::from(entry.offset[1]);
+
+                let rel_x = (draw_x - start_pos[0]).as_f32() * sx;
+                let rel_y = (draw_y - start_pos[1]).as_f32() * sy;
+
+                let final_x = start_pos[0].as_f32() + rel_x;
+                let final_y = start_pos[1].as_f32() + rel_y;
+
+                let w = entry.image.bounds.width.as_f32() * sx;
+                let h = entry.image.bounds.height.as_f32() * sy;
+
+                if final_x + w >= viewport_rect[0]
+                    && final_x <= viewport_rect[2]
+                    && final_y + h >= viewport_rect[1]
+                    && final_y <= viewport_rect[3]
+                {
+                    let mut glyph_opts = *opts;
+                    glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
+
+                    let mut shader_opts = ShaderOpts::default();
+                    shader_opts.set_vec4(0, text.color);
+
+                    self.resolved_draws.push(ResolvedDraw {
+                        img_entry: entry.image,
+                        opts: glyph_opts,
+                        shader_id: self.text_shader_id,
+                        shader_opts,
                     });
                 }
-                caret_x += scaled.h_advance(id);
-                prev = Some(id);
+
+                caret_pos[0] += Pt::from(scaled.h_advance(glyph_id));
             }
+            caret_pos[0] = start_pos[0];
+            caret_pos[1] += Pt::from(line_height);
         }
-        
-        let image = self.create_image(Pt::from(text_width as f32), Pt::from(text_height as f32), &rgba_data)?;
-        Ok(self.images.get(image.index()).and_then(|e| e.as_ref()).copied())
+        Ok(())
     }
 
     fn get_cached_font(&self, font_hash: u64) -> Option<FontArc> {
@@ -658,12 +755,7 @@ impl Graphics {
         self.font_cache.insert(font_hash, font);
     }
 
-    fn resolve_drawables(
-        &mut self,
-        drawables: &[DrawCommand],
-        logical_w: u32,
-        logical_h: u32,
-    ) {
+    fn resolve_drawables(&mut self, drawables: &[DrawCommand], logical_w: u32, logical_h: u32) {
         self.resolved_draws.clear();
         let viewport_rect = [0.0, 0.0, logical_w as f32, logical_h as f32];
 
@@ -699,48 +791,9 @@ impl Graphics {
                     }
                 }
                 DrawCommand::Text(text, opts) => {
-                    let key = TextImageKey {
-                        content: text.content.clone(),
-                        font_hash: text.font_hash,
-                        font_size_bits: text.font_size.as_f32().to_bits(),
-                        color_bits: [
-                            text.color[0].to_bits(),
-                            text.color[1].to_bits(),
-                            text.color[2].to_bits(),
-                            text.color[3].to_bits(),
-                        ],
-                        max_width_bits: text.max_width.map(|w| w.as_f32().to_bits()),
-                    };
-
-                    let entry = if let Some(cached_entry) = self.text_image_cache.get(&key) {
-                        *cached_entry
-                    } else if let Ok(Some(new_entry)) = self.render_text_to_image(text, opts) {
-                        self.text_image_cache.insert(key, new_entry);
-                        new_entry
-                    } else {
-                        continue;
-                    };
-
-                    let pos = opts.position();
-                    let scale = opts.scale();
-                    let w = entry.bounds.width.as_f32() * scale[0];
-                    let h = entry.bounds.height.as_f32() * scale[1];
-                    if pos[0].as_f32() + w < 0.0
-                        || pos[0].as_f32() > viewport_rect[2]
-                        || pos[1].as_f32() + h < 0.0
-                        || pos[1].as_f32() > viewport_rect[3]
-                    {
-                        if opts.rotation() == 0.0 {
-                            continue;
-                        }
+                    if let Err(e) = self.layout_and_queue_text(text, opts, viewport_rect) {
+                        eprintln!("[spot] Text layout error: {:?}", e);
                     }
-
-                    self.resolved_draws.push(ResolvedDraw {
-                        img_entry: entry,
-                        opts: *opts,
-                        shader_id: 0,
-                        shader_opts: ShaderOpts::default(),
-                    });
                 }
             }
         }
@@ -805,7 +858,10 @@ impl Graphics {
                 let ai = current_atlas_index.unwrap();
                 let atlas_bg = &self.atlases.get(ai as usize).expect("atlas").bind_group;
 
-                if let Ok(range) = self.image_renderer.upload_instances(&self.queue, self.batch.as_slice()) {
+                if let Ok(range) = self
+                    .image_renderer
+                    .upload_instances(&self.queue, self.batch.as_slice())
+                {
                     let pipeline = if current_shader_id == 0 {
                         &self.default_pipeline
                     } else {
@@ -830,23 +886,26 @@ impl Graphics {
                     opacity: current_opacity,
                     _padding: [0.0; 3],
                 };
-                current_engine_globals_offset = self.image_renderer
+                current_engine_globals_offset = self
+                    .image_renderer
                     .upload_engine_globals(&self.queue, &eg)
                     .unwrap_or(0);
             }
 
-            if current_user_globals != effective_user_globals || (current_atlas_index.is_none() && self.batch.is_empty()) {
+            if current_user_globals != effective_user_globals
+                || (current_atlas_index.is_none() && self.batch.is_empty())
+            {
                 current_user_globals = effective_user_globals;
                 if std::env::var("SPOT_DEBUG_SHADER").is_ok() {
                     let b = current_user_globals.as_bytes();
                     let x0 = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
                     eprintln!(
                         "[spot][debug][shader] upload user_globals[0].x={:.3} shader_id={}",
-                        x0,
-                        shader_id
+                        x0, shader_id
                     );
                 }
-                current_user_globals_offset = self.image_renderer
+                current_user_globals_offset = self
+                    .image_renderer
                     .upload_user_globals_bytes(&self.queue, current_user_globals.as_bytes())
                     .unwrap_or(current_user_globals_offset);
             }
@@ -894,7 +953,10 @@ impl Graphics {
         if !self.batch.is_empty() {
             let ai = current_atlas_index.unwrap();
             let atlas_bg = &self.atlases.get(ai as usize).expect("atlas").bind_group;
-            if let Ok(range) = self.image_renderer.upload_instances(&self.queue, self.batch.as_slice()) {
+            if let Ok(range) = self
+                .image_renderer
+                .upload_instances(&self.queue, self.batch.as_slice())
+            {
                 let pipeline = if current_shader_id == 0 {
                     &self.default_pipeline
                 } else {
@@ -918,7 +980,12 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         context: &Context,
     ) -> Result<(), wgpu::SurfaceError> {
-        self.draw_drawables_with_context(surface, context.draw_list(), context.scale_factor(), context)
+        self.draw_drawables_with_context(
+            surface,
+            context.draw_list(),
+            context.scale_factor(),
+            context,
+        )
     }
 
     fn draw_drawables_with_context(
@@ -929,7 +996,11 @@ impl Graphics {
         context: &Context,
     ) -> Result<(), wgpu::SurfaceError> {
         let (lw, lh) = context.window_logical_size();
-        let sf = if scale_factor.is_finite() && scale_factor > 0.0 { scale_factor } else { 1.0 };
+        let sf = if scale_factor.is_finite() && scale_factor > 0.0 {
+            scale_factor
+        } else {
+            1.0
+        };
         let expected_w = ((lw.as_f32() as f64) * sf).round().max(1.0) as u32;
         let expected_h = ((lh.as_f32() as f64) * sf).round().max(1.0) as u32;
         if expected_w != self.config.width || expected_h != self.config.height {
@@ -955,25 +1026,41 @@ impl Graphics {
                 .unwrap_or(false)
         });
 
-        let mut t_prev = if profile_enabled { Some(Instant::now()) } else { None };
+        let mut t_prev = if profile_enabled {
+            Some(Instant::now())
+        } else {
+            None
+        };
         let frame = surface.get_current_texture()?;
         let dt_acquire_ms = if let Some(t0) = t_prev {
             t0.elapsed().as_secs_f64() * 1000.0
         } else {
             0.0
         };
-        t_prev = if profile_enabled { Some(Instant::now()) } else { None };
+        t_prev = if profile_enabled {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("graphics_encoder"),
-        });
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("graphics_encoder"),
+            });
         let dt_encoder_ms = if let Some(t0) = t_prev {
             t0.elapsed().as_secs_f64() * 1000.0
         } else {
             0.0
         };
-        t_prev = if profile_enabled { Some(Instant::now()) } else { None };
+        t_prev = if profile_enabled {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         self.image_renderer.begin_frame();
         let sf = if scale_factor.is_finite() && scale_factor > 0.0 {
@@ -983,7 +1070,6 @@ impl Graphics {
         };
         let logical_w = ((self.config.width as f64) / sf).round().max(1.0) as u32;
         let logical_h = ((self.config.height as f64) / sf).round().max(1.0) as u32;
-        self.text_renderer.begin_frame(logical_w, logical_h, &self.queue);
 
         let (sw, sh) = (logical_w as f32, logical_h as f32);
         let sw_inv = 1.0 / sw;
@@ -997,7 +1083,11 @@ impl Graphics {
         } else {
             0.0
         };
-        t_prev = if profile_enabled { Some(Instant::now()) } else { None };
+        t_prev = if profile_enabled {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1024,7 +1114,11 @@ impl Graphics {
         } else {
             0.0
         };
-        t_prev = if profile_enabled { Some(Instant::now()) } else { None };
+        t_prev = if profile_enabled {
+            Some(Instant::now())
+        } else {
+            None
+        };
         self.queue.submit(Some(encoder.finish()));
         let dt_submit_ms = if let Some(t0) = t_prev {
             t0.elapsed().as_secs_f64() * 1000.0
@@ -1069,20 +1163,30 @@ impl Graphics {
 
     pub(crate) fn copy_image(&mut self, dst: Image, src: Image) -> anyhow::Result<()> {
         let (dst_atlas_index, dst_rect, dst_uv_rect) = {
-             let Some(Some(d)) = self.images.get(dst.index()) else { return Err(anyhow::anyhow!("invalid dst image")); };
+            let Some(Some(d)) = self.images.get(dst.index()) else {
+                return Err(anyhow::anyhow!("invalid dst image"));
+            };
             (d.atlas_index, d.bounds, d.uv_rect)
         };
-         let (src_atlas_index, src_rect, src_uv_rect) = {
-             let Some(Some(s)) = self.images.get(src.index()) else { return Err(anyhow::anyhow!("invalid src image")); };
+        let (src_atlas_index, src_rect, src_uv_rect) = {
+            let Some(Some(s)) = self.images.get(src.index()) else {
+                return Err(anyhow::anyhow!("invalid src image"));
+            };
             (s.atlas_index, s.bounds, s.uv_rect)
         };
-        if dst_atlas_index != src_atlas_index { return Err(anyhow::anyhow!("copy_image across atlases is not supported")); }
-        if dst_rect.width != src_rect.width || dst_rect.height != src_rect.height { return Err(anyhow::anyhow!("size mismatch")); }
-        
+        if dst_atlas_index != src_atlas_index {
+            return Err(anyhow::anyhow!(
+                "copy_image across atlases is not supported"
+            ));
+        }
+        if dst_rect.width != src_rect.width || dst_rect.height != src_rect.height {
+            return Err(anyhow::anyhow!("size mismatch"));
+        }
+
         let atlas = self.atlases.get(dst_atlas_index as usize).expect("atlas");
         let aw = atlas.packer.width() as f32;
         let ah = atlas.packer.height() as f32;
-        
+
         let src_x = (src_uv_rect[0] * aw).round() as u32;
         let src_y = (src_uv_rect[1] * ah).round() as u32;
         let dst_x = (dst_uv_rect[0] * aw).round() as u32;
@@ -1090,11 +1194,37 @@ impl Graphics {
         let w = dst_rect.width.to_u32_clamped();
         let h = dst_rect.height.to_u32_clamped();
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("graphics_copy_image_encoder") });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("graphics_copy_image_encoder"),
+            });
         encoder.copy_texture_to_texture(
-            wgpu::TexelCopyTextureInfo { texture: &atlas.texture.0.texture, mip_level: 0, origin: wgpu::Origin3d { x: src_x, y: src_y, z: 0 }, aspect: wgpu::TextureAspect::All },
-            wgpu::TexelCopyTextureInfo { texture: &atlas.texture.0.texture, mip_level: 0, origin: wgpu::Origin3d { x: dst_x, y: dst_y, z: 0 }, aspect: wgpu::TextureAspect::All },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }
+            wgpu::TexelCopyTextureInfo {
+                texture: &atlas.texture.0.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: src_x,
+                    y: src_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &atlas.texture.0.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: dst_x,
+                    y: dst_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
         );
         self.queue.submit(Some(encoder.finish()));
         Ok(())
@@ -1104,7 +1234,12 @@ impl Graphics {
         let bounds = self.image_bounds(target)?;
         let w = bounds.width.to_u32_clamped();
         let h = bounds.height.to_u32_clamped();
-        let pixel = [(color[0] * 255.0) as u8, (color[1] * 255.0) as u8, (color[2] * 255.0) as u8, (color[3] * 255.0) as u8];
+        let pixel = [
+            (color[0] * 255.0) as u8,
+            (color[1] * 255.0) as u8,
+            (color[2] * 255.0) as u8,
+            (color[3] * 255.0) as u8,
+        ];
         let data: Vec<u8> = pixel.repeat((w * h) as usize);
         let entry = self.images.get(target.index()).unwrap().as_ref().unwrap();
         let atlas = self.atlases.get(entry.atlas_index as usize).expect("atlas");
@@ -1116,10 +1251,23 @@ impl Graphics {
         let (data, bytes_per_row) = platform::align_write_texture_bytes(bytes_per_row, h, data);
 
         self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &atlas.texture.0.texture, mip_level: 0, origin: wgpu::Origin3d { x: x, y: y, z: 0 }, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo {
+                texture: &atlas.texture.0.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x: x, y: y, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
             &data,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(bytes_per_row), rows_per_image: Some(h) },
-            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 }
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(h),
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
         );
         Ok(())
     }

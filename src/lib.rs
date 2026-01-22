@@ -36,6 +36,7 @@
 
 mod drawable;
 mod font;
+mod glyph_cache;
 mod graphics;
 mod image;
 mod image_raw;
@@ -47,7 +48,6 @@ mod platform;
 mod pt;
 mod shader_opts;
 mod text;
-mod text_renderer;
 mod texture;
 mod window;
 
@@ -387,6 +387,14 @@ pub fn ime_preedit(context: &Context) -> Option<&str> {
 
 pub fn register_image_shader(wgsl_source: &str) -> u32 {
     with_graphics(|g| g.register_image_shader(wgsl_source))
+}
+
+pub fn register_font(font_data: Vec<u8>) -> u32 {
+    with_graphics(|g| g.register_font(font_data))
+}
+
+pub fn get_registered_font(font_id: u32) -> Option<Vec<u8>> {
+    with_graphics(|g| g.get_font(font_id).cloned())
 }
 
 type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot> + Send>;

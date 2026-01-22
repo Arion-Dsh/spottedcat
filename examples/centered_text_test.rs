@@ -1,7 +1,7 @@
 use spottedcat::{Context, DrawOption, Pt, Spot, WindowConfig, run, Image, load_font_from_bytes};
 
 struct CenteredTextTestSpot {
-    font_data: Vec<u8>,
+    font_id: u32,
 }
 
 impl Spot for CenteredTextTestSpot {
@@ -9,8 +9,9 @@ impl Spot for CenteredTextTestSpot {
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_data = load_font_from_bytes(FONT);
+        let font_id = spottedcat::register_font(font_data);
 
-        Self { font_data }
+        Self { font_id }
     }
 
     fn draw(&mut self, context: &mut Context) {
@@ -63,7 +64,7 @@ impl Spot for CenteredTextTestSpot {
                 let font_size = Pt::from(20.0);
                 
                 // Create text to measure its dimensions including baseline offset
-                let text = spottedcat::Text::new(text_content, self.font_data.clone())
+                let text = spottedcat::Text::new(text_content, self.font_id)
                     .with_font_size(font_size)
                     .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
                 

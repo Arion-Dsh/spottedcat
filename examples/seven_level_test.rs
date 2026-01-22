@@ -2,7 +2,7 @@ use spottedcat::{Context, DrawOption, Pt, Spot, WindowConfig, run, Image, load_f
 
 struct SevenLevelNestTestSpot {
     red_image: Image,
-    font_data: Vec<u8>,
+    font_id: u32,
 }
 
 impl Spot for SevenLevelNestTestSpot {
@@ -19,8 +19,9 @@ impl Spot for SevenLevelNestTestSpot {
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_data = load_font_from_bytes(FONT);
+        let font_id = spottedcat::register_font(font_data);
 
-        Self { red_image, font_data }
+        Self { red_image, font_id }
     }
 
     fn draw(&mut self, context: &mut Context) {
@@ -128,7 +129,7 @@ impl Spot for SevenLevelNestTestSpot {
                                     let text_opts = DrawOption::default()
                                         .with_position([Pt::from(25.0), Pt::from(40.0)]);
                                     
-                                    let text = spottedcat::Text::new("7级嵌套测试文字宽度测试", self.font_data.clone())
+                                    let text = spottedcat::Text::new("7级嵌套测试文字宽度测试", self.font_id)
                                         .with_font_size(Pt::from(16.0))
                                         .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
                                     
