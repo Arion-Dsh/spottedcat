@@ -2087,7 +2087,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "ab_glyph",
  "anyhow",
