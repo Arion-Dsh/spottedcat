@@ -133,7 +133,6 @@ pub struct Context {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LastImageDrawInfo {
     pub(crate) opts: DrawOption,
-    pub(crate) origin: [Pt; 2],
 }
 
 #[derive(Default)]
@@ -234,7 +233,6 @@ impl Context {
     ///
     /// This is used internally by Image::draw() and other drawing methods.
     pub(crate) fn push(&mut self, mut drawable: DrawCommand) {
-        let origin = self.current_state.position;
         // Apply current state to the drawable
         match &mut drawable {
             DrawCommand::Image(_, opts, _, _) | DrawCommand::Text(_, opts) => {
@@ -242,13 +240,8 @@ impl Context {
             }
         }
         if let DrawCommand::Image(id, opts, _, _) = &drawable {
-            self.last_image_opts.insert(
-                *id,
-                LastImageDrawInfo {
-                    opts: *opts,
-                    origin,
-                },
-            );
+            self.last_image_opts
+                .insert(*id, LastImageDrawInfo { opts: *opts });
         }
         if std::env::var("SPOT_DEBUG_DRAW").is_ok() {
             match &drawable {

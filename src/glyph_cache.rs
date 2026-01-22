@@ -36,10 +36,6 @@ impl GlyphCache {
     pub(crate) fn insert(&mut self, key: GlyphCacheKey, entry: GlyphEntry) {
         self.cache.insert(key, entry);
     }
-
-    pub(crate) fn contains(&self, key: &GlyphCacheKey) -> bool {
-        self.cache.contains_key(key)
-    }
 }
 
 impl Default for GlyphCache {
