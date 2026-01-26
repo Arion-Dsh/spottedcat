@@ -3,8 +3,8 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 
-use crate::{Context, Pt, Spot, WindowConfig, with_graphics, take_scene_switch_request};
 use crate::platform;
+use crate::{Context, Pt, Spot, WindowConfig, take_scene_switch_request, with_graphics};
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -83,7 +83,10 @@ impl App {
     }
 
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    pub(crate) fn new_wasm<T: Spot + 'static>(window_config: WindowConfig, canvas_id: Option<String>) -> Self {
+    pub(crate) fn new_wasm<T: Spot + 'static>(
+        window_config: WindowConfig,
+        canvas_id: Option<String>,
+    ) -> Self {
         let instance = platform::create_wgpu_instance();
 
         Self {
@@ -116,15 +119,12 @@ impl App {
             return;
         };
 
-        let canvas = self
-            .canvas_id
-            .as_deref()
-            .and_then(|id| {
-                web_sys::window()
-                    .and_then(|w| w.document())
-                    .and_then(|d| d.get_element_by_id(id))
-                    .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
-            });
+        let canvas = self.canvas_id.as_deref().and_then(|id| {
+            web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id(id))
+                .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+        });
 
         let Some(canvas) = canvas else {
             return;
@@ -203,7 +203,10 @@ impl ApplicationHandler for App {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[spot][android][surface] recreate on resume failed: {:?}", e);
+                        eprintln!(
+                            "[spot][android][surface] recreate on resume failed: {:?}",
+                            e
+                        );
                         self.surface.take();
                     }
                 }
@@ -235,7 +238,10 @@ impl ApplicationHandler for App {
                         }
                     }
                     Err(e) => {
-                        eprintln!("[spot][android][surface] recreate on resume failed: {:?}", e);
+                        eprintln!(
+                            "[spot][android][surface] recreate on resume failed: {:?}",
+                            e
+                        );
                         self.surface.take();
                     }
                 }
@@ -269,18 +275,15 @@ impl ApplicationHandler for App {
         let window = {
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             {
-                use winit::platform::web::WindowAttributesExtWebSys;
                 use wasm_bindgen::JsCast;
+                use winit::platform::web::WindowAttributesExtWebSys;
 
-                let canvas = self
-                    .canvas_id
-                    .as_deref()
-                    .and_then(|id| {
-                        web_sys::window()
-                            .and_then(|w| w.document())
-                            .and_then(|d| d.get_element_by_id(id))
-                            .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
-                    });
+                let canvas = self.canvas_id.as_deref().and_then(|id| {
+                    web_sys::window()
+                        .and_then(|w| w.document())
+                        .and_then(|d| d.get_element_by_id(id))
+                        .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+                });
 
                 event_loop
                     .create_window(
@@ -359,7 +362,10 @@ impl ApplicationHandler for App {
         {
             let window = self.window.as_ref().expect("window");
             let surface = unsafe {
-                let s = self.instance.create_surface(window).expect("failed to create surface");
+                let s = self
+                    .instance
+                    .create_surface(window)
+                    .expect("failed to create surface");
                 std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
             };
             self.surface = Some(surface);
@@ -369,7 +375,10 @@ impl ApplicationHandler for App {
         {
             let window = self.window.as_ref().expect("window");
             let surface = unsafe {
-                let s = self.instance.create_surface(window).expect("failed to create surface");
+                let s = self
+                    .instance
+                    .create_surface(window)
+                    .expect("failed to create surface");
                 std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
             };
             self.surface = Some(surface);
@@ -378,7 +387,13 @@ impl ApplicationHandler for App {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let s = self.surface.as_ref().expect("surface");
-            platform::begin_graphics_init(&mut self.init_state, &self.instance, s, size.width, size.height);
+            platform::begin_graphics_init(
+                &mut self.init_state,
+                &self.instance,
+                s,
+                size.width,
+                size.height,
+            );
         }
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -460,6 +475,11 @@ impl ApplicationHandler for App {
                 let y = Pt::from_physical_px(position.y, self.scale_factor);
                 self.context.input_mut().handle_cursor_moved(x, y);
             }
+            WindowEvent::Touch(touch) => {
+                self.context
+                    .input_mut()
+                    .handle_touch(touch, self.scale_factor);
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.context.input_mut().handle_mouse_input(state, button);
             }
@@ -480,7 +500,6 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                
                 // On Android the surface may disappear without a clean suspended/resumed sequence.
                 // If we don't have a surface, try to recreate it lazily and schedule another redraw.
                 #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
@@ -491,10 +510,9 @@ impl ApplicationHandler for App {
                         match surface_r {
                             Ok(s) => {
                                 let surface = unsafe {
-                                    std::mem::transmute::<
-                                        wgpu::Surface<'_>,
-                                        wgpu::Surface<'static>,
-                                    >(s)
+                                    std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(
+                                        s,
+                                    )
                                 };
                                 self.surface = Some(surface);
 
@@ -563,12 +581,20 @@ impl ApplicationHandler for App {
                                                         std::mem::transmute::<
                                                             wgpu::Surface<'_>,
                                                             wgpu::Surface<'static>,
-                                                        >(s)
+                                                        >(
+                                                            s
+                                                        )
                                                     };
                                                     self.surface = Some(surface);
 
                                                     if let Some(surface) = self.surface.as_ref() {
-                                                        with_graphics(|g| g.resize(surface, size.width, size.height));
+                                                        with_graphics(|g| {
+                                                            g.resize(
+                                                                surface,
+                                                                size.width,
+                                                                size.height,
+                                                            )
+                                                        });
                                                     }
                                                 }
                                                 Err(e) => {
@@ -630,7 +656,6 @@ impl ApplicationHandler for App {
                 self.lag = self.lag.saturating_sub(self.fixed_dt);
             }
         }
-
 
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();

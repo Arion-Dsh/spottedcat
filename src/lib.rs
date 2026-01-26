@@ -49,6 +49,7 @@ mod pt;
 mod shader_opts;
 mod text;
 mod texture;
+mod touch;
 mod window;
 
 use std::any::{Any, TypeId};
@@ -73,6 +74,7 @@ pub use mouse::MouseButton;
 pub use pt::Pt;
 pub use shader_opts::ShaderOpts;
 pub use text::Text;
+pub use touch::{TouchInfo, TouchPhase};
 
 #[derive(Debug, Clone)]
 pub struct WindowConfig {
@@ -413,6 +415,14 @@ pub fn text_input(context: &Context) -> &str {
 
 pub fn get_input(context: &Context) -> &str {
     context.input().text_input()
+}
+
+pub fn touches(context: &Context) -> &[TouchInfo] {
+    context.input().touches()
+}
+
+pub fn touch_down(context: &Context) -> bool {
+    !context.input().touches().is_empty()
 }
 
 pub fn ime_preedit(context: &Context) -> Option<&str> {

@@ -1,11 +1,12 @@
 use std::collections::HashSet;
 
-use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta};
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, Touch};
 use winit::keyboard::PhysicalKey;
 
 use crate::Key;
 use crate::MouseButton as SpotMouseButton;
 use crate::Pt;
+use crate::touch::{TouchInfo, TouchPhase};
 
 #[derive(Debug, Clone)]
 pub struct InputManager {
@@ -28,6 +29,8 @@ pub struct InputManager {
 
     text_input: String,
     ime_preedit: Option<String>,
+
+    touches: Vec<TouchInfo>,
 }
 
 impl Default for InputManager {
@@ -52,6 +55,8 @@ impl Default for InputManager {
 
             text_input: String::new(),
             ime_preedit: None,
+
+            touches: Vec::new(),
         }
     }
 }
@@ -96,6 +101,10 @@ impl InputManager {
 
     pub fn ime_preedit(&self) -> Option<&str> {
         self.ime_preedit.as_deref()
+    }
+
+    pub fn touches(&self) -> &[TouchInfo] {
+        &self.touches
     }
 
     pub fn key_down(&self, key: Key) -> bool {
@@ -277,6 +286,40 @@ impl InputManager {
             ElementState::Released => {
                 self.keys_down[w] &= !mask;
                 self.keys_released[w] |= mask;
+            }
+        }
+    }
+
+    pub(crate) fn handle_touch(&mut self, touch: Touch, scale_factor: f64) {
+        let x = Pt::from_physical_px(touch.location.x, scale_factor);
+        let y = Pt::from_physical_px(touch.location.y, scale_factor);
+        let pos = (x, y);
+        let phase = TouchPhase::from_winit(touch.phase);
+
+        match phase {
+            TouchPhase::Started => {
+                // Ensure we don't have duplicates
+                self.touches.retain(|t| t.id != touch.id);
+                self.touches.push(TouchInfo {
+                    id: touch.id,
+                    position: pos,
+                    phase,
+                });
+            }
+            TouchPhase::Moved => {
+                if let Some(t) = self.touches.iter_mut().find(|t| t.id == touch.id) {
+                    t.position = pos;
+                    t.phase = phase;
+                } else {
+                    self.touches.push(TouchInfo {
+                        id: touch.id,
+                        position: pos,
+                        phase,
+                    });
+                }
+            }
+            TouchPhase::Ended | TouchPhase::Cancelled => {
+                self.touches.retain(|t| t.id != touch.id);
             }
         }
     }
