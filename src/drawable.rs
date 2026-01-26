@@ -4,7 +4,7 @@ use crate::Text;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand {
-    Image(u32, DrawOption, u32, ShaderOpts),
+    Image(u32, DrawOption, u32, ShaderOpts, [Pt; 2]), // Added original [width, height]
     Text(Box<Text>, DrawOption),
 }
 

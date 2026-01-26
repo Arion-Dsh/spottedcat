@@ -1,6 +1,5 @@
- 
-use crate::with_graphics;
 use crate::Pt;
+use crate::with_graphics;
 
 /// Rectangle bounds for defining sub-regions of images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -149,6 +148,7 @@ impl Image {
             options,
             0,
             crate::ShaderOpts::default(),
+            [self.width, self.height],
         ));
     }
 
@@ -164,6 +164,7 @@ impl Image {
             options,
             shader_id,
             shader_opts,
+            [self.width, self.height],
         ));
     }
 
@@ -192,7 +193,7 @@ impl Image {
     }
 
     /// Returns the global screen-space bounds of this image when drawn.
-    /// 
+    ///
     /// # Arguments
     /// * `options` - The same DrawOption used when calling `draw()`
     pub(crate) fn screen_bounds(self, options: crate::DrawOption) -> [Pt; 4] {
@@ -205,17 +206,13 @@ impl Image {
         [x, y, w, h]
     }
 
-    pub fn with_clip_scope<F>(
-        self,
-        context: &mut crate::Context,
-        options: crate::DrawOption,
-        f: F,
-    ) where
+    pub fn with_clip_scope<F>(self, context: &mut crate::Context, options: crate::DrawOption, f: F)
+    where
         F: FnOnce(&mut crate::Context),
     {
         // First, draw the parent image to establish the clip region
         self.draw(context, options);
-        
+
         // Then set up the clipping state for child elements
         let parent_opts_abs = if let Some(info) = context.last_image_draw_info(self.id) {
             info.opts
@@ -226,7 +223,7 @@ impl Image {
 
         let parent_pos_abs = parent_opts_abs.position();
         let parent_bounds = self.screen_bounds(parent_opts_abs);
-        
+
         // Get the current origin to calculate relative position
         let current_origin = context.current_draw_state().position;
         let parent_pos_relative = [

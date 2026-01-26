@@ -29,7 +29,7 @@ impl Spot for SevenLevelNestTestSpot {
         
         // Level 1 - Red parent
         let level1_opts = DrawOption::default()
-            .with_position([Pt::from(50.0), Pt::from(50.0)]);
+            .with_position([Pt::from(-10.0), Pt::from(50.0)]);
         
         self.red_image.with_clip_scope(context, level1_opts, |ctx| {
             println!("RED level1: 200x200 at (50, 50) - auto drawn");

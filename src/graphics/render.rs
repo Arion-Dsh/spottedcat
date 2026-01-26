@@ -25,25 +25,10 @@ impl Graphics {
 
         for drawable in drawables {
             match drawable {
-                DrawCommand::Image(id, opts, shader_id, shader_opts) => {
+                DrawCommand::Image(id, opts, shader_id, shader_opts, _) => {
                     if let Some(Some(entry)) = self.images.get(*id as usize) {
                         if !entry.visible {
                             continue;
-                        }
-
-                        let pos = opts.position();
-                        let scale = opts.scale();
-                        let w = entry.bounds.width.as_f32() * scale[0];
-                        let h = entry.bounds.height.as_f32() * scale[1];
-
-                        if pos[0].as_f32() + w < 0.0
-                            || pos[0].as_f32() > viewport_rect[2]
-                            || pos[1].as_f32() + h < 0.0
-                            || pos[1].as_f32() > viewport_rect[3]
-                        {
-                            if opts.rotation() == 0.0 {
-                                continue;
-                            }
                         }
 
                         self.resolved_draws.push(ResolvedDraw {

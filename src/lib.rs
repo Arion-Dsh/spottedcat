@@ -235,17 +235,58 @@ impl Context {
     pub(crate) fn push(&mut self, mut drawable: DrawCommand) {
         // Apply current state to the drawable
         match &mut drawable {
-            DrawCommand::Image(_, opts, _, _) | DrawCommand::Text(_, opts) => {
+            DrawCommand::Image(_, opts, _, _, _) | DrawCommand::Text(_, opts) => {
                 *opts = opts.apply_state(&self.current_state);
             }
         }
-        if let DrawCommand::Image(id, opts, _, _) = &drawable {
+        if let DrawCommand::Image(id, opts, _, _, size) = &drawable {
+            // Culling check
+            let pos = opts.position();
+            let scale = opts.scale();
+            let rot = opts.rotation();
+            let w = size[0].as_f32() * scale[0];
+            let h = size[1].as_f32() * scale[1];
+
+            let (vw, vh) = self.window_logical_size;
+            let screen_w = vw.as_f32();
+            let screen_h = vh.as_f32();
+
+            let is_visible = if rot == 0.0 {
+                !(pos[0].as_f32() + w < 0.0
+                    || pos[0].as_f32() > screen_w
+                    || pos[1].as_f32() + h < 0.0
+                    || pos[1].as_f32() > screen_h)
+            } else {
+                let c = rot.cos();
+                let s = rot.sin();
+                let x2 = w * c;
+                let y2 = w * s;
+                let x3 = -h * s;
+                let y3 = h * c;
+                let x4 = x2 + x3;
+                let y4 = y2 + y3;
+
+                let min_x = 0.0f32.min(x2).min(x3).min(x4);
+                let max_x = 0.0f32.max(x2).max(x3).max(x4);
+                let min_y = 0.0f32.min(y2).min(y3).min(y4);
+                let max_y = 0.0f32.max(y2).max(y3).max(y4);
+
+                !(pos[0].as_f32() + max_x < 0.0
+                    || pos[0].as_f32() + min_x > screen_w
+                    || pos[1].as_f32() + max_y < 0.0
+                    || pos[1].as_f32() + min_y > screen_h)
+            };
+
+            if !is_visible {
+                return;
+            }
+
             self.last_image_opts
                 .insert(*id, LastImageDrawInfo { opts: *opts });
         }
         if std::env::var("SPOT_DEBUG_DRAW").is_ok() {
             match &drawable {
-                DrawCommand::Image(id, opts, shader_id, _shader_opts) => {
+                DrawCommand::Image(id, opts, shader_id, _shader_opts, _) => {
                     eprintln!(
                         "[spot][debug] draw image id={} shader_id={} pos={:?} clip={:?}",
                         id,
