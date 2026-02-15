@@ -105,6 +105,8 @@ use crate::graphics::Graphics;
 pub(crate) struct DrawState {
     pub position: [Pt; 2],
     pub clip: Option<[Pt; 4]>,
+    pub shader_id: Option<u32>,
+    pub shader_opts: Option<ShaderOpts>,
 }
 
 impl Default for DrawState {
@@ -112,6 +114,8 @@ impl Default for DrawState {
         Self {
             position: [Pt(0.0), Pt(0.0)],
             clip: None,
+            shader_id: None,
+            shader_opts: None,
         }
     }
 }
@@ -204,6 +208,25 @@ impl Context {
             .and_then(|v| Arc::downcast::<T>(v).ok())
     }
 
+    pub fn remove_resource<T: Any + Send + Sync>(&mut self) -> Option<Arc<T>> {
+        self.resources
+            .inner
+            .remove(&TypeId::of::<T>())
+            .and_then(|v| Arc::downcast::<T>(v).ok())
+    }
+
+    pub(crate) fn insert_resource_dyn(
+        &mut self,
+        type_id: TypeId,
+        value: Arc<dyn Any + Send + Sync>,
+    ) {
+        self.resources.inner.insert(type_id, value);
+    }
+
+    pub(crate) fn remove_resource_dyn(&mut self, type_id: TypeId) {
+        self.resources.inner.remove(&type_id);
+    }
+
     /// Clears all drawing commands from the previous frame.
     ///
     /// This is called automatically at the start of each frame, but can be used
@@ -237,7 +260,20 @@ impl Context {
     pub(crate) fn push(&mut self, mut drawable: DrawCommand) {
         // Apply current state to the drawable
         match &mut drawable {
-            DrawCommand::Image(_, opts, _, _, _) | DrawCommand::Text(_, opts) => {
+            DrawCommand::Image(_id, opts, shader_id, shader_opts, _) => {
+                *opts = opts.apply_state(&self.current_state);
+                // Inherit shader if not explicitly set
+                if *shader_id == 0 {
+                    if let Some(parent_shader_id) = self.current_state.shader_id {
+                        // eprintln!("Inheriting shader {} from state", parent_shader_id);
+                        *shader_id = parent_shader_id;
+                        if let Some(parent_shader_opts) = self.current_state.shader_opts {
+                            *shader_opts = parent_shader_opts;
+                        }
+                    }
+                }
+            }
+            DrawCommand::Text(_, opts) => {
                 *opts = opts.apply_state(&self.current_state);
             }
         }
@@ -345,6 +381,14 @@ impl Context {
             };
             self.current_state.clip = merged_clip;
         }
+
+        // Apply shader state if provided in the new state
+        if let Some(sid) = state.shader_id {
+            self.current_state.shader_id = Some(sid);
+        }
+        if let Some(sopts) = state.shader_opts {
+            self.current_state.shader_opts = Some(sopts);
+        }
     }
 
     fn pop_state(&mut self) {
@@ -443,7 +487,19 @@ pub fn get_registered_font(font_id: u32) -> Option<Vec<u8>> {
 
 type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot> + Send>;
 
-static SCENE_SWITCH_REQUEST: OnceLock<Mutex<Option<SceneFactory>>> = OnceLock::new();
+pub(crate) struct ScenePayload {
+    pub(crate) type_id: TypeId,
+    pub(crate) value: Arc<dyn Any + Send + Sync>,
+}
+
+pub(crate) struct ScenePayloadTypeId(pub(crate) TypeId);
+
+pub(crate) struct SceneSwitchRequest {
+    pub(crate) factory: SceneFactory,
+    pub(crate) payload: Option<ScenePayload>,
+}
+
+static SCENE_SWITCH_REQUEST: OnceLock<Mutex<Option<SceneSwitchRequest>>> = OnceLock::new();
 
 fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
     platform::with_graphics(f)
@@ -459,11 +515,27 @@ where
 {
     if let Some(request) = SCENE_SWITCH_REQUEST.get() {
         let mut guard = request.lock().expect("Scene switch mutex poisoned");
-        *guard = Some(Box::new(factory));
+        *guard = Some(SceneSwitchRequest {
+            factory: Box::new(factory),
+            payload: None,
+        });
     }
 }
 
-pub(crate) fn take_scene_switch_request() -> Option<SceneFactory> {
+fn request_scene_switch_with<F>(factory: F, payload: ScenePayload)
+where
+    F: FnOnce(&mut Context) -> Box<dyn Spot> + Send + 'static,
+{
+    if let Some(request) = SCENE_SWITCH_REQUEST.get() {
+        let mut guard = request.lock().expect("Scene switch mutex poisoned");
+        *guard = Some(SceneSwitchRequest {
+            factory: Box::new(factory),
+            payload: Some(payload),
+        });
+    }
+}
+
+pub(crate) fn take_scene_switch_request() -> Option<SceneSwitchRequest> {
     SCENE_SWITCH_REQUEST
         .get()
         .and_then(|request| request.lock().ok())
@@ -560,6 +632,19 @@ pub fn switch_scene<T: Spot + 'static>() {
     request_scene_switch(|ctx| Box::new(T::initialize(ctx)));
 }
 
+/// Switches to a new scene and provides a payload for the next scene to read.
+///
+/// The payload can be retrieved in the new scene via `Context::take_resource::<T>()`.
+pub fn switch_scene_with<T: Spot + 'static, P: Any + Send + Sync>(payload: P) {
+    request_scene_switch_with(
+        |ctx| Box::new(T::initialize(ctx)),
+        ScenePayload {
+            type_id: TypeId::of::<P>(),
+            value: Arc::new(payload),
+        },
+    );
+}
+
 /// Main application trait that must be implemented by your application.
 ///
 /// This trait defines the lifecycle of a Spot application.
@@ -591,4 +676,35 @@ pub trait Spot {
 
     /// Cleanup when the application is shutting down.
     fn remove(&self);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resource_management() {
+        let mut ctx = Context::new();
+        let val = Arc::new(42i32);
+        ctx.insert_resource(val.clone());
+
+        assert_eq!(ctx.get_resource::<i32>(), Some(val.clone()));
+
+        let removed = ctx.remove_resource::<i32>();
+        assert_eq!(removed, Some(val));
+        assert_eq!(ctx.get_resource::<i32>(), None);
+    }
+
+    #[test]
+    fn test_resource_dyn_management() {
+        let mut ctx = Context::new();
+        let type_id = TypeId::of::<String>();
+        let val = Arc::new("hello".to_string());
+
+        ctx.insert_resource_dyn(type_id, val.clone() as Arc<dyn Any + Send + Sync>);
+        assert_eq!(ctx.get_resource::<String>(), Some(val.clone()));
+
+        ctx.remove_resource_dyn(type_id);
+        assert_eq!(ctx.get_resource::<String>(), None);
+    }
 }

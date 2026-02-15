@@ -4,7 +4,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 
 use crate::platform;
-use crate::{Context, Pt, Spot, WindowConfig, take_scene_switch_request, with_graphics};
+use crate::{
+    Context, Pt, ScenePayloadTypeId, Spot, WindowConfig, take_scene_switch_request, with_graphics,
+};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -558,11 +561,23 @@ impl ApplicationHandler for App {
                         spot.draw(&mut self.context);
                     }
 
-                    if let Some(factory) = take_scene_switch_request() {
+                    if let Some(request) = take_scene_switch_request() {
+                        if let Some(payload) = request.payload {
+                            self.context
+                                .insert_resource_dyn(payload.type_id, payload.value);
+                            self.context
+                                .insert_resource(Arc::new(ScenePayloadTypeId(payload.type_id)));
+                        } else if let Some(last) =
+                            self.context.remove_resource::<ScenePayloadTypeId>()
+                        {
+                            if let Ok(last) = std::sync::Arc::try_unwrap(last) {
+                                self.context.remove_resource_dyn(last.0);
+                            }
+                        }
                         if let Some(old_spot) = self.spot.take() {
                             old_spot.remove();
                         }
-                        self.spot = Some(factory(&mut self.context));
+                        self.spot = Some((request.factory)(&mut self.context));
                     }
 
                     if self.spot.is_some() {

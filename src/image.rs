@@ -206,12 +206,18 @@ impl Image {
         [x, y, w, h]
     }
 
-    pub fn with_clip_scope<F>(self, context: &mut crate::Context, options: crate::DrawOption, f: F)
-    where
+    pub fn with_clip_scope_draw<F, D>(
+        self,
+        context: &mut crate::Context,
+        options: crate::DrawOption,
+        draw: D,
+        f: F,
+    ) where
+        D: FnOnce(Self, &mut crate::Context, crate::DrawOption),
         F: FnOnce(&mut crate::Context),
     {
         // First, draw the parent image to establish the clip region
-        self.draw(context, options);
+        draw(self, context, options);
 
         // Then set up the clipping state for child elements
         let parent_opts_abs = if let Some(info) = context.last_image_draw_info(self.id) {
@@ -239,7 +245,37 @@ impl Image {
                 parent_bounds[2],
                 parent_bounds[3],
             ]),
+            shader_id: context.current_draw_state().shader_id,
+            shader_opts: context.current_draw_state().shader_opts,
         };
+
+        context.push_state(state);
+        f(context);
+        context.pop_state();
+    }
+
+    pub fn with_clip_scope<F>(self, context: &mut crate::Context, options: crate::DrawOption, f: F)
+    where
+        F: FnOnce(&mut crate::Context),
+    {
+        self.with_clip_scope_draw(context, options, |img, ctx, opts| img.draw(ctx, opts), f);
+    }
+
+    pub fn with_shader_scope<F>(
+        self,
+        context: &mut crate::Context,
+        shader_id: u32,
+        shader_opts: crate::ShaderOpts,
+        f: F,
+    ) where
+        F: FnOnce(&mut crate::Context),
+    {
+        let mut state = crate::DrawState::default();
+        state.shader_id = Some(shader_id);
+        state.shader_opts = Some(shader_opts);
+        // We do NOT set position or clip here.
+        // position will be (0,0) so it won't shift children.
+        // clip is None, so push_state will retain the current clip.
 
         context.push_state(state);
         f(context);
