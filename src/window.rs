@@ -7,7 +7,7 @@ use crate::platform;
 use crate::{
     Context, Pt, ScenePayloadTypeId, Spot, WindowConfig, take_scene_switch_request, with_graphics,
 };
-use std::sync::Arc;
+use std::rc::Rc;
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -566,11 +566,11 @@ impl ApplicationHandler for App {
                             self.context
                                 .insert_resource_dyn(payload.type_id, payload.value);
                             self.context
-                                .insert_resource(Arc::new(ScenePayloadTypeId(payload.type_id)));
+                                .insert_resource(Rc::new(ScenePayloadTypeId(payload.type_id)));
                         } else if let Some(last) =
                             self.context.remove_resource::<ScenePayloadTypeId>()
                         {
-                            if let Ok(last) = std::sync::Arc::try_unwrap(last) {
+                            if let Ok(last) = std::rc::Rc::try_unwrap(last) {
                                 self.context.remove_resource_dyn(last.0);
                             }
                         }
