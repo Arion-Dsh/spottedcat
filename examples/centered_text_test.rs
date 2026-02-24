@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption, Pt, Spot, WindowConfig, run, Image, load_font_from_bytes};
+use spottedcat::{Context, DrawOption, Pt, Spot, WindowConfig, run, Image};
 
 struct CenteredTextTestSpot {
     font_id: u32,
@@ -8,8 +8,7 @@ impl Spot for CenteredTextTestSpot {
     fn initialize(_context: &mut Context) -> Self {
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_data = load_font_from_bytes(FONT);
-        let font_id = spottedcat::register_font(font_data);
+        let font_id = spottedcat::register_font(FONT.to_vec());
 
         Self { font_id }
     }

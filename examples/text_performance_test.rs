@@ -1,6 +1,6 @@
 fn main() {
     use spottedcat::{
-        Context, DrawOption, Pt, Spot, Text, WindowConfig, load_font_from_bytes, run,
+        Context, DrawOption, Pt, Spot, Text, WindowConfig, run,
     };
 
     struct TextPerformanceSpot {
@@ -10,8 +10,7 @@ fn main() {
     impl Spot for TextPerformanceSpot {
         fn initialize(_context: &mut Context) -> Self {
             const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-            let font_data = load_font_from_bytes(FONT);
-            let font_id = spottedcat::register_font(font_data);
+            let font_id = spottedcat::register_font(FONT.to_vec());
 
             let mut texts = Vec::new();
 

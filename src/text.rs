@@ -31,10 +31,10 @@ impl Text {
     ///
     /// # Example
     /// ```no_run
-    /// # use spottedcat::{Text, load_font_from_bytes};
+    /// # use spottedcat::Text;
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-    /// let font_data = load_font_from_bytes(FONT);
-    /// let text = Text::new("Hello, World!", font_data);
+    /// let font_id = spottedcat::register_font(FONT.to_vec());
+    /// let text = Text::new("Hello, World!", font_id);
     /// ```
     pub fn new(content: impl Into<String>, font_id: u32) -> Self {
         Self {
@@ -77,10 +77,10 @@ impl Text {
     ///
     /// # Example
     /// ```no_run
-    /// # use spottedcat::{Text, load_font_from_bytes};
+    /// # use spottedcat::Text;
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-    /// let font_data = load_font_from_bytes(FONT);
-    /// let text = Text::new("Hello, World!", font_data)
+    /// let font_id = spottedcat::register_font(FONT.to_vec());
+    /// let text = Text::new("Hello, World!", font_id)
     ///     .with_font_size(spottedcat::Pt::from(32.0));
     /// let font_size = text.font_size();
     /// ```
@@ -96,13 +96,13 @@ impl Text {
     ///
     /// # Example
     /// ```no_run
-    /// # use spottedcat::{Context, Text, DrawOption, load_font_from_bytes};
+    /// # use spottedcat::{Context, Text, DrawOption};
     /// # let mut context = Context::new();
     /// const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-    /// let font_data = load_font_from_bytes(FONT);
+    /// let font_id = spottedcat::register_font(FONT.to_vec());
     /// let opts = DrawOption::default()
     ///     .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
-    /// Text::new("Hello, World!", font_data)
+    /// Text::new("Hello, World!", font_id)
     ///     .with_font_size(spottedcat::Pt::from(32.0))
     ///     .draw(&mut context, opts);
     /// ```

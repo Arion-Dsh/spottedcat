@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.2.8"
+version = "0.2.9
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -21,6 +21,9 @@ anyhow = "1"
 winit = "0.30"
 image = "0.25"
 ab_glyph = "0.2"
+cpal = "0.15"
+symphonia = { version = "0.5", features = ["all"] }
+fundsp = "0.18"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = "0.2"
@@ -46,6 +49,10 @@ path = "examples/seven_level_test.rs"
 [[example]]
 name = "text_performance_test"
 path = "examples/text_performance_test.rs"
+
+[[example]]
+name = "audio_test"
+path = "examples/audio_test.rs"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]

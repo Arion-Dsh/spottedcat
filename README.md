@@ -2,12 +2,22 @@
 
 A simple, clean 2D graphics library for drawing images using Rust and wgpu.
 
+## Why spottedcat?
+
+The library is named after the **Rusty-spotted cat** (*Prionailurus rubiginosus*), the world's smallest wild cat. Just like its namesake, this library aims to be tiny, agile, and remarkably efficient.
+
+
 ## Features
 
-- **Simple API**: Only 4 main types to learn: `Context`, `Spot`, `Image`, and `run`
-- **GPU-accelerated**: Built on wgpu for high-performance rendering
-- **Image operations**: Load from files, create from raw data, extract sub-images
-- **Flexible drawing**: Position, scale, rotate images with ease
+- **Simple API**: Minimal core types to learn: `Context`, `Spot`, `Image`, `Text`, and `run`.
+- **GPU-accelerated**: Built on wgpu for high-performance rendering.
+- **Image operations**: Load from files, create from raw data, extract sub-images.
+- **Text rendering**: Custom font support, text wrapping, and styling (color, stroke).
+- **Audio support**: Play sounds (PNG/WAV/etc.), sine waves, and handle fades/volume.
+- **Input management**: High-level API for Keyboard, Mouse, and Touch events.
+- **Scene management**: Easy switching between game scenes with payload support.
+- **Resource management**: Built-in dependency injection for shared resources.
+- **Cross-platform**: Support for Desktop, Web (WASM), and Android.
 
 ## Quick Start
 
@@ -15,125 +25,82 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.1.0" }
+spottedcat = "0.2.9"
 ```
 
 ### Basic Example
 
 ```rust
-use spottedcat::{Context, Spot, Image, DrawOption};
+use spottedcat::{Context, Spot, Image, DrawOption, Pt, WindowConfig};
+use std::time::Duration;
 
 struct MyApp {
     image: Image,
 }
 
 impl Spot for MyApp {
-    fn initialize(_context: &mut Context) -> Self {
-        let image = Image::new_from_file("image.png")
-            .expect("Failed to load image");
+    fn initialize(context: &mut Context) -> Self {
+        // Create an image from raw RGBA8 data (or use the 'image' crate to load pixels)
+        let rgba = vec![255u8; 64 * 64 * 4]; // Red square
+        let image = Image::new_from_rgba8(Pt::from(64.0), Pt::from(64.0), &rgba)
+            .expect("Failed to create image");
         Self { image }
     }
 
+    fn update(&mut self, _context: &mut Context, _dt: Duration) {
+        // Handle logic here
+    }
+
     fn draw(&mut self, context: &mut Context) {
+        let (w, h) = spottedcat::window_size(context);
+        
+        // Draw image at center
         let opts = DrawOption::default()
-            .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)])
+            .with_position([w / 2.0, h / 2.0])
             .with_scale([2.0, 2.0]);
         self.image.draw(context, opts);
     }
 
-    fn update(&mut self, _context: &mut spottedcat::Context, _dt: std::time::Duration) {}
     fn remove(&self) {}
 }
 
 fn main() {
-    spottedcat::run::<MyApp>(spottedcat::WindowConfig::default());
+    spottedcat::run::<MyApp>(WindowConfig {
+        title: "SpottedCat Example".to_string(),
+        ..Default::default()
+    });
 }
 ```
 
 ## API Overview
 
-### Core Types
+### Core Components
 
-#### `Context`
-Drawing context for managing render commands. Accumulates drawing operations during a frame.
+- **`Context`**: Central state for managing draw commands, input, audio, and resources.
+- **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
+- **`Image`**: GPU texture handle for drawing. Supports sub-images and raw data creation.
+- **`Text`**: High-level text rendering with font registration and layout.
+- **`DrawOption`**: Unified configuration for position, rotation, scale, and clipping.
 
-**Methods:**
-- `new()` - Create a new context
-- `begin_frame()` - Clear previous frame's commands
-- Use `Image::draw(context, options)` to queue an image for drawing
+### Key Systems
 
-#### `Spot` (trait)
-Main application trait defining the lifecycle of your app.
+- **Input**: Check keys with `key_down`, mouse with `mouse_button_pressed`, or get `touches`.
+- **Audio**: Load and play sounds with `play_sound`, or generate tones with `play_sine`.
+- **Scenes**: Transition between states using `switch_scene::<NewScene>()`.
+- **Resources**: Share data between systems via `context.get_resource::<T>()`.
 
-**Required methods:**
-- `initialize(&mut context)` - Set up initial state and load resources
-- `draw(&mut context)` - Render the current frame
-- `update(event)` - Handle events (reserved for future use)
-- `remove()` - Cleanup on shutdown
+## Platform Support
 
-#### `Image`
-Handle to a GPU texture that can be drawn to the screen.
+- **Desktop**: Windows, macOS, Linux.
+- **Web**: Compile to WASM with `wasm-pack`. See `canvas_id` in `WindowConfig`.
+- **Android**: Integrated with `winit`'s android-activity.
 
-**Methods:**
-- `new_from_rgba8(width, height, rgba)` - Create from raw pixel data
-- `new_from_file(path)` - Load from image file (PNG, JPEG, etc.)
-- `new_from_image(image)` - Clone an existing image
-- `sub_image(image, bounds)` - Extract a region from an image
-- `destroy()` - Free GPU resources
+## License
 
-#### `DrawOptions`
-Options for controlling how images are rendered.
+This project is licensed under either of:
 
-**Fields:**
-- `position: [f32; 2]` - Top-left corner in screen pixels
-- `rotation: f32` - Rotation in radians
-- `scale: [f32; 2]` - Scale factors (applied after the image's intrinsic size)
+- Apache License, Version 2.0
+- MIT license
 
-#### `Bounds`
-Rectangle for defining sub-regions of images.
+at your option.
 
-**Fields:**
-- `x: u32` - X coordinate
-- `y: u32` - Y coordinate  
-- `width: u32` - Width
-- `height: u32` - Height
-
-### Functions
-
-#### `run(init)`
-Main entry point. Creates a window, initializes graphics, and runs the event loop.
-
-**Arguments:**
-- `init: fn(&mut Context) -> Box<dyn Spot>` - Function to create your app
-
-## Advanced Usage
-
-### Creating Sub-Images
-
-Extract regions from existing images without duplicating GPU memory:
-
-```rust
-let full_image = Image::new_from_file("spritesheet.png")?;
-let sprite = Image::sub_image(
-    full_image,
-    Bounds::new(0, 0, 32, 32)
-)?;
-```
-
-### Drawing with Transformations
-
-```rust
-let opts = DrawOption::default()
-    .with_position([spottedcat::Pt::from(400.0), spottedcat::Pt::from(300.0)])
-    .with_rotation(std::f32::consts::PI / 4.0) // 45 degrees
-    .with_scale([2.0, 2.0]); // Double size
-image.draw(&mut context, opts);
-```
-
-### Creating Images from Raw Data
-
-```rust
-let mut rgba = vec![0u8; 64 * 64 * 4];
-// Fill with your pixel data...
-let image = Image::new_from_rgba8(64, 64, &rgba)?;
-```

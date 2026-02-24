@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption, Pt, Spot, WindowConfig, run, Image, load_font_from_bytes};
+use spottedcat::{Context, DrawOption, Pt, Spot, WindowConfig, run, Image};
 
 struct SevenLevelNestTestSpot {
     red_image: Image,
@@ -18,8 +18,7 @@ impl Spot for SevenLevelNestTestSpot {
 
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_data = load_font_from_bytes(FONT);
-        let font_id = spottedcat::register_font(font_data);
+        let font_id = spottedcat::register_font(FONT.to_vec());
 
         Self { red_image, font_id }
     }

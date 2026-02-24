@@ -10,8 +10,7 @@ struct InputExample {
 impl Spot for InputExample {
     fn initialize(_: &mut Context) -> Self {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_data = spottedcat::load_font_from_bytes(FONT);
-        let font_id = spottedcat::register_font(font_data);
+        let font_id = spottedcat::register_font(FONT.to_vec());
 
         Self {
             x: 200.0,

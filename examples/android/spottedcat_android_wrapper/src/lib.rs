@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig, load_font_from_bytes};
+use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig};
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
@@ -24,8 +24,8 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
             let son = Image::new_from_rgba8(Pt::from(100.0), Pt::from(100.0), &son_rgba).unwrap();
 
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
-            let font = load_font_from_bytes(FALLBACK_FONT);
-            let text = Text::new("Clipped Text", font)
+            let font_id = spottedcat::register_font(FALLBACK_FONT.to_vec());
+            let text = Text::new("Clipped Text", font_id)
                 .with_font_size(Pt::from(24.0))
                 .with_color([1.0, 1.0, 1.0, 1.0]);
 
