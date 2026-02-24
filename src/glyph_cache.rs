@@ -1,4 +1,4 @@
-use crate::image::ImageEntry;
+use crate::Image;
 use std::collections::HashMap;
 
 /// Key for caching individual glyphs in the atlas
@@ -9,10 +9,10 @@ pub(crate) struct GlyphCacheKey {
     pub glyph_id: u32,
 }
 
-/// Cached glyph data including atlas image and positioning offset
+/// Cached glyph data including atlas image handle and positioning offset
 #[derive(Clone, Debug)]
 pub(crate) struct GlyphEntry {
-    pub image: ImageEntry,
+    pub image: Image,
     pub offset: [f32; 2],
     pub advance: f32, // Horizontal advance width
 }

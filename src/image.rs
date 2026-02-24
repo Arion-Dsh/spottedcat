@@ -64,6 +64,17 @@ impl Image {
     pub fn id(&self) -> u32 {
         self.id
     }
+
+    /// Returns true if the image is ready for rendering.
+    pub fn is_ready(&self) -> bool {
+        with_graphics(|g| {
+            g.images
+                .get(self.index())
+                .and_then(|v| v.as_ref())
+                .map(|e| e.is_ready())
+                .unwrap_or(false)
+        })
+    }
 }
 
 impl Image {
@@ -286,20 +297,20 @@ impl Image {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ImageEntry {
-    pub(crate) atlas_index: u32,
+    pub(crate) atlas_index: Option<u32>,
     pub(crate) bounds: Bounds,
-    pub(crate) uv_rect: [f32; 4], // [u, v, w, h]
+    pub(crate) uv_rect: Option<[f32; 4]>, // [u, v, w, h]
     pub(crate) visible: bool,
-    pub(crate) raw_data: Option<Arc<Vec<u8>>>,
+    pub(crate) raw_data: Option<Arc<[u8]>>,
     pub(crate) parent_id: Option<u32>,
 }
 
 impl ImageEntry {
     pub(crate) fn new(
-        atlas_index: u32,
+        atlas_index: Option<u32>,
         bounds: Bounds,
-        uv_rect: [f32; 4],
-        raw_data: Option<Arc<Vec<u8>>>,
+        uv_rect: Option<[f32; 4]>,
+        raw_data: Option<Arc<[u8]>>,
         parent_id: Option<u32>,
     ) -> Self {
         Self {
@@ -310,5 +321,9 @@ impl ImageEntry {
             raw_data,
             parent_id,
         }
+    }
+
+    pub(crate) fn is_ready(&self) -> bool {
+        self.atlas_index.is_some() && self.uv_rect.is_some()
     }
 }

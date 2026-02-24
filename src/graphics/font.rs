@@ -85,15 +85,8 @@ impl Graphics {
             &rgba_data,
         )?;
 
-        let image_entry = self
-            .images
-            .get(image.index())
-            .and_then(|e| e.as_ref())
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get created glyph image"))?;
-
         Ok(GlyphEntry {
-            image: image_entry,
+            image,
             offset: [bounds.min.x, bounds.min.y],
             advance: h_advance,
         })

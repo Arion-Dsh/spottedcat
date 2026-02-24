@@ -83,6 +83,14 @@ impl Graphics {
                     }
                 };
 
+                let img_id = entry.image.id() as usize;
+                let img_entry = if let Some(Some(e)) = self.images.get(img_id) {
+                    e
+                } else {
+                    caret_pos[0] += Pt::from(entry.advance);
+                    continue;
+                };
+
                 let baseline_y = caret_pos[1] + Pt::from(ascent);
                 let draw_x = caret_pos[0] + Pt::from(entry.offset[0]);
                 let draw_y = baseline_y + Pt::from(entry.offset[1]);
@@ -93,8 +101,8 @@ impl Graphics {
                 let final_x = start_pos[0].as_f32() + rel_x;
                 let final_y = start_pos[1].as_f32() + rel_y;
 
-                let w = entry.image.bounds.width.as_f32() * sx;
-                let h = entry.image.bounds.height.as_f32() * sy;
+                let w = img_entry.bounds.width.as_f32() * sx;
+                let h = img_entry.bounds.height.as_f32() * sy;
 
                 if final_x + w >= viewport_rect[0]
                     && final_x <= viewport_rect[2]
@@ -108,7 +116,7 @@ impl Graphics {
                     shader_opts.set_vec4(0, text.color);
 
                     self.resolved_draws.push(ResolvedDraw {
-                        img_entry: entry.image.clone(),
+                        img_entry: img_entry.clone(),
                         opts: glyph_opts,
                         shader_id: self.text_shader_id,
                         shader_opts,

@@ -27,7 +27,7 @@ impl Graphics {
             match drawable {
                 DrawCommand::Image(id, opts, shader_id, shader_opts, _) => {
                     if let Some(Some(entry)) = self.images.get(*id as usize) {
-                        if !entry.visible {
+                        if !entry.visible || !entry.is_ready() {
                             continue;
                         }
 
@@ -87,24 +87,29 @@ impl Graphics {
         rpass.set_scissor_rect(0, 0, config_width.max(1), config_height.max(1));
         let mut last_set_scissor: Option<(u32, u32, u32, u32)> = None;
 
-        for i in 0..self.resolved_draws.len() {
-            let resolved = &self.resolved_draws[i];
+        for resolved in &self.resolved_draws {
             let img_entry = &resolved.img_entry;
             let opts = resolved.opts;
             let shader_id = resolved.shader_id;
             let shader_opts = resolved.shader_opts;
-
-            let effective_user_globals = shader_opts;
             let draw_opacity = opts.opacity();
 
-            let state_changed = current_atlas_index != Some(img_entry.atlas_index)
+            let uv_rect = match img_entry.uv_rect {
+                Some(uv) => uv,
+                None => continue,
+            };
+
+            let effective_user_globals = shader_opts;
+
+            let state_changed = current_atlas_index != img_entry.atlas_index
                 || current_shader_id != shader_id
                 || current_user_globals != effective_user_globals
                 || current_clip != opts.get_clip()
                 || current_opacity != draw_opacity;
 
             if state_changed && !self.batch.is_empty() {
-                let ai = current_atlas_index.unwrap();
+                let ai = current_atlas_index
+                    .expect("current_atlas_index should be Some if batch is not empty");
                 let atlas_bg = &self.atlases.get(ai as usize).expect("atlas").bind_group;
 
                 if let Ok(range) = self
@@ -145,14 +150,6 @@ impl Graphics {
                 || (current_atlas_index.is_none() && self.batch.is_empty())
             {
                 current_user_globals = effective_user_globals;
-                if std::env::var("SPOT_DEBUG_SHADER").is_ok() {
-                    let b = current_user_globals.as_bytes();
-                    let x0 = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
-                    eprintln!(
-                        "[spot][debug][shader] upload user_globals[0].x={:.3} shader_id={}",
-                        x0, shader_id
-                    );
-                }
                 current_user_globals_offset = self
                     .image_renderer
                     .upload_user_globals_bytes(&self.queue, current_user_globals.as_bytes())
@@ -185,7 +182,7 @@ impl Graphics {
                 }
             }
 
-            current_atlas_index = Some(img_entry.atlas_index);
+            current_atlas_index = img_entry.atlas_index;
             current_shader_id = shader_id;
 
             self.batch.push(InstanceData {
@@ -195,12 +192,13 @@ impl Graphics {
                     img_entry.bounds.width.as_f32() * opts.scale()[0],
                     img_entry.bounds.height.as_f32() * opts.scale()[1],
                 ],
-                uv_rect: img_entry.uv_rect,
+                uv_rect,
             });
         }
 
         if !self.batch.is_empty() {
-            let ai = current_atlas_index.unwrap();
+            let ai = current_atlas_index
+                .expect("current_atlas_index should be Some if batch is not empty");
             let atlas_bg = &self.atlases.get(ai as usize).expect("atlas").bind_group;
             if let Ok(range) = self
                 .image_renderer
@@ -229,6 +227,7 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         context: &Context,
     ) -> Result<(), wgpu::SurfaceError> {
+        let _ = self.process_registrations();
         self.draw_drawables_with_context(
             surface,
             context.draw_list(),
