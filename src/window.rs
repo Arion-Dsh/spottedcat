@@ -63,6 +63,8 @@ pub(crate) struct App {
 impl App {
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
         let instance = platform::create_wgpu_instance();
+        let audio = crate::audio::AudioSystem::new().expect("failed to initialize audio system");
+        let _ = platform::set_global_audio(audio);
 
         Self {
             window: None,
@@ -91,6 +93,8 @@ impl App {
         canvas_id: Option<String>,
     ) -> Self {
         let instance = platform::create_wgpu_instance();
+        let audio = crate::audio::AudioSystem::new().expect("failed to initialize audio system");
+        let _ = platform::set_global_audio(audio);
 
         Self {
             window: None,

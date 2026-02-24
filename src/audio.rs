@@ -12,15 +12,34 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
-pub(crate) struct AudioSystem {
+pub struct AudioSystem(pub(crate) Arc<AudioSystemInner>);
+
+impl Clone for AudioSystem {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+pub(crate) struct AudioSystemInner {
     #[allow(dead_code)]
     stream: cpal::Stream,
     handler: Arc<Mutex<MixerHandler>>,
 }
 
+// cpal::Stream is safe to send and sync on most platforms.
+// We explicitly implement Send and Sync to allow storing AudioSystem in a global static/Arc.
+unsafe impl Send for AudioSystemInner {}
+unsafe impl Sync for AudioSystemInner {}
+
 impl fmt::Debug for AudioSystem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AudioSystem").finish()
+    }
+}
+
+impl fmt::Debug for AudioSystemInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AudioSystemInner").finish()
     }
 }
 
@@ -63,6 +82,64 @@ impl MixerHandler {
 
 impl AudioSystem {
     pub fn new() -> Result<Self> {
+        Ok(Self(Arc::new(AudioSystemInner::new()?)))
+    }
+
+    pub(crate) fn play_sine(&self, freq: f32, volume: f32) -> Option<u64> {
+        self.0.play_sine(freq, volume)
+    }
+
+    pub(crate) fn play_registered_sound_with_options(
+        &self,
+        sound_id: u32,
+        options: PlayOptions,
+    ) -> Option<u64> {
+        self.0.play_registered_sound_with_options(sound_id, options)
+    }
+
+    pub(crate) fn play_sound_with_options(
+        &self,
+        sound: &SoundData,
+        options: PlayOptions,
+    ) -> Option<u64> {
+        self.0.play_sound_with_options(sound, options)
+    }
+
+    pub(crate) fn register_sound(&self, sound_data: SoundData) -> u32 {
+        self.0.register_sound(sound_data)
+    }
+
+    pub(crate) fn pause_play_id(&self, play_id: u64) {
+        self.0.pause_play_id(play_id);
+    }
+
+    pub(crate) fn resume_play_id(&self, play_id: u64) {
+        self.0.resume_play_id(play_id);
+    }
+
+    pub(crate) fn stop_play_id(&self, play_id: u64) {
+        self.0.stop_play_id(play_id);
+    }
+
+    pub(crate) fn fade_in_play_id(&self, play_id: u64, duration: Duration) {
+        self.0.fade_in_play_id(play_id, duration);
+    }
+
+    pub(crate) fn fade_out_play_id(&self, play_id: u64, duration: Duration) {
+        self.0.fade_out_play_id(play_id, duration);
+    }
+
+    pub(crate) fn set_volume_play_id(&self, play_id: u64, volume: f32) {
+        self.0.set_volume_play_id(play_id, volume);
+    }
+
+    pub(crate) fn is_playing_play_id(&self, play_id: u64) -> bool {
+        self.0.is_playing_play_id(play_id)
+    }
+}
+
+impl AudioSystemInner {
+    fn new() -> Result<Self> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -100,7 +177,7 @@ impl AudioSystem {
         Ok(Self { stream, handler })
     }
 
-    pub(crate) fn play_sine(&self, freq: f32, volume: f32) -> Option<u64> {
+    fn play_sine(&self, freq: f32, volume: f32) -> Option<u64> {
         let sample_rate = {
             let Ok(h) = self.handler.lock() else {
                 return None;
@@ -130,7 +207,7 @@ impl AudioSystem {
         )
     }
 
-    pub(crate) fn play_registered_sound_with_options(
+    fn play_registered_sound_with_options(
         &self,
         sound_id: u32,
         options: PlayOptions,
@@ -139,14 +216,14 @@ impl AudioSystem {
             return None;
         };
         let sound = handler.sound_registry.get(&sound_id)?.clone();
-        Some(Self::add_playing_sound_locked(&mut handler, &sound, options))
+        Some(Self::add_playing_sound_locked(
+            &mut handler,
+            &sound,
+            options,
+        ))
     }
 
-    pub(crate) fn play_sound_with_options(
-        &self,
-        sound: &SoundData,
-        options: PlayOptions,
-    ) -> Option<u64> {
+    fn play_sound_with_options(&self, sound: &SoundData, options: PlayOptions) -> Option<u64> {
         if sound.samples.is_empty() || sound.sample_rate == 0 {
             return None;
         }
@@ -157,7 +234,7 @@ impl AudioSystem {
         }
     }
 
-    pub(crate) fn register_sound(&self, sound_data: SoundData) -> u32 {
+    fn register_sound(&self, sound_data: SoundData) -> u32 {
         let Ok(mut handler) = self.handler.lock() else {
             return 0;
         };
@@ -207,19 +284,19 @@ impl AudioSystem {
         play_id
     }
 
-    pub(crate) fn pause_play_id(&self, play_id: u64) {
+    fn pause_play_id(&self, play_id: u64) {
         self.update_playing(play_id, |sound| sound.paused = true);
     }
 
-    pub(crate) fn resume_play_id(&self, play_id: u64) {
+    fn resume_play_id(&self, play_id: u64) {
         self.update_playing(play_id, |sound| sound.paused = false);
     }
 
-    pub(crate) fn stop_play_id(&self, play_id: u64) {
+    fn stop_play_id(&self, play_id: u64) {
         self.update_playing(play_id, |sound| sound.finished = true);
     }
 
-    pub(crate) fn fade_in_play_id(&self, play_id: u64, duration: Duration) {
+    fn fade_in_play_id(&self, play_id: u64, duration: Duration) {
         let frames = duration_to_frames(duration, self.sample_rate());
         if frames == 0 {
             return;
@@ -230,7 +307,7 @@ impl AudioSystem {
         });
     }
 
-    pub(crate) fn fade_out_play_id(&self, play_id: u64, duration: Duration) {
+    fn fade_out_play_id(&self, play_id: u64, duration: Duration) {
         let frames = duration_to_frames(duration, self.sample_rate());
         if frames == 0 {
             self.stop_play_id(play_id);
@@ -242,11 +319,11 @@ impl AudioSystem {
         });
     }
 
-    pub(crate) fn set_volume_play_id(&self, play_id: u64, volume: f32) {
+    fn set_volume_play_id(&self, play_id: u64, volume: f32) {
         self.update_playing(play_id, |sound| sound.volume = volume.max(0.0));
     }
 
-    pub(crate) fn is_playing_play_id(&self, play_id: u64) -> bool {
+    fn is_playing_play_id(&self, play_id: u64) -> bool {
         let Ok(handler) = self.handler.lock() else {
             return false;
         };

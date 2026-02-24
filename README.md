@@ -25,7 +25,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.3.0"
+spottedcat = "0.3.1"
 ```
 
 ### Basic Example

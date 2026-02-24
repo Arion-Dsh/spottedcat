@@ -6,7 +6,7 @@ struct AudioTest {
 }
 
 impl Spot for AudioTest {
-    fn initialize(context: &mut Context) -> Self {
+    fn initialize(_context: &mut Context) -> Self {
         println!("Audio Test Initialized. Press any key to play a sine wave.");
         Self {
             timer: Duration::ZERO,

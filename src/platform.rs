@@ -79,7 +79,9 @@ pub(crate) fn begin_graphics_init(
 ) {
     match init_state {
         GraphicsInitState::NotStarted => {}
-        GraphicsInitState::Pending | GraphicsInitState::Ready(_) | GraphicsInitState::Failed => return,
+        GraphicsInitState::Pending | GraphicsInitState::Ready(_) | GraphicsInitState::Failed => {
+            return;
+        }
     }
 
     *init_state = GraphicsInitState::Pending;
@@ -156,6 +158,14 @@ thread_local! {
     static GLOBAL_GRAPHICS: RefCell<Option<Graphics>> = RefCell::new(None);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+static GLOBAL_AUDIO: OnceLock<crate::audio::AudioSystem> = OnceLock::new();
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+thread_local! {
+    static GLOBAL_AUDIO: RefCell<Option<crate::audio::AudioSystem>> = RefCell::new(None);
+}
+
 pub(crate) fn set_global_graphics(graphics: Graphics) -> Result<(), Graphics> {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -178,6 +188,28 @@ pub(crate) fn set_global_graphics(graphics: Graphics) -> Result<(), Graphics> {
     }
 }
 
+pub(crate) fn set_global_audio(
+    audio: crate::audio::AudioSystem,
+) -> Result<(), crate::audio::AudioSystem> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        return GLOBAL_AUDIO.set(audio);
+    }
+
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    {
+        return GLOBAL_AUDIO.with(|cell| {
+            let mut slot = cell.borrow_mut();
+            if slot.is_some() {
+                Err(audio)
+            } else {
+                *slot = Some(audio);
+                Ok(())
+            }
+        });
+    }
+}
+
 pub(crate) fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -194,6 +226,28 @@ pub(crate) fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
             let mut slot = cell.borrow_mut();
             let g = slot.as_mut().expect("global Graphics not initialized");
             f(g)
+        });
+    }
+}
+
+pub(crate) fn with_audio<R>(f: impl FnOnce(&mut crate::audio::AudioSystem) -> R) -> R {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let a = GLOBAL_AUDIO
+            .get()
+            .expect("global AudioSystem not initialized");
+        // Since AudioSystem is a handle (Arc wrapper), we can clone it
+        // and pass a mutable reference to the clone to the closure.
+        let mut a_clone = a.clone();
+        return f(&mut a_clone);
+    }
+
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    {
+        return GLOBAL_AUDIO.with(|cell| {
+            let mut slot = cell.borrow_mut();
+            let a = slot.as_mut().expect("global AudioSystem not initialized");
+            f(a)
         });
     }
 }

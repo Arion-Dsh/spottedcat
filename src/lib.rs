@@ -185,7 +185,7 @@ impl Context {
             scale_factor: 1.0,
             window_logical_size: (Pt(0.0), Pt(0.0)),
             resources: ResourceMap::default(),
-            audio: audio::AudioSystem::new().expect("failed to initialize audio system"),
+            audio: platform::with_audio(|a| a.clone()),
             state_stack: Vec::new(),
             current_state: DrawState::default(),
             last_image_opts: HashMap::new(),
@@ -505,9 +505,9 @@ pub fn get_registered_font(font_id: u32) -> Option<Vec<u8>> {
     with_graphics(|g| g.get_font(font_id).cloned())
 }
 
-pub fn register_sound(context: &Context, bytes: Vec<u8>) -> anyhow::Result<u32> {
+pub fn register_sound(bytes: Vec<u8>) -> anyhow::Result<u32> {
     let sound_data = audio::decode_sound_from_bytes(bytes)?;
-    Ok(context.audio().register_sound(sound_data))
+    Ok(platform::with_audio(|a| a.register_sound(sound_data)))
 }
 
 pub fn play_sound(context: &Context, sound_id: u32, options: SoundOptions) -> Option<u64> {
