@@ -509,6 +509,16 @@ pub fn unregister_font(font_id: u32) {
     with_graphics(|g| g.unregister_font(font_id));
 }
 
+/// Manually compresses GPU assets to reclaim memory.
+///
+/// This will rebuild the texture atlases if any assets have been unregistered,
+/// defragmenting GPU memory and physically releasing unused space.
+pub fn compress_assets() {
+    with_graphics(|g| {
+        let _ = g.compress_assets();
+    });
+}
+
 pub fn register_sound(bytes: Vec<u8>) -> anyhow::Result<u32> {
     let sound_data = audio::decode_sound_from_bytes(bytes)?;
     Ok(platform::with_audio(|a| a.register_sound(sound_data)))

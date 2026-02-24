@@ -72,10 +72,10 @@ impl Graphics {
                 };
 
                 let entry = if let Some(e) = self.glyph_cache.get(&cache_key) {
-                    *e
+                    e.clone()
                 } else {
                     if let Ok(e) = self.render_single_glyph(font_id, px_size, glyph_id.0 as u32) {
-                        self.glyph_cache.insert(cache_key, e);
+                        self.glyph_cache.insert(cache_key, e.clone());
                         e
                     } else {
                         caret_pos[0] += Pt::from(scaled.h_advance(glyph_id));
@@ -108,7 +108,7 @@ impl Graphics {
                     shader_opts.set_vec4(0, text.color);
 
                     self.resolved_draws.push(ResolvedDraw {
-                        img_entry: entry.image,
+                        img_entry: entry.image.clone(),
                         opts: glyph_opts,
                         shader_id: self.text_shader_id,
                         shader_opts,

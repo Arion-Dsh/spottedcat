@@ -21,6 +21,7 @@ impl Graphics {
     pub(crate) fn unregister_font(&mut self, font_id: u32) {
         self.font_registry.remove(&font_id);
         self.font_cache.remove(&(font_id as u64));
+        self.dirty_assets = true;
     }
 
     /// Render a single glyph to the atlas and cache it
@@ -88,7 +89,7 @@ impl Graphics {
             .images
             .get(image.index())
             .and_then(|e| e.as_ref())
-            .copied()
+            .cloned()
             .ok_or_else(|| anyhow::anyhow!("Failed to get created glyph image"))?;
 
         Ok(GlyphEntry {

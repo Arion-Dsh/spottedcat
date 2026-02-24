@@ -1,5 +1,6 @@
 use crate::Pt;
 use crate::with_graphics;
+use std::sync::Arc;
 
 /// Rectangle bounds for defining sub-regions of images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -283,21 +284,31 @@ impl Image {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct ImageEntry {
     pub(crate) atlas_index: u32,
     pub(crate) bounds: Bounds,
     pub(crate) uv_rect: [f32; 4], // [u, v, w, h]
     pub(crate) visible: bool,
+    pub(crate) raw_data: Option<Arc<Vec<u8>>>,
+    pub(crate) parent_id: Option<u32>,
 }
 
 impl ImageEntry {
-    pub(crate) fn new(atlas_index: u32, bounds: Bounds, uv_rect: [f32; 4]) -> Self {
+    pub(crate) fn new(
+        atlas_index: u32,
+        bounds: Bounds,
+        uv_rect: [f32; 4],
+        raw_data: Option<Arc<Vec<u8>>>,
+        parent_id: Option<u32>,
+    ) -> Self {
         Self {
             atlas_index,
             bounds,
             uv_rect,
             visible: true,
+            raw_data,
+            parent_id,
         }
     }
 }

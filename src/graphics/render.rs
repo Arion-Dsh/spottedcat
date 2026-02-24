@@ -32,7 +32,7 @@ impl Graphics {
                         }
 
                         self.resolved_draws.push(ResolvedDraw {
-                            img_entry: *entry,
+                            img_entry: entry.clone(),
                             opts: *opts,
                             shader_id: *shader_id,
                             shader_opts: *shader_opts,
@@ -88,8 +88,8 @@ impl Graphics {
         let mut last_set_scissor: Option<(u32, u32, u32, u32)> = None;
 
         for i in 0..self.resolved_draws.len() {
-            let resolved = self.resolved_draws[i];
-            let img_entry = resolved.img_entry;
+            let resolved = &self.resolved_draws[i];
+            let img_entry = &resolved.img_entry;
             let opts = resolved.opts;
             let shader_id = resolved.shader_id;
             let shader_opts = resolved.shader_opts;

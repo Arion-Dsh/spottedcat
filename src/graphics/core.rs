@@ -19,7 +19,7 @@ pub(crate) struct AtlasSlot {
     pub bind_group: wgpu::BindGroup,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct ResolvedDraw {
     pub img_entry: ImageEntry,
     pub opts: DrawOption,
@@ -44,6 +44,7 @@ pub struct Graphics {
     pub(crate) glyph_cache: GlyphCache,
     pub(crate) resolved_draws: Vec<ResolvedDraw>,
     pub(crate) text_shader_id: u32,
+    pub(crate) dirty_assets: bool,
 }
 
 impl Graphics {
@@ -178,6 +179,7 @@ impl Graphics {
             glyph_cache: GlyphCache::new(),
             resolved_draws: Vec::with_capacity(10000),
             text_shader_id: 0,
+            dirty_assets: false,
         };
 
         // Register default text shader for tinting

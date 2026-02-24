@@ -10,7 +10,7 @@ pub(crate) struct GlyphCacheKey {
 }
 
 /// Cached glyph data including atlas image and positioning offset
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct GlyphEntry {
     pub image: ImageEntry,
     pub offset: [f32; 2],
@@ -35,6 +35,10 @@ impl GlyphCache {
 
     pub(crate) fn insert(&mut self, key: GlyphCacheKey, entry: GlyphEntry) {
         self.cache.insert(key, entry);
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.cache.clear();
     }
 }
 
