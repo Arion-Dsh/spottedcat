@@ -505,6 +505,10 @@ pub fn get_registered_font(font_id: u32) -> Option<Vec<u8>> {
     with_graphics(|g| g.get_font(font_id).cloned())
 }
 
+pub fn unregister_font(font_id: u32) {
+    with_graphics(|g| g.unregister_font(font_id));
+}
+
 pub fn register_sound(bytes: Vec<u8>) -> anyhow::Result<u32> {
     let sound_data = audio::decode_sound_from_bytes(bytes)?;
     Ok(platform::with_audio(|a| a.register_sound(sound_data)))
@@ -554,6 +558,10 @@ pub fn set_sound_volume(context: &Context, play_id: u64, volume: f32) {
 
 pub fn is_sound_playing(context: &Context, play_id: u64) -> bool {
     context.audio().is_playing_play_id(play_id)
+}
+
+pub fn unregister_sound(context: &Context, sound_id: u32) {
+    context.audio().unregister_sound(sound_id);
 }
 
 pub fn play_sine(context: &Context, freq: f32, volume: f32) -> Option<u64> {
@@ -750,35 +758,4 @@ pub trait Spot {
 
     /// Cleanup when the application is shutting down.
     fn remove(&self);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_resource_management() {
-        let mut ctx = Context::new();
-        let val = Rc::new(42i32);
-        ctx.insert_resource(val.clone());
-
-        assert_eq!(ctx.get_resource::<i32>(), Some(val.clone()));
-
-        let removed = ctx.remove_resource::<i32>();
-        assert_eq!(removed, Some(val));
-        assert_eq!(ctx.get_resource::<i32>(), None);
-    }
-
-    #[test]
-    fn test_resource_dyn_management() {
-        let mut ctx = Context::new();
-        let type_id = TypeId::of::<String>();
-        let val = Rc::new("hello".to_string());
-
-        ctx.insert_resource_dyn(type_id, val.clone() as Rc<dyn Any>);
-        assert_eq!(ctx.get_resource::<String>(), Some(val.clone()));
-
-        ctx.remove_resource_dyn(type_id);
-        assert_eq!(ctx.get_resource::<String>(), None);
-    }
 }

@@ -18,6 +18,11 @@ impl Graphics {
         self.font_registry.get(&font_id)
     }
 
+    pub(crate) fn unregister_font(&mut self, font_id: u32) {
+        self.font_registry.remove(&font_id);
+        self.font_cache.remove(&(font_id as u64));
+    }
+
     /// Render a single glyph to the atlas and cache it
     pub(super) fn render_single_glyph(
         &mut self,

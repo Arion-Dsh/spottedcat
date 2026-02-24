@@ -78,6 +78,10 @@ impl MixerHandler {
         }
         self.sounds.retain(|sound| !sound.finished);
     }
+
+    fn unregister_sound(&mut self, sound_id: u32) {
+        self.sound_registry.remove(&sound_id);
+    }
 }
 
 impl AudioSystem {
@@ -135,6 +139,10 @@ impl AudioSystem {
 
     pub(crate) fn is_playing_play_id(&self, play_id: u64) -> bool {
         self.0.is_playing_play_id(play_id)
+    }
+
+    pub(crate) fn unregister_sound(&self, sound_id: u32) {
+        self.0.unregister_sound(sound_id);
     }
 }
 
@@ -242,6 +250,12 @@ impl AudioSystemInner {
         handler.next_sound_id = handler.next_sound_id.saturating_add(1).max(1);
         handler.sound_registry.insert(sound_id, sound_data);
         sound_id
+    }
+
+    fn unregister_sound(&self, sound_id: u32) {
+        if let Ok(mut handler) = self.handler.lock() {
+            handler.unregister_sound(sound_id);
+        }
     }
 
     fn add_playing_sound_locked(
