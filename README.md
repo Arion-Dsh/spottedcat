@@ -17,7 +17,7 @@ The library is named after the **Rusty-spotted cat** (*Prionailurus rubiginosus*
 - **Input management**: High-level API for Keyboard, Mouse, and Touch events.
 - **Scene management**: Easy switching between game scenes with payload support.
 - **Resource management**: Built-in dependency injection for shared resources.
-- **Cross-platform**: Support for Desktop, Web (WASM), and Android.
+- **Cross-platform**: Support for Desktop, Web (WASM), IOS and Android.
 
 ## Quick Start
 
