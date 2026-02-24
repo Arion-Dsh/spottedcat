@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.2.9"
+version = "0.3.0"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -8,7 +8,9 @@ repository = "https://github.com/arion-dsh/spottedcat"
 description = "Rusty SpottedCat simple game engine"
 readme = "README.md"
 exclude = [
-    "examples/**",
+    "examples/android/**",
+    "examples/ios/**",
+    "examples/wasm/**",
     "assets/**",
 ]
 
