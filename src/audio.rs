@@ -144,16 +144,22 @@ impl AudioSystem {
     pub(crate) fn unregister_sound(&self, sound_id: u32) {
         self.0.unregister_sound(sound_id);
     }
+
+    /// Try to resume the audio stream (useful for WASM autoplay policy).
+    pub(crate) fn try_resume(&self) {
+        let _ = self.0.stream.play();
+    }
 }
 
 impl AudioSystemInner {
     fn new() -> Result<Self> {
         let host = cpal::default_host();
+
         let device = host
             .default_output_device()
             .context("no output device available")?;
         let config = device.default_output_config()?;
-        let sample_rate = config.sample_rate().0;
+        let sample_rate = config.sample_rate();
         let channels = config.channels();
 
         let handler = Arc::new(Mutex::new(MixerHandler {
@@ -180,6 +186,17 @@ impl AudioSystemInner {
             _ => return Err(anyhow::anyhow!("Unsupported sample format")),
         };
 
+        // On WASM, stream.play() may fail due to browser autoplay policy.
+        // The AudioContext will be resumed automatically after user interaction.
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            if let Err(e) = stream.play() {
+                web_sys::console::warn_1(
+                    &format!("[spot][audio] play deferred (autoplay policy): {e:?}").into(),
+                );
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         stream.play()?;
 
         Ok(Self { stream, handler })

@@ -1,8 +1,9 @@
-use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig};
+use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig};
 use wasm_bindgen::prelude::*;
 
 struct WasmDemo {
     image: Image,
+    font_id: u32,
 }
 
 impl Spot for WasmDemo {
@@ -22,17 +23,37 @@ impl Spot for WasmDemo {
         let image = Image::new_from_rgba8(Pt::from(64.0), Pt::from(64.0), &rgba)
             .expect("failed to create test image");
 
-        Self { image }
+        // Include font for WASM demo
+        const FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
+        let font_id = spottedcat::register_font(FONT.to_vec());
+
+        Self { image, font_id }
     }
 
     fn draw(&mut self, context: &mut Context) {
         let opts = DrawOption::default()
-            .with_position([Pt::from(40.0), Pt::from(40.0)])
+            .with_position([Pt::from(40.0), Pt::from(100.0)])
             .with_scale([5.0, 5.0]);
         self.image.draw(context, opts);
+
+        let text_opts = DrawOption::default().with_position([Pt::from(40.0), Pt::from(40.0)]);
+        Text::new("SpottedCat WASM Demo", self.font_id)
+            .with_font_size(Pt::from(32.0))
+            .with_color([1.0, 1.0, 1.0, 1.0])
+            .draw(context, text_opts);
+
+        let sub_text_opts = DrawOption::default().with_position([Pt::from(40.0), Pt::from(80.0)]);
+        Text::new("Click to play a tone!", self.font_id)
+            .with_font_size(Pt::from(16.0))
+            .with_color([0.7, 0.9, 1.0, 1.0])
+            .draw(context, sub_text_opts);
     }
 
-    fn update(&mut self, _context: &mut Context, _dt: std::time::Duration) {}
+    fn update(&mut self, context: &mut Context, _dt: std::time::Duration) {
+        if spottedcat::key_pressed(context, spottedcat::Key::Space) {
+            spottedcat::play_sine(context, 440.0, 0.3);
+        }
+    }
 
     fn remove(&self) {}
 }

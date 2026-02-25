@@ -54,6 +54,8 @@ pub(crate) struct App {
     init_state: GraphicsInitState,
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     last_physical_size: Option<(u32, u32)>,
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    audio_initialized: bool,
     scale_factor: f64,
     previous: Option<Instant>,
     lag: Duration,
@@ -80,6 +82,8 @@ impl App {
             init_state: GraphicsInitState::NotStarted,
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             last_physical_size: None,
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            audio_initialized: false,
             scale_factor: 1.0,
             previous: None,
             lag: Duration::ZERO,
@@ -93,8 +97,8 @@ impl App {
         canvas_id: Option<String>,
     ) -> Self {
         let instance = platform::create_wgpu_instance();
-        let audio = crate::audio::AudioSystem::new().expect("failed to initialize audio system");
-        let _ = platform::set_global_audio(audio);
+        // Audio init is deferred to first user gesture to satisfy browser
+        // autoplay policy.  See `init_audio_on_gesture` below.
 
         Self {
             window: None,
@@ -108,10 +112,29 @@ impl App {
             canvas_id,
             init_state: GraphicsInitState::NotStarted,
             last_physical_size: None,
+            audio_initialized: false,
             scale_factor: 1.0,
             previous: None,
             lag: Duration::ZERO,
             fixed_dt: Duration::from_nanos(8_333_333),
+        }
+    }
+
+    /// Lazily initialise the audio system on the first user gesture so that
+    /// the browser's autoplay policy is satisfied.
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    fn init_audio_on_gesture(&mut self) {
+        if self.audio_initialized {
+            return;
+        }
+        self.audio_initialized = true;
+        match crate::audio::AudioSystem::new() {
+            Ok(audio) => {
+                let _ = platform::set_global_audio(audio);
+            }
+            Err(e) => {
+                web_sys::console::warn_1(&format!("[spot][wasm] Audio unavailable: {e:?}").into());
+            }
         }
     }
 
@@ -147,14 +170,6 @@ impl App {
         let dpr = self.scale_factor;
         let w = ((css_w * dpr).round() as i64).max(1) as u32;
         let h = ((css_h * dpr).round() as i64).max(1) as u32;
-
-        web_sys::console::log_1(
-            &format!(
-                "[spot][wasm][canvas] css={:.1}x{:.1} dpr={:.2} px={}x{}",
-                css_w, css_h, dpr, w, h
-            )
-            .into(),
-        );
 
         if self.last_physical_size == Some((w, h)) {
             return;
@@ -488,12 +503,22 @@ impl ApplicationHandler for App {
                     .handle_touch(touch, self.scale_factor);
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                {
+                    self.init_audio_on_gesture();
+                    platform::try_resume_audio();
+                }
                 self.context.input_mut().handle_mouse_input(state, button);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 self.context.input_mut().handle_mouse_wheel(delta);
             }
             WindowEvent::KeyboardInput { event, .. } => {
+                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                {
+                    self.init_audio_on_gesture();
+                    platform::try_resume_audio();
+                }
                 self.context
                     .input_mut()
                     .handle_keyboard_input(event.state, event.physical_key);
@@ -552,7 +577,6 @@ impl ApplicationHandler for App {
 
                 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
                 {
-                    web_sys::console::log_1(&"[spot][wasm] redraw_requested".into());
                     if self.spot.is_some() {
                         self.sync_canvas_resize();
                     }
@@ -588,7 +612,7 @@ impl ApplicationHandler for App {
                         #[cfg(not(target_arch = "wasm32"))]
                         {
                             let r = with_graphics(|g| g.draw_context(surface, &self.context));
-                            if let Err(e) = r {
+                            if let Some(Err(e)) = r {
                                 match e {
                                     wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
                                         if let Some(window) = self.window.as_ref() {
@@ -648,7 +672,7 @@ impl ApplicationHandler for App {
                         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
                         {
                             let r = with_graphics(|g| g.draw_context(surface, &self.context));
-                            if let Err(e) = r {
+                            if let Some(Err(e)) = r {
                                 web_sys::console::error_1(
                                     &format!("[spot][wasm][surface] {:?}", e).into(),
                                 );

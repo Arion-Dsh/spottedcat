@@ -149,7 +149,7 @@ pub struct Context {
     scale_factor: f64,
     window_logical_size: (Pt, Pt),
     resources: ResourceMap,
-    audio: audio::AudioSystem,
+    audio: Option<audio::AudioSystem>,
     state_stack: Vec<DrawState>,
     current_state: DrawState,
     last_image_opts: HashMap<u32, LastImageDrawInfo>,
@@ -420,8 +420,11 @@ impl Context {
         &self.draw_list
     }
 
-    pub(crate) fn audio(&self) -> &audio::AudioSystem {
-        &self.audio
+    pub(crate) fn audio(&self) -> Option<audio::AudioSystem> {
+        if let Some(a) = self.audio.as_ref() {
+            return Some(a.clone());
+        }
+        platform::with_audio(|a| a.clone())
     }
 }
 
@@ -494,15 +497,15 @@ pub fn ime_preedit(context: &Context) -> Option<&str> {
 }
 
 pub fn register_image_shader(wgsl_source: &str) -> u32 {
-    with_graphics(|g| g.register_image_shader(wgsl_source))
+    with_graphics(|g| g.register_image_shader(wgsl_source)).unwrap_or(0)
 }
 
 pub fn register_font(font_data: Vec<u8>) -> u32 {
-    with_graphics(|g| g.register_font(font_data))
+    with_graphics(|g| g.register_font(font_data)).unwrap_or(0)
 }
 
 pub fn get_registered_font(font_id: u32) -> Option<Vec<u8>> {
-    with_graphics(|g| g.get_font(font_id).cloned())
+    with_graphics(|g| g.get_font(font_id).cloned()).flatten()
 }
 
 pub fn unregister_font(font_id: u32) {
@@ -521,7 +524,7 @@ pub fn compress_assets() {
 
 pub fn register_sound(bytes: Vec<u8>) -> anyhow::Result<u32> {
     let sound_data = audio::decode_sound_from_bytes(bytes)?;
-    Ok(platform::with_audio(|a| a.register_sound(sound_data)))
+    Ok(platform::with_audio(|a| a.register_sound(sound_data)).unwrap_or(0))
 }
 
 pub fn play_sound(context: &Context, sound_id: u32, options: SoundOptions) -> Option<u64> {
@@ -532,50 +535,67 @@ pub fn play_sound(context: &Context, sound_id: u32, options: SoundOptions) -> Op
         start_paused: options.start_paused,
     };
     context
-        .audio()
+        .audio()?
         .play_registered_sound_with_options(sound_id, opts)
 }
 
 pub fn play_sound_simple(context: &Context, sound_id: u32) -> Option<u64> {
     context
-        .audio()
+        .audio()?
         .play_registered_sound_with_options(sound_id, audio::PlayOptions::default())
 }
 
 pub fn pause_sound(context: &Context, play_id: u64) {
-    context.audio().pause_play_id(play_id);
+    if let Some(a) = context.audio() {
+        a.pause_play_id(play_id);
+    }
 }
 
 pub fn resume_sound(context: &Context, play_id: u64) {
-    context.audio().resume_play_id(play_id);
+    if let Some(a) = context.audio() {
+        a.resume_play_id(play_id);
+    }
 }
 
 pub fn stop_sound(context: &Context, play_id: u64) {
-    context.audio().stop_play_id(play_id);
+    if let Some(a) = context.audio() {
+        a.stop_play_id(play_id);
+    }
 }
 
 pub fn fade_in_sound(context: &Context, play_id: u64, duration: Duration) {
-    context.audio().fade_in_play_id(play_id, duration);
+    if let Some(a) = context.audio() {
+        a.fade_in_play_id(play_id, duration);
+    }
 }
 
 pub fn fade_out_sound(context: &Context, play_id: u64, duration: Duration) {
-    context.audio().fade_out_play_id(play_id, duration);
+    if let Some(a) = context.audio() {
+        a.fade_out_play_id(play_id, duration);
+    }
 }
 
 pub fn set_sound_volume(context: &Context, play_id: u64, volume: f32) {
-    context.audio().set_volume_play_id(play_id, volume);
+    if let Some(a) = context.audio() {
+        a.set_volume_play_id(play_id, volume);
+    }
 }
 
 pub fn is_sound_playing(context: &Context, play_id: u64) -> bool {
-    context.audio().is_playing_play_id(play_id)
+    context
+        .audio()
+        .map(|a| a.is_playing_play_id(play_id))
+        .unwrap_or(false)
 }
 
 pub fn unregister_sound(context: &Context, sound_id: u32) {
-    context.audio().unregister_sound(sound_id);
+    if let Some(a) = context.audio() {
+        a.unregister_sound(sound_id);
+    }
 }
 
 pub fn play_sine(context: &Context, freq: f32, volume: f32) -> Option<u64> {
-    context.audio().play_sine(freq, volume)
+    context.audio()?.play_sine(freq, volume)
 }
 
 type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot>>;
@@ -598,7 +618,7 @@ thread_local! {
     static SCENE_SWITCH_REQUEST: RefCell<Option<SceneSwitchRequest>> = const { RefCell::new(None) };
 }
 
-fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
+fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
     platform::with_graphics(f)
 }
 

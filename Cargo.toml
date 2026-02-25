@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -23,7 +23,7 @@ anyhow = "1"
 winit = "0.30"
 image = "0.25"
 ab_glyph = "0.2"
-cpal = "0.15"
+cpal = { version = "0.17.3", features = ["wasm-bindgen"] }
 symphonia = { version = "0.5", features = ["all"] }
 fundsp = "0.18"
 

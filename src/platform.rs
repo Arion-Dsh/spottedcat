@@ -210,46 +210,46 @@ pub(crate) fn set_global_audio(
     }
 }
 
-pub(crate) fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> R {
+pub(crate) fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let mutex = GLOBAL_GRAPHICS
-            .get()
-            .expect("global Graphics not initialized");
-        let mut g = mutex.lock().expect("Graphics mutex poisoned");
-        return f(&mut g);
+        let mutex = GLOBAL_GRAPHICS.get()?;
+        let mut g = mutex.lock().ok()?;
+        return Some(f(&mut g));
     }
 
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         return GLOBAL_GRAPHICS.with(|cell| {
             let mut slot = cell.borrow_mut();
-            let g = slot.as_mut().expect("global Graphics not initialized");
-            f(g)
+            let g = slot.as_mut()?;
+            Some(f(g))
         });
     }
 }
 
-pub(crate) fn with_audio<R>(f: impl FnOnce(&mut crate::audio::AudioSystem) -> R) -> R {
+pub(crate) fn with_audio<R>(f: impl FnOnce(&mut crate::audio::AudioSystem) -> R) -> Option<R> {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let a = GLOBAL_AUDIO
-            .get()
-            .expect("global AudioSystem not initialized");
-        // Since AudioSystem is a handle (Arc wrapper), we can clone it
-        // and pass a mutable reference to the clone to the closure.
+        let a = GLOBAL_AUDIO.get()?;
         let mut a_clone = a.clone();
-        return f(&mut a_clone);
+        return Some(f(&mut a_clone));
     }
 
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         return GLOBAL_AUDIO.with(|cell| {
             let mut slot = cell.borrow_mut();
-            let a = slot.as_mut().expect("global AudioSystem not initialized");
-            f(a)
+            let a = slot.as_mut()?;
+            Some(f(a))
         });
     }
+}
+
+/// Attempt to resume the audio stream. Called on user interaction events
+/// to satisfy browser autoplay policy on WASM.
+pub(crate) fn try_resume_audio() {
+    with_audio(|a| a.try_resume());
 }
 
 pub(crate) fn align_write_texture_bytes(

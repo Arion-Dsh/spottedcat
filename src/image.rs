@@ -74,6 +74,7 @@ impl Image {
                 .map(|e| e.is_ready())
                 .unwrap_or(false)
         })
+        .unwrap_or(false)
     }
 }
 
@@ -109,6 +110,7 @@ impl Image {
     /// Returns an error if the data length doesn't match width * height * 4.
     pub fn new_from_rgba8(width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Self> {
         with_graphics(|g| g.create_image(width, height, rgba))
+            .unwrap_or_else(|| Err(anyhow::anyhow!("Graphics not initialized")))
     }
 
     /// Creates a copy of an existing image.
@@ -120,6 +122,7 @@ impl Image {
             let bounds = g.image_bounds(image)?;
             g.create_sub_image(image, bounds)
         })
+        .unwrap_or_else(|| Err(anyhow::anyhow!("Graphics not initialized")))
     }
 
     /// Creates a sub-image from a region of an existing image.
@@ -135,6 +138,7 @@ impl Image {
     /// Returns an error if the bounds are out of range.
     pub fn sub_image(image: Image, bounds: Bounds) -> anyhow::Result<Self> {
         with_graphics(|g| g.create_sub_image(image, bounds))
+            .unwrap_or_else(|| Err(anyhow::anyhow!("Graphics not initialized")))
     }
 
     /// Draws this image to the context with the specified options.
@@ -182,10 +186,12 @@ impl Image {
 
     pub fn clear(self, color: [f32; 4]) -> anyhow::Result<()> {
         with_graphics(|g| g.clear_image(self, color))
+            .unwrap_or_else(|| Err(anyhow::anyhow!("Graphics not initialized")))
     }
 
     pub fn copy_from(self, src: Image) -> anyhow::Result<()> {
         with_graphics(|g| g.copy_image(self, src))
+            .unwrap_or_else(|| Err(anyhow::anyhow!("Graphics not initialized")))
     }
 
     pub fn bounds(self) -> anyhow::Result<Bounds> {
@@ -201,7 +207,7 @@ impl Image {
     ///
     /// Returns true if the image was successfully destroyed.
     pub fn destroy(self) -> bool {
-        with_graphics(|g| g.take_image_entry(self).is_some())
+        with_graphics(|g| g.take_image_entry(self).is_some()).unwrap_or(false)
     }
 
     /// Returns the global screen-space bounds of this image when drawn.
