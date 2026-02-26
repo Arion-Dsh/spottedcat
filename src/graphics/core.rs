@@ -10,7 +10,6 @@ use crate::platform;
 use crate::texture::Texture;
 use ab_glyph::FontArc;
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU32;
 
 use super::profile::pick_present_mode;
 
@@ -41,8 +40,7 @@ pub struct Graphics {
     pub(crate) batch: Vec<InstanceData>,
     pub(crate) font_cache: HashMap<u64, FontArc>,
     pub(crate) font_registry: HashMap<u32, Vec<u8>>,
-    pub(crate) next_font_id: AtomicU32,
-    pub(crate) font_registration_queue: Vec<(u32, Vec<u8>)>,
+    pub(crate) next_font_id: u32,
     pub(crate) glyph_cache: GlyphCache,
     pub(crate) resolved_draws: Vec<ResolvedDraw>,
     pub(crate) text_shader_id: u32,
@@ -177,8 +175,7 @@ impl Graphics {
             batch: Vec::with_capacity(10000),
             font_cache: HashMap::new(),
             font_registry: HashMap::new(),
-            next_font_id: AtomicU32::new(1),
-            font_registration_queue: Vec::new(),
+            next_font_id: 1,
             glyph_cache: GlyphCache::new(),
             resolved_draws: Vec::with_capacity(10000),
             text_shader_id: 0,

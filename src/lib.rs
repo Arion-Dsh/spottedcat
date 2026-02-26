@@ -600,10 +600,6 @@ fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
     platform::with_graphics(f)
 }
 
-fn init_scene_switch() {
-    // thread_local is lazily initialized, no explicit init needed here
-}
-
 fn request_scene_switch<F>(factory: F)
 where
     F: FnOnce(&mut Context) -> Box<dyn Spot> + 'static,
@@ -654,8 +650,6 @@ pub(crate) fn take_scene_switch_request() -> Option<SceneSwitchRequest> {
 /// ```
 #[cfg(not(target_os = "android"))]
 pub fn run<T: Spot + 'static>(window: WindowConfig) {
-    init_scene_switch();
-
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         console_error_panic_hook::set_once();
@@ -675,8 +669,6 @@ pub fn run<T: Spot + 'static>(
     app: winit::platform::android::activity::AndroidApp,
 ) {
     use winit::platform::android::EventLoopBuilderExtAndroid;
-
-    init_scene_switch();
 
     let event_loop = EventLoop::builder()
         .with_android_app(app)

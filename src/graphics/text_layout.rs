@@ -47,9 +47,33 @@ impl Graphics {
 
         let start_pos = opts.position();
         let mut caret_pos = start_pos;
+
+        // Calculate y_offset without calling text.measure_with_y_offset() to avoid re-entrant lock.
+        // We use the same ink-bounds logic as the measure system.
+        let mut global_min_y = scaled.ascent();
+        for line in &lines {
+            for ch in line.chars() {
+                let id = scaled.glyph_id(ch);
+                if let Some(glyph) = scaled.outline_glyph(ab_glyph::Glyph {
+                    id,
+                    scale,
+                    position: ab_glyph::point(0.0, 0.0),
+                }) {
+                    global_min_y = global_min_y.min(glyph.px_bounds().min.y);
+                }
+            }
+        }
+        let y_offset = -global_min_y;
+
         let ascent = scaled.ascent();
         let descent = scaled.descent();
         let line_height = ascent - descent + scaled.line_gap();
+
+        // Adjust caret_pos[1] so that the first line's baseline aligns with the ink bounds top
+        // baseline_y = caret_pos[1] + ascent
+        // We want baseline_y = start_pos[1] + y_offset
+        // So caret_pos[1] = start_pos[1] + Pt::from(y_offset - ascent)
+        caret_pos[1] += Pt::from(y_offset - ascent);
 
         let image_scale = opts.scale();
         let sx = image_scale[0];
@@ -57,8 +81,11 @@ impl Graphics {
 
         for line in lines {
             let mut prev: Option<ab_glyph::GlyphId> = None;
+            let baseline_y = caret_pos[1] + Pt::from(ascent);
+
             for ch in line.chars() {
                 let glyph_id = scaled.glyph_id(ch);
+                // ... (rest same)
 
                 if let Some(p) = prev {
                     caret_pos[0] += Pt::from(scaled.kern(p, glyph_id));
@@ -91,7 +118,6 @@ impl Graphics {
                     continue;
                 };
 
-                let baseline_y = caret_pos[1] + Pt::from(ascent);
                 let draw_x = caret_pos[0] + Pt::from(entry.offset[0]);
                 let draw_y = baseline_y + Pt::from(entry.offset[1]);
 
