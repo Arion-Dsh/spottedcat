@@ -149,6 +149,8 @@ impl Graphics {
     }
 
     pub(crate) fn process_registrations(&mut self) -> anyhow::Result<()> {
+        self.flush_font_queue();
+
         if !self.dirty_assets {
             return Ok(());
         }

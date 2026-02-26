@@ -117,7 +117,7 @@ pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
     #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
     {
         return wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
             ..Default::default()
         });
     }
@@ -248,6 +248,7 @@ pub(crate) fn with_audio<R>(f: impl FnOnce(&mut crate::audio::AudioSystem) -> R)
 
 /// Attempt to resume the audio stream. Called on user interaction events
 /// to satisfy browser autoplay policy on WASM.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) fn try_resume_audio() {
     with_audio(|a| a.try_resume());
 }

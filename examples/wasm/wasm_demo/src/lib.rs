@@ -51,7 +51,7 @@ impl Spot for WasmDemo {
 
     fn update(&mut self, context: &mut Context, _dt: std::time::Duration) {
         if spottedcat::key_pressed(context, spottedcat::Key::Space) {
-            spottedcat::play_sine(context, 440.0, 0.3);
+            spottedcat::play_sine(440.0, 0.3);
         }
     }
 

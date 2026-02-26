@@ -320,13 +320,17 @@ impl ApplicationHandler for App {
 
             #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
             {
+                let mut attributes = Window::default_attributes()
+                    .with_title(self.window_config.title.clone())
+                    .with_resizable(self.window_config.resizable);
+
+                #[cfg(not(any(target_os = "ios", target_os = "android")))]
+                {
+                    attributes = attributes.with_inner_size(winit::dpi::LogicalSize::new(w, h));
+                }
+
                 event_loop
-                    .create_window(
-                        Window::default_attributes()
-                            .with_title(self.window_config.title.clone())
-                            .with_inner_size(winit::dpi::LogicalSize::new(w, h))
-                            .with_resizable(self.window_config.resizable),
-                    )
+                    .create_window(attributes)
                     .expect("failed to create window")
             }
         };
@@ -538,7 +542,7 @@ impl ApplicationHandler for App {
                 if self.surface.is_none() {
                     if let Some(window) = self.window.as_ref() {
                         let size = window.inner_size();
-                        let surface_r = unsafe { self.instance.create_surface(window) };
+                        let surface_r = self.instance.create_surface(window);
                         match surface_r {
                             Ok(s) => {
                                 let surface = unsafe {

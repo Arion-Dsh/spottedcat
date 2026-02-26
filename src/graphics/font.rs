@@ -8,10 +8,19 @@ use super::Graphics;
 
 impl Graphics {
     pub(crate) fn register_font(&mut self, font_data: Vec<u8>) -> u32 {
-        let font_id = self.next_font_id;
-        self.next_font_id = self.next_font_id.saturating_add(1);
-        self.font_registry.insert(font_id, font_data);
+        use std::sync::atomic::Ordering;
+        let font_id = self.next_font_id.fetch_add(1, Ordering::SeqCst);
+        self.font_registration_queue.push((font_id, font_data));
         font_id
+    }
+
+    pub(crate) fn flush_font_queue(&mut self) {
+        if self.font_registration_queue.is_empty() {
+            return;
+        }
+        for (id, data) in self.font_registration_queue.drain(..) {
+            self.font_registry.insert(id, data);
+        }
     }
 
     pub(crate) fn get_font(&self, font_id: u32) -> Option<&Vec<u8>> {

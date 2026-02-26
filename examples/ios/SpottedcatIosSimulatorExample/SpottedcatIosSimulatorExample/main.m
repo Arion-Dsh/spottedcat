@@ -1,4 +1,4 @@
-x#import <UIKit/UIKit.h>
+#import <UIKit/UIKit.h>
 #import "../../include/spottedcat.h"
 
 int main(int argc, char * argv[]) {

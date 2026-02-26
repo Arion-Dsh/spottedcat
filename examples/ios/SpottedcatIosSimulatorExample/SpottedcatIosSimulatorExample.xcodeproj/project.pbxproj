@@ -10,6 +10,13 @@
 		A10000000000000100000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000200000003 /* Assets.xcassets */; };
 		A10000000000000100000004 /* Spottedcat.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000200000004 /* Spottedcat.xcframework */; };
 		A10000000000000100000005 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000200000008 /* main.m */; };
+		D578E6892F4FD454002829D3 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E6882F4FD454002829D3 /* AudioToolbox.framework */; };
+		D578E68B2F4FD462002829D3 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E68A2F4FD462002829D3 /* CoreAudio.framework */; };
+		D578E68D2F4FD469002829D3 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E68C2F4FD469002829D3 /* AVFoundation.framework */; };
+		D578E68F2F4FD471002829D3 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E68E2F4FD471002829D3 /* CoreFoundation.framework */; };
+		D578E6912F4FD47B002829D3 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E6902F4FD47B002829D3 /* QuartzCore.framework */; };
+		D578E6932F4FD483002829D3 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E6922F4FD483002829D3 /* Metal.framework */; };
+		D578E6952F4FD48C002829D3 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D578E6942F4FD48C002829D3 /* UIKit.framework */; platformFilter = ios; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -19,6 +26,13 @@
 		A10000000000000200000006 /* SpottedcatIosSimulatorExample-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "SpottedcatIosSimulatorExample-Bridging-Header.h"; sourceTree = "<group>"; };
 		A10000000000000200000007 /* SpottedcatIosSimulatorExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpottedcatIosSimulatorExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000200000008 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		D578E6882F4FD454002829D3 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AudioToolbox.framework; sourceTree = DEVELOPER_DIR; };
+		D578E68A2F4FD462002829D3 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/CoreAudio.framework; sourceTree = DEVELOPER_DIR; };
+		D578E68C2F4FD469002829D3 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/AVFoundation.framework; sourceTree = DEVELOPER_DIR; };
+		D578E68E2F4FD471002829D3 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/CoreFoundation.framework; sourceTree = DEVELOPER_DIR; };
+		D578E6902F4FD47B002829D3 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/QuartzCore.framework; sourceTree = DEVELOPER_DIR; };
+		D578E6922F4FD483002829D3 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
+		D578E6942F4FD48C002829D3 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/UIKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -26,7 +40,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D578E68F2F4FD471002829D3 /* CoreFoundation.framework in Frameworks */,
+				D578E6952F4FD48C002829D3 /* UIKit.framework in Frameworks */,
+				D578E68D2F4FD469002829D3 /* AVFoundation.framework in Frameworks */,
+				D578E6932F4FD483002829D3 /* Metal.framework in Frameworks */,
+				D578E6912F4FD47B002829D3 /* QuartzCore.framework in Frameworks */,
+				D578E68B2F4FD462002829D3 /* CoreAudio.framework in Frameworks */,
 				A10000000000000100000004 /* Spottedcat.xcframework in Frameworks */,
+				D578E6892F4FD454002829D3 /* AudioToolbox.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -56,6 +77,13 @@
 		A10000000000000400000003 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				D578E6942F4FD48C002829D3 /* UIKit.framework */,
+				D578E6922F4FD483002829D3 /* Metal.framework */,
+				D578E6902F4FD47B002829D3 /* QuartzCore.framework */,
+				D578E68E2F4FD471002829D3 /* CoreFoundation.framework */,
+				D578E68C2F4FD469002829D3 /* AVFoundation.framework */,
+				D578E68A2F4FD462002829D3 /* CoreAudio.framework */,
+				D578E6882F4FD454002829D3 /* AudioToolbox.framework */,
 				A10000000000000200000004 /* Spottedcat.xcframework */,
 			);
 			name = Frameworks;
@@ -159,13 +187,13 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.spottedcat.iossim;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTS_MACCATALYST = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OBJC_BRIDGING_HEADER = "SpottedcatIosSimulatorExample/SpottedcatIosSimulatorExample-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -183,8 +211,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.spottedcat.iossim;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTS_MACCATALYST = NO;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "SpottedcatIosSimulatorExample/SpottedcatIosSimulatorExample-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -48,6 +48,11 @@ impl Text {
         }
     }
 
+    /// Sets the text content safely without re-allocating the entire struct.
+    pub fn set_content(&mut self, content: impl Into<String>) {
+        self.content = content.into();
+    }
+
     pub fn with_font_size(mut self, font_size: crate::Pt) -> Self {
         self.font_size = font_size;
         self
@@ -86,6 +91,10 @@ impl Text {
     /// ```
     pub fn font_size(&self) -> crate::Pt {
         self.font_size
+    }
+
+    pub fn font_id(&self) -> u32 {
+        self.font_id
     }
 
     /// Draws this text to the context with the specified options.

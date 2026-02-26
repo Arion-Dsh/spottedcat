@@ -19,14 +19,14 @@ impl Spot for AudioTest {
         // Play a sine wave every 2 seconds automatically to verify it's working
         if self.timer.as_secs_f32() > 2.0 {
             println!("Auto-playing sine wave...");
-            spottedcat::play_sine(context, 440.0, 0.2);
+            spottedcat::play_sine(440.0, 0.2);
             self.timer = Duration::ZERO;
         }
 
         // Manual trigger via input (if input manager is working)
         if spottedcat::key_pressed(context, spottedcat::Key::Space) {
             println!("Space pressed! Playing higher sine wave...");
-            spottedcat::play_sine(context, 880.0, 0.2);
+            spottedcat::play_sine(880.0, 0.2);
         }
     }
 

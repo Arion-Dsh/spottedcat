@@ -2,6 +2,7 @@ use anyhow::{Context as _, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use symphonia::core::audio::{AudioBufferRef, Signal};
@@ -24,6 +25,8 @@ pub(crate) struct AudioSystemInner {
     #[allow(dead_code)]
     stream: cpal::Stream,
     handler: Arc<Mutex<MixerHandler>>,
+    next_sound_id: AtomicU32,
+    registration_queue: Arc<Mutex<Vec<(u32, Vec<u8>)>>>,
 }
 
 // cpal::Stream is safe to send and sync on most platforms.
@@ -47,7 +50,6 @@ pub(crate) struct MixerHandler {
     sample_rate: u32,
     channels: u16,
     next_play_id: u64,
-    next_sound_id: u32,
     sound_registry: HashMap<u32, SoundData>,
     sounds: Vec<PlayingSound>,
 }
@@ -101,16 +103,12 @@ impl AudioSystem {
         self.0.play_registered_sound_with_options(sound_id, options)
     }
 
-    pub(crate) fn play_sound_with_options(
-        &self,
-        sound: &SoundData,
-        options: PlayOptions,
-    ) -> Option<u64> {
-        self.0.play_sound_with_options(sound, options)
-    }
-
-    pub(crate) fn register_sound(&self, sound_data: SoundData) -> u32 {
-        self.0.register_sound(sound_data)
+    pub(crate) fn register_sound(&self, bytes: Vec<u8>) -> u32 {
+        let sound_id = self.0.next_sound_id.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut queue) = self.0.registration_queue.lock() {
+            queue.push((sound_id, bytes));
+        }
+        sound_id
     }
 
     pub(crate) fn pause_play_id(&self, play_id: u64) {
@@ -146,8 +144,9 @@ impl AudioSystem {
     }
 
     /// Try to resume the audio stream (useful for WASM autoplay policy).
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     pub(crate) fn try_resume(&self) {
-        let _ = self.0.stream.play();
+        self.0.try_resume();
     }
 }
 
@@ -166,17 +165,32 @@ impl AudioSystemInner {
             sample_rate,
             channels,
             next_play_id: 1,
-            next_sound_id: 1,
             sound_registry: HashMap::new(),
             sounds: Vec::new(),
         }));
 
+        let registration_queue = Arc::new(Mutex::new(Vec::new()));
+        let registration_queue_clone = Arc::clone(&registration_queue);
         let handler_clone = Arc::clone(&handler);
+
         let stream = match config.sample_format() {
             cpal::SampleFormat::F32 => device.build_output_stream(
                 &config.into(),
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    if let Ok(mut h) = handler_clone.lock() {
+                    // Process registrations
+                    if let Ok(mut queue) = registration_queue_clone.try_lock() {
+                        if !queue.is_empty() {
+                            if let Ok(mut h) = handler_clone.try_lock() {
+                                for (id, bytes) in queue.drain(..) {
+                                    if let Ok(sound_data) = decode_sound_from_bytes(bytes) {
+                                        h.sound_registry.insert(id, sound_data);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Ok(mut h) = handler_clone.try_lock() {
                         h.process(data);
                     }
                 },
@@ -199,7 +213,12 @@ impl AudioSystemInner {
         #[cfg(not(target_arch = "wasm32"))]
         stream.play()?;
 
-        Ok(Self { stream, handler })
+        Ok(Self {
+            stream,
+            handler,
+            next_sound_id: AtomicU32::new(1),
+            registration_queue,
+        })
     }
 
     fn play_sine(&self, freq: f32, volume: f32) -> Option<u64> {
@@ -257,16 +276,6 @@ impl AudioSystemInner {
         } else {
             None
         }
-    }
-
-    fn register_sound(&self, sound_data: SoundData) -> u32 {
-        let Ok(mut handler) = self.handler.lock() else {
-            return 0;
-        };
-        let sound_id = handler.next_sound_id;
-        handler.next_sound_id = handler.next_sound_id.saturating_add(1).max(1);
-        handler.sound_registry.insert(sound_id, sound_data);
-        sound_id
     }
 
     fn unregister_sound(&self, sound_id: u32) {
@@ -364,6 +373,11 @@ impl AudioSystemInner {
             .find(|sound| sound.id == play_id)
             .map(|sound| !sound.finished && !sound.paused)
             .unwrap_or(false)
+    }
+
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    fn try_resume(&self) {
+        let _ = self.stream.play();
     }
 
     fn sample_rate(&self) -> u32 {

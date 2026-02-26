@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat_ios_wrapper"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 
 [lib]
@@ -8,3 +8,4 @@ crate-type = ["staticlib"]
 
 [dependencies]
 spottedcat = { path = "../../.." }
+image = "0.25"

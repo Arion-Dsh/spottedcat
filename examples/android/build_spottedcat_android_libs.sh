@@ -41,7 +41,7 @@ fi
 
 mkdir -p "$JNI_LIBS_DIR"
 
-cargo ndk -o "$JNI_LIBS_DIR" -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 -P 24 \
+cargo ndk -o "$JNI_LIBS_DIR" -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 -P 26 \
   --manifest-path "$WRAPPER_DIR/Cargo.toml" \
   build --release
 
