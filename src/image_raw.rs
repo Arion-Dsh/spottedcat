@@ -89,7 +89,11 @@ impl ImageRenderer {
     pub const GLOBALS_SIZE_BYTES: usize = 256;
     pub const ENGINE_GLOBALS_SIZE_BYTES: usize = std::mem::size_of::<EngineGlobals>();
 
-    pub fn new(device: &wgpu::Device, _surface_format: wgpu::TextureFormat, max_instances: u32) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        _surface_format: wgpu::TextureFormat,
+        max_instances: u32,
+    ) -> Self {
         let globals_stride = {
             let align = device.limits().min_uniform_buffer_offset_alignment;
             let size = Self::GLOBALS_SIZE_BYTES as u32;
@@ -102,9 +106,10 @@ impl ImageRenderer {
         };
         let max_user_globals = 4096u32;
         let max_engine_globals = 4096u32;
-        let user_globals_buffer_size = globals_stride as wgpu::BufferAddress * max_user_globals as wgpu::BufferAddress;
-        let engine_globals_buffer_size =
-            engine_globals_stride as wgpu::BufferAddress * max_engine_globals as wgpu::BufferAddress;
+        let user_globals_buffer_size =
+            globals_stride as wgpu::BufferAddress * max_user_globals as wgpu::BufferAddress;
+        let engine_globals_buffer_size = engine_globals_stride as wgpu::BufferAddress
+            * max_engine_globals as wgpu::BufferAddress;
 
         let user_globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("image_user_globals_ubo"),
@@ -121,7 +126,8 @@ impl ImageRenderer {
         });
 
         let instance_stride = std::mem::size_of::<InstanceData>() as u32;
-        let instance_buffer_size = instance_stride as wgpu::BufferAddress * max_instances as wgpu::BufferAddress;
+        let instance_buffer_size =
+            instance_stride as wgpu::BufferAddress * max_instances as wgpu::BufferAddress;
 
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("image_instance_buffer"),
@@ -130,27 +136,28 @@ impl ImageRenderer {
             mapped_at_creation: false,
         });
 
-        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("image_texture_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("image_texture_bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("image_sampler"),
@@ -159,7 +166,7 @@ impl ImageRenderer {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             lod_min_clamp: 0.0,
             lod_max_clamp: 32.0,
             compare: None,
@@ -167,66 +174,64 @@ impl ImageRenderer {
             border_color: None,
         });
 
-        let user_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("image_user_globals_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let user_globals_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("image_user_globals_bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: true,
-                        min_binding_size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
+                        min_binding_size: std::num::NonZeroU64::new(
+                            Self::GLOBALS_SIZE_BYTES as u64,
+                        ),
                     },
                     count: None,
-                },
-            ],
-        });
+                }],
+            });
 
-        let engine_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("image_engine_globals_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let engine_globals_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("image_engine_globals_bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: true,
-                        min_binding_size: std::num::NonZeroU64::new(Self::ENGINE_GLOBALS_SIZE_BYTES as u64),
+                        min_binding_size: std::num::NonZeroU64::new(
+                            Self::ENGINE_GLOBALS_SIZE_BYTES as u64,
+                        ),
                     },
                     count: None,
-                },
-            ],
-        });
+                }],
+            });
 
         let user_globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("image_user_globals_bg"),
             layout: &user_globals_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &user_globals_buffer,
-                        offset: 0,
-                        size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
-                    }),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &user_globals_buffer,
+                    offset: 0,
+                    size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
+                }),
+            }],
         });
 
         let engine_globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("image_engine_globals_bg"),
             layout: &engine_globals_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &engine_globals_buffer,
-                        offset: 0,
-                        size: std::num::NonZeroU64::new(Self::ENGINE_GLOBALS_SIZE_BYTES as u64),
-                    }),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &engine_globals_buffer,
+                    offset: 0,
+                    size: std::num::NonZeroU64::new(Self::ENGINE_GLOBALS_SIZE_BYTES as u64),
+                }),
+            }],
         });
 
         Self {
@@ -251,9 +256,16 @@ impl ImageRenderer {
         }
     }
 
-    pub fn upload_user_globals_bytes(&mut self, queue: &wgpu::Queue, bytes: &[u8]) -> anyhow::Result<u32> {
+    pub fn upload_user_globals_bytes(
+        &mut self,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+    ) -> anyhow::Result<u32> {
         if bytes.len() != Self::GLOBALS_SIZE_BYTES {
-            return Err(anyhow::anyhow!("image user globals must be exactly {} bytes", Self::GLOBALS_SIZE_BYTES));
+            return Err(anyhow::anyhow!(
+                "image user globals must be exactly {} bytes",
+                Self::GLOBALS_SIZE_BYTES
+            ));
         }
         if self.next_user_globals >= self.max_user_globals {
             return Err(anyhow::anyhow!("max image user globals exceeded"));
@@ -265,7 +277,11 @@ impl ImageRenderer {
         Ok((slot * self.globals_stride) as u32)
     }
 
-    pub fn upload_engine_globals_bytes(&mut self, queue: &wgpu::Queue, bytes: &[u8]) -> anyhow::Result<u32> {
+    pub fn upload_engine_globals_bytes(
+        &mut self,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+    ) -> anyhow::Result<u32> {
         if bytes.len() != Self::ENGINE_GLOBALS_SIZE_BYTES {
             return Err(anyhow::anyhow!(
                 "image engine globals must be exactly {} bytes",
@@ -288,11 +304,19 @@ impl ImageRenderer {
         Ok(dyn_offset)
     }
 
-    pub fn upload_engine_globals(&mut self, queue: &wgpu::Queue, globals: &EngineGlobals) -> anyhow::Result<u32> {
+    pub fn upload_engine_globals(
+        &mut self,
+        queue: &wgpu::Queue,
+        globals: &EngineGlobals,
+    ) -> anyhow::Result<u32> {
         self.upload_engine_globals_bytes(queue, bytemuck::bytes_of(globals))
     }
 
-    pub fn create_texture_bind_group(&self, device: &wgpu::Device, texture_view: &wgpu::TextureView) -> wgpu::BindGroup {
+    pub fn create_texture_bind_group(
+        &self,
+        device: &wgpu::Device,
+        texture_view: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("image_texture_bg"),
             layout: &self.texture_bind_group_layout,
@@ -315,7 +339,11 @@ impl ImageRenderer {
         self.next_engine_globals = 0;
     }
 
-    pub fn upload_instances(&mut self, queue: &wgpu::Queue, instances: &[InstanceData]) -> anyhow::Result<std::ops::Range<u32>> {
+    pub fn upload_instances(
+        &mut self,
+        queue: &wgpu::Queue,
+        instances: &[InstanceData],
+    ) -> anyhow::Result<std::ops::Range<u32>> {
         let count = instances.len() as u32;
         if count == 0 {
             return Ok(0..0);
@@ -325,8 +353,13 @@ impl ImageRenderer {
         }
 
         let start = self.next_instance;
-        let offset_bytes = start as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
-        queue.write_buffer(&self.instance_buffer, offset_bytes, bytemuck::cast_slice(instances));
+        let offset_bytes =
+            start as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
+        queue.write_buffer(
+            &self.instance_buffer,
+            offset_bytes,
+            bytemuck::cast_slice(instances),
+        );
         self.next_instance += count;
         Ok(start..(start + count))
     }
@@ -344,8 +377,10 @@ impl ImageRenderer {
             return;
         }
         pass.set_pipeline(pipeline);
-        let start = instance_range.start as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
-        let end = instance_range.end as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
+        let start = instance_range.start as wgpu::BufferAddress
+            * self.instance_stride as wgpu::BufferAddress;
+        let end =
+            instance_range.end as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
         pass.set_vertex_buffer(0, self.instance_buffer.slice(start..end));
         pass.set_bind_group(0, texture_bind_group, &[]);
         pass.set_bind_group(1, &self.user_globals_bind_group, &[user_globals_offset]);

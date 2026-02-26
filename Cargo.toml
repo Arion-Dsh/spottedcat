@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -17,7 +17,7 @@ exclude = [
 
 
 [dependencies]
-wgpu = { version = "27", features = ["gles"] }
+wgpu = { version = "28", features = ["gles"] }
 bytemuck = { version = "1", features = ["derive"] }
 anyhow = "1"
 winit = { version = "0.30", features = ["android-native-activity"] }

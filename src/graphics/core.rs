@@ -127,7 +127,7 @@ impl Graphics {
                 &image_renderer.user_globals_bind_group_layout,
                 &image_renderer.engine_globals_bind_group_layout,
             ],
-            push_constant_ranges: &[],
+            immediate_size: 0,
         });
 
         let default_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -160,7 +160,7 @@ impl Graphics {
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 

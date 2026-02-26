@@ -97,7 +97,7 @@ impl Graphics {
                     &self.image_renderer.user_globals_bind_group_layout,
                     &self.image_renderer.engine_globals_bind_group_layout,
                 ],
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         let pipeline = self
@@ -132,7 +132,7 @@ impl Graphics {
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             });
 

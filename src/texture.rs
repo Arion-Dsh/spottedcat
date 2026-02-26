@@ -23,7 +23,7 @@ impl Texture {
         format: wgpu::TextureFormat,
     ) -> Self {
         let mip_level_count = Self::calculate_mip_levels(width, height);
-        
+
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("atlas_texture"),
             size: wgpu::Extent3d {
@@ -69,7 +69,7 @@ impl Texture {
     pub fn generate_mipmaps(&self, device: &wgpu::Device, queue: &wgpu::Queue) {
         let texture = &self.0.texture;
         let mip_level_count = texture.mip_level_count();
-        
+
         if mip_level_count <= 1 {
             return;
         }
@@ -105,7 +105,7 @@ impl Texture {
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -116,7 +116,7 @@ impl Texture {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
 
@@ -177,6 +177,7 @@ impl Texture {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             render_pass.set_pipeline(&pipeline);
