@@ -1,14 +1,16 @@
 use bytemuck::Pod;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShaderOpts {
-    bytes: [u8; crate::image_raw::ImageRenderer::GLOBALS_SIZE_BYTES],
+    pub(crate) bytes: [u8; crate::image_raw::ImageRenderer::GLOBALS_SIZE_BYTES],
+    pub(crate) opacity: f32,
 }
 
 impl Default for ShaderOpts {
     fn default() -> Self {
         Self {
             bytes: [0u8; crate::image_raw::ImageRenderer::GLOBALS_SIZE_BYTES],
+            opacity: 1.0,
         }
     }
 }
@@ -24,10 +26,7 @@ impl ShaderOpts {
     }
 
     pub fn set_opacity(&mut self, opacity: f32) {
-        let opacity = opacity.clamp(0.0, 1.0);
-        let bytes = opacity.to_le_bytes();
-        let end = self.bytes.len();
-        self.bytes[end - 4..end].copy_from_slice(&bytes);
+        self.opacity = opacity.clamp(0.0, 1.0);
     }
 
     pub fn from_bytes(src: &[u8]) -> Self {
@@ -64,7 +63,7 @@ impl ShaderOpts {
             let start = index * 16;
             for i in 0..4 {
                 let bytes = value[i].to_le_bytes();
-                self.bytes[start + i*4..start + i*4 + 4].copy_from_slice(&bytes);
+                self.bytes[start + i * 4..start + i * 4 + 4].copy_from_slice(&bytes);
             }
         }
     }

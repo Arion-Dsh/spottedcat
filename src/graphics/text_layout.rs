@@ -130,10 +130,17 @@ impl Graphics {
                 let w = img_entry.bounds.width.as_f32() * sx;
                 let h = img_entry.bounds.height.as_f32() * sy;
 
-                if final_x + w >= viewport_rect[0]
-                    && final_x <= viewport_rect[2]
-                    && final_y + h >= viewport_rect[1]
-                    && final_y <= viewport_rect[3]
+                let x1 = final_x + w;
+                let y1 = final_y + h;
+                let min_x = final_x.min(x1);
+                let max_x = final_x.max(x1);
+                let min_y = final_y.min(y1);
+                let max_y = final_y.max(y1);
+
+                if max_x >= viewport_rect[0]
+                    && min_x <= viewport_rect[2]
+                    && max_y >= viewport_rect[1]
+                    && min_y <= viewport_rect[3]
                 {
                     let mut glyph_opts = *opts;
                     glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));

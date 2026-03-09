@@ -310,10 +310,17 @@ impl Context {
             let screen_h = vh.as_f32();
 
             let is_visible = if rot == 0.0 {
-                !(pos[0].as_f32() + w < 0.0
-                    || pos[0].as_f32() > screen_w
-                    || pos[1].as_f32() + h < 0.0
-                    || pos[1].as_f32() > screen_h)
+                let x0 = pos[0].as_f32();
+                let y0 = pos[1].as_f32();
+                let x1 = x0 + w;
+                let y1 = y0 + h;
+
+                let min_x = x0.min(x1);
+                let max_x = x0.max(x1);
+                let min_y = y0.min(y1);
+                let max_y = y0.max(y1);
+
+                !(max_x < 0.0 || min_x > screen_w || max_y < 0.0 || min_y > screen_h)
             } else {
                 let c = rot.cos();
                 let s = rot.sin();
@@ -336,6 +343,15 @@ impl Context {
             };
 
             if !is_visible {
+                if std::env::var("SPOT_DEBUG_CULL").is_ok() {
+                    eprintln!(
+                        "[spot][cull] image id={} at {:?} (size {:?}) is culled (screen: {:?})",
+                        id,
+                        pos,
+                        [w, h],
+                        self.window_logical_size
+                    );
+                }
                 return;
             }
 
@@ -758,4 +774,102 @@ pub trait Spot {
 
     /// Cleanup when the application is shutting down.
     fn remove(&self);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_image_culling_flip() {
+        let mut context = Context::new();
+        context.set_window_logical_size(Pt::from(800.0), Pt::from(600.0));
+
+        let img_id = 1u32;
+        let img_size = [Pt::from(100.0), Pt::from(100.0)];
+
+        // 1. Normal visible
+        let opts = DrawOption::default().with_position([Pt::from(100.0), Pt::from(100.0)]);
+        context.push(DrawCommand::Image(
+            img_id,
+            opts,
+            0,
+            ShaderOpts::default(),
+            img_size,
+        ));
+        assert_eq!(context.draw_list.len(), 1, "Normal image should be visible");
+        context.draw_list.clear();
+
+        // 2. Flip H, should be visible at (100, 100) (covers 0 to 100)
+        let opts = DrawOption::default()
+            .with_position([Pt::from(100.0), Pt::from(100.0)])
+            .with_scale([-1.0, 1.0]);
+        context.push(DrawCommand::Image(
+            img_id,
+            opts,
+            0,
+            ShaderOpts::default(),
+            img_size,
+        ));
+        assert_eq!(
+            context.draw_list.len(),
+            1,
+            "Flipped H image at 100 should be visible (covers 0-100)"
+        );
+        context.draw_list.clear();
+
+        // 3. Flip H, culled at (0, 100) (covers -100 to 0)
+        let opts = DrawOption::default()
+            .with_position([Pt::from(-0.1), Pt::from(100.0)])
+            .with_scale([-1.0, 1.0]);
+        context.push(DrawCommand::Image(
+            img_id,
+            opts,
+            0,
+            ShaderOpts::default(),
+            img_size,
+        ));
+        assert_eq!(
+            context.draw_list.len(),
+            0,
+            "Flipped H image at -0.1 should be culled (covers -100 to -0.1)"
+        );
+        context.draw_list.clear();
+
+        // 4. Flip V, should be visible at (100, 100) (covers 0 to 100 in Y)
+        let opts = DrawOption::default()
+            .with_position([Pt::from(100.0), Pt::from(100.0)])
+            .with_scale([1.0, -1.0]);
+        context.push(DrawCommand::Image(
+            img_id,
+            opts,
+            0,
+            ShaderOpts::default(),
+            img_size,
+        ));
+        assert_eq!(
+            context.draw_list.len(),
+            1,
+            "Flipped V image at 100 should be visible (covers 0-100 in Y)"
+        );
+        context.draw_list.clear();
+
+        // 5. Flip Both, visible at (100, 100)
+        let opts = DrawOption::default()
+            .with_position([Pt::from(100.0), Pt::from(100.0)])
+            .with_scale([-1.0, -1.0]);
+        context.push(DrawCommand::Image(
+            img_id,
+            opts,
+            0,
+            ShaderOpts::default(),
+            img_size,
+        ));
+        assert_eq!(
+            context.draw_list.len(),
+            1,
+            "Both-flipped image at 100,100 should be visible"
+        );
+        context.draw_list.clear();
+    }
 }

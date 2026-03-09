@@ -1,0 +1,192 @@
+use spottedcat::{
+    Context, DrawOption, Image, Pt, ShaderOpts, Spot, Text, WindowConfig, register_image_shader,
+};
+
+struct FlipTest {
+    image: Image,
+    font_id: u32,
+    text_obj: Text,
+    time: f32,
+    yellow_shader_id: u32,
+}
+
+impl Spot for FlipTest {
+    fn initialize(_context: &mut Context) -> Self {
+        let image_data = include_bytes!("../assets/happy-tree.png");
+        let img_raw = image::load_from_memory(image_data).unwrap().to_rgba8();
+        let image = Image::new_from_rgba8(
+            Pt::from(img_raw.width()),
+            Pt::from(img_raw.height()),
+            &img_raw,
+        )
+        .unwrap();
+
+        let font_data = include_bytes!("../assets/DejaVuSans.ttf");
+        let font_id = spottedcat::register_font(font_data.to_vec());
+        let text_obj = Text::new("Flipped!", font_id)
+            .with_font_size(Pt::from(16.0))
+            .with_color([1.0, 1.0, 1.0, 1.0]);
+
+        let fill_shader_src = r#"
+            fn user_fs_hook() {
+                let fill_color = user_globals[0];
+                color = vec4<f32>(fill_color.rgb, color.a * fill_color.a);
+            }
+        "#;
+        let yellow_shader_id = register_image_shader(fill_shader_src);
+
+        Self {
+            image,
+            font_id,
+            text_obj,
+            time: 0.0,
+            yellow_shader_id,
+        }
+    }
+
+    fn update(&mut self, _context: &mut Context, dt: std::time::Duration) {
+        self.time += dt.as_secs_f32();
+    }
+
+    fn draw(&mut self, context: &mut Context) {
+        let (sw, sh) = context.window_logical_size();
+        let fsw = sw.as_f32();
+        let fsh = sh.as_f32();
+
+        // 1. Label
+        let mut t_instr = self.text_obj.clone().with_font_size(Pt::from(20.0));
+        t_instr.set_content("Check: 4 Trees (Red 100%, Green 80%, Blue 60%, Yellow 40%)");
+        t_instr.draw(
+            context,
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(20.0)]),
+        );
+
+        // Use a small scale
+        let s = 0.3;
+
+        let draw_item = |ctx: &mut Context,
+                         x: f32,
+                         y: f32,
+                         sx: f32,
+                         sy: f32,
+                         color: [f32; 4],
+                         alpha: f32,
+                         shader_alpha: f32,
+                         label: &str| {
+            let opts = DrawOption::default()
+                .with_position([Pt::from(x), Pt::from(y)])
+                .with_scale([sx * s, sy * s])
+                .with_opacity(alpha);
+
+            let mut shader_opts = ShaderOpts::default().with_opacity(shader_alpha);
+            shader_opts.set_vec4(0, color);
+
+            self.image.draw_with_shader(ctx, 1, opts, shader_opts);
+
+            let mut t = self.text_obj.clone();
+            t.set_content(label);
+            t.draw(
+                ctx,
+                DrawOption::default().with_position([Pt::from(x - 20.0), Pt::from(y + 10.0)]),
+            );
+        };
+
+        // Extreme spacing: corners and center
+        // 1. Red - Normal - Top Left
+        draw_item(
+            context,
+            100.0,
+            100.0,
+            1.0,
+            1.0,
+            [1.0, 0.0, 0.0, 1.0],
+            1.0,
+            1.0,
+            "1.Red (Opaque)",
+        );
+
+        // 2. Green - Flip H - Top Right
+        // 0.8 * 0.5 = 0.4
+        draw_item(
+            context,
+            fsw - 100.0,
+            100.0,
+            -1.0,
+            1.0,
+            [0.0, 1.0, 0.0, 1.0],
+            0.8,
+            0.5,
+            "2.Green (0.8*0.5=0.4)",
+        );
+
+        // 3. Blue - Flip V - Bottom Left
+        // 0.5 * 1.0 = 0.5
+        draw_item(
+            context,
+            100.0,
+            fsh - 100.0,
+            1.0,
+            -1.0,
+            [0.0, 0.0, 1.0, 1.0],
+            0.5,
+            1.0,
+            "3.Blue (0.5*1.0=0.5)",
+        );
+
+        // 4. Yellow - Both - Bottom Right
+        // Solid Yellow Fill via Custom Hook, Opacity 1.0
+        let mut yellow_opts = ShaderOpts::default().with_opacity(1.0);
+        yellow_opts.set_vec4(0, [1.0, 1.0, 0.0, 1.0]); // Yellow in Slot 0
+
+        let yellow_draw = |ctx: &mut Context, x: f32, y: f32| {
+            let opts = DrawOption::default()
+                .with_position([Pt::from(x), Pt::from(y)])
+                .with_scale([-s, -s]);
+
+            self.image
+                .draw_with_shader(ctx, self.yellow_shader_id, opts, yellow_opts);
+        };
+        yellow_draw(context, fsw - 100.0, fsh - 100.0);
+
+        let mut t_y = self.text_obj.clone();
+        t_y.set_content("4.Solid Yellow (User Hook)");
+        t_y.draw(
+            context,
+            DrawOption::default().with_position([Pt::from(fsw - 140.0), Pt::from(fsh - 90.0)]),
+        );
+
+        // 5. Center - Solid FILLED (via Custom Hook)
+        let move_y = (self.time.sin() * 100.0) + (fsh * 0.5);
+        let mut fill_opts = ShaderOpts::default();
+        fill_opts.set_vec4(0, [1.0, 0.5, 0.0, 1.0]); // Orange Fill
+
+        self.image.draw_with_shader(
+            context,
+            self.yellow_shader_id, // User-registered Fill Shader
+            DrawOption::default()
+                .with_position([Pt::from(fsw * 0.5), Pt::from(move_y)])
+                .with_scale([0.5, 0.5]),
+            fill_opts,
+        );
+
+        let mut t_c = self.text_obj.clone();
+        t_c.set_content("5.Solid Fill (Orange)");
+        t_c.draw(
+            context,
+            DrawOption::default()
+                .with_position([Pt::from(fsw * 0.5 - 20.0), Pt::from(move_y + 10.0)]),
+        );
+    }
+
+    fn remove(&self) {
+        spottedcat::unregister_font(self.font_id);
+    }
+}
+
+fn main() {
+    let mut config = WindowConfig::default();
+    config.title = "Flip Test (Final Diagnose)".to_string();
+    config.width = Pt::from(1000.0);
+    config.height = Pt::from(800.0);
+    spottedcat::run::<FlipTest>(config);
+}

@@ -44,7 +44,8 @@ pub struct EngineGlobals {
     // screen[0].zw = [1.0/logical_w, 1.0/logical_h] (sw_inv, sh_inv)
     pub screen: [f32; 4],
     pub opacity: f32,
-    pub _padding: [f32; 3],
+    pub shader_opacity: f32,
+    pub _padding: [f32; 2],
 }
 
 impl InstanceData {
@@ -86,7 +87,7 @@ pub struct ImageRenderer {
 }
 
 impl ImageRenderer {
-    pub const GLOBALS_SIZE_BYTES: usize = 256;
+    pub const GLOBALS_SIZE_BYTES: usize = 256; // 16 * 16 bytes
     pub const ENGINE_GLOBALS_SIZE_BYTES: usize = std::mem::size_of::<EngineGlobals>();
 
     pub fn new(

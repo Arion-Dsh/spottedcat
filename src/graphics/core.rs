@@ -186,7 +186,7 @@ impl Graphics {
         let text_shader_src = r#"
             fn user_fs_hook() {
                 let tint = user_globals[0];
-                color = vec4<f32>(tint.rgb, tint.a * color.a);
+                color = vec4<f32>(color.rgb * tint.rgb, color.a * tint.a);
             }
         "#;
         graphics.text_shader_id = graphics.register_image_shader(text_shader_src);

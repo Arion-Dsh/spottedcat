@@ -30,7 +30,13 @@ impl Graphics {
             if !vs_src.is_empty() {
                 let marker = "// USER_VS_HOOK";
                 if let Some(pos) = combined_shader.rfind(marker) {
-                    combined_shader.insert_str(pos + marker.len(), &format!("\n{}", vs_src));
+                    combined_shader.insert_str(
+                        pos + marker.len(),
+                        &format!(
+                            "\n{{\nlet engine_globals = 0;\nlet _sp_internal = 0;\n{}\n}}",
+                            vs_src
+                        ),
+                    );
                 }
             }
         }
@@ -47,7 +53,13 @@ impl Graphics {
             if !fs_src.is_empty() {
                 let marker = "// USER_FS_HOOK";
                 if let Some(pos) = combined_shader.rfind(marker) {
-                    combined_shader.insert_str(pos + marker.len(), &format!("\n{}", fs_src));
+                    combined_shader.insert_str(
+                        pos + marker.len(),
+                        &format!(
+                            "\n{{\nlet engine_globals = 0;\nlet _sp_internal = 0;\n{}\n}}",
+                            fs_src
+                        ),
+                    );
                 }
             }
         }

@@ -14,10 +14,12 @@ var<uniform> user_globals: array<vec4<f32>, 16>;
 struct EngineGlobals {
     screen: vec4<f32>,
     opacity: f32,
+    shader_opacity: f32,
+    _padding: vec2<f32>,
 };
 
 @group(2) @binding(0)
-var<uniform> engine_globals: EngineGlobals;
+var<uniform> _sp_internal: EngineGlobals;
 
 struct VsIn {
     @builtin(vertex_index) vertex_index: u32,
@@ -58,10 +60,10 @@ fn vs_main(in: VsIn) -> VsOut {
     let uv = uv_arr[in.vertex_index];
 
     // MVP calculation moved to GPU
-    let sw_inv_2 = engine_globals.screen.x;
-    let sh_inv_2 = engine_globals.screen.y;
-    let sw_inv = engine_globals.screen.z;
-    let sh_inv = engine_globals.screen.w;
+    let sw_inv_2 = _sp_internal.screen.x;
+    let sh_inv_2 = _sp_internal.screen.y;
+    let sw_inv = _sp_internal.screen.z;
+    let sh_inv = _sp_internal.screen.w;
 
     let tx = in.pos.x * sw_inv_2 - 1.0;
     let ty = 1.0 - in.pos.y * sh_inv_2;
@@ -101,7 +103,7 @@ fn vs_main(in: VsIn) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let c = textureSample(tex, samp, in.uv);
-    let opacity = engine_globals.opacity;
+    let opacity = _sp_internal.opacity * _sp_internal.shader_opacity;
     var color = vec4<f32>(c.rgb, c.a * opacity);
 
     // USER_FS_HOOK

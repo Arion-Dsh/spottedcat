@@ -60,15 +60,15 @@ impl Graphics {
         let engine_globals = crate::image_raw::EngineGlobals {
             screen: screen_size_data,
             opacity: current_opacity,
-            _padding: [0.0; 3],
+            shader_opacity: 1.0, // Default for first batch
+            _padding: [0.0; 2],
         };
         let mut current_engine_globals_offset = self
             .image_renderer
             .upload_engine_globals(&self.queue, &engine_globals)
             .unwrap_or(0);
 
-        let mut default_user_globals = ShaderOpts::default();
-        default_user_globals.set_opacity(1.0);
+        let default_user_globals = ShaderOpts::default();
         let mut current_user_globals_offset = self
             .image_renderer
             .upload_user_globals_bytes(&self.queue, default_user_globals.as_bytes())
@@ -78,7 +78,6 @@ impl Graphics {
         let mut current_atlas_index: Option<u32> = None;
         let mut current_shader_id: u32 = 0;
         let mut current_user_globals = ShaderOpts::default();
-        current_user_globals.set_opacity(1.0);
         let mut current_clip: Option<[Pt; 4]> = None;
 
         let config_width = self.config.width;
@@ -133,12 +132,15 @@ impl Graphics {
                 self.batch.clear();
             }
 
-            if current_opacity != draw_opacity {
+            if current_opacity != draw_opacity
+                || current_user_globals.opacity != resolved.shader_opts.opacity
+            {
                 current_opacity = draw_opacity;
                 let eg = crate::image_raw::EngineGlobals {
                     screen: screen_size_data,
                     opacity: current_opacity,
-                    _padding: [0.0; 3],
+                    shader_opacity: resolved.shader_opts.opacity,
+                    _padding: [0.0; 2],
                 };
                 current_engine_globals_offset = self
                     .image_renderer
