@@ -70,6 +70,19 @@ pub struct Graphics {
     pub(crate) white_image_id: u32,
     pub(crate) black_image_id: u32,
     pub(crate) normal_image_id: u32,
+    #[allow(dead_code)]
+    pub(crate) shadow_texture: wgpu::Texture,
+    pub(crate) shadow_view: wgpu::TextureView,
+    pub(crate) shadow_bind_group: wgpu::BindGroup,
+    pub(crate) shadow_pipeline: wgpu::RenderPipeline,
+    pub(crate) instanced_shadow_pipeline: wgpu::RenderPipeline,
+    pub(crate) ibl_bind_group: wgpu::BindGroup,
+    #[allow(dead_code)]
+    pub(crate) irradiance_texture: wgpu::Texture,
+    #[allow(dead_code)]
+    pub(crate) prefiltered_texture: wgpu::Texture,
+    #[allow(dead_code)]
+    pub(crate) brdf_lut_texture: wgpu::Texture,
     pub(crate) scene_globals: crate::graphics::model_raw::SceneGlobals,
 }
 
@@ -202,9 +215,38 @@ impl Graphics {
                 &model_renderer.user_shader_opts_bind_group_layout,
                 &model_renderer.bone_matrices_bind_group_layout,
                 &model_renderer.scene_globals_bind_group_layout,
+                &model_renderer.shadow_bind_group_layout, // Group 5
+                &model_renderer.ibl_bind_group_layout,    // Group 6
             ],
             immediate_size: 0,
         });
+
+        let shadow_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("shadow_pipeline_layout"),
+            bind_group_layouts: &[
+                &model_renderer.user_globals_bind_group_layout,   // Group 0
+                &model_renderer.bone_matrices_bind_group_layout,  // Group 1
+            ],
+            immediate_size: 0,
+        });
+
+        let shadow_size = 2048;
+        let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("shadow_texture"),
+            size: wgpu::Extent3d {
+                width: shadow_size,
+                height: shadow_size,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let shadow_view = shadow_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let shadow_bind_group = model_renderer.create_shadow_bind_group(&device, &shadow_view);
 
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("depth_texture"),
@@ -221,6 +263,50 @@ impl Graphics {
             view_formats: &[],
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let irradiance_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("irradiance_texture"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 6 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let prefiltered_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("prefiltered_texture"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 6 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let brdf_lut_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("brdf_lut_texture"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        let ibl_bind_group = model_renderer.create_ibl_bind_group(
+            &device,
+            &irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::Cube),
+                ..Default::default()
+            }),
+            &prefiltered_texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::Cube),
+                ..Default::default()
+            }),
+            &brdf_lut_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+        );
 
         let model_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("model_pipeline"),
@@ -319,6 +405,90 @@ impl Graphics {
             cache: None,
         });
 
+        let shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("shadow_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shadow.wgsl").into()),
+        });
+
+        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("shadow_pipeline"),
+            layout: Some(&shadow_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState {
+                    constant: 2, // SLope scale depth bias for shadows
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let instanced_shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("instanced_shadow_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shadow_instanced.wgsl").into()),
+        });
+
+        let instanced_shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("instanced_shadow_pipeline"),
+            layout: Some(&shadow_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &instanced_shadow_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[
+                    Vertex::layout(),
+                    wgpu::VertexBufferLayout {
+                        array_stride: 64,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &[
+                            wgpu::VertexAttribute { offset: 0, shader_location: 5, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 16, shader_location: 6, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 32, shader_location: 7, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 48, shader_location: 8, format: wgpu::VertexFormat::Float32x4 },
+                        ],
+                    }
+                ],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState {
+                    constant: 2,
+                    slope_scale: 2.0,
+                    clamp: 0.0,
+                },
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        });
+
         let mut graphics = Self {
             device,
             queue,
@@ -346,6 +516,15 @@ impl Graphics {
             skins: Vec::new(),
             depth_texture,
             depth_view,
+            shadow_texture,
+            shadow_view,
+            shadow_bind_group,
+            shadow_pipeline,
+            instanced_shadow_pipeline,
+            ibl_bind_group,
+            irradiance_texture,
+            prefiltered_texture,
+            brdf_lut_texture,
             white_image_id: 0,
             black_image_id: 0,
             normal_image_id: 0,
@@ -356,6 +535,7 @@ impl Graphics {
                     position: [1.0, 1.0, 1.0, 0.0],
                     color: [1.0, 1.0, 1.0, 1.0],
                 }; 4],
+                light_view_proj: identity(),
             },
         };
 

@@ -198,6 +198,8 @@ impl Graphics {
                 &self.model_renderer.user_shader_opts_bind_group_layout,
                 &self.model_renderer.bone_matrices_bind_group_layout,
                 &self.model_renderer.scene_globals_bind_group_layout,
+                &self.model_renderer.shadow_bind_group_layout,
+                &self.model_renderer.ibl_bind_group_layout,
             ],
             immediate_size: 0,
         });
