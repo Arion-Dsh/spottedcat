@@ -5,6 +5,8 @@ use crate::ShaderOpts;
 use crate::glyph_cache::GlyphCache;
 use crate::image::ImageEntry;
 use crate::image_raw::{ImageRenderer, InstanceData};
+use crate::model::Vertex;
+use crate::graphics::model_raw::{ModelRenderer, MeshData};
 use crate::packer::AtlasPacker;
 use crate::platform;
 use crate::texture::Texture;
@@ -17,6 +19,17 @@ pub(crate) struct AtlasSlot {
     pub packer: AtlasPacker,
     pub texture: Texture,
     pub bind_group: wgpu::BindGroup,
+}
+
+pub struct SkinData {
+    pub bones: Vec<Bone>,
+    pub bone_matrices: Vec<[[f32; 4]; 4]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bone {
+    pub parent_index: Option<usize>, // Index into 'bones' Vec
+    pub inverse_bind_matrix: [[f32; 4]; 4],
 }
 
 #[derive(Clone)]
@@ -34,7 +47,9 @@ pub struct Graphics {
     pub(crate) image_renderer: ImageRenderer,
     pub(crate) default_pipeline: wgpu::RenderPipeline,
     pub(crate) image_pipelines: HashMap<u32, wgpu::RenderPipeline>,
+    pub(crate) model_pipelines: HashMap<u32, wgpu::RenderPipeline>,
     pub(crate) next_image_shader_id: u32,
+    pub(crate) next_model_shader_id: u32,
     pub(crate) images: Vec<Option<ImageEntry>>,
     pub(crate) atlases: Vec<AtlasSlot>,
     pub(crate) batch: Vec<InstanceData>,
@@ -45,6 +60,17 @@ pub struct Graphics {
     pub(crate) resolved_draws: Vec<ResolvedDraw>,
     pub(crate) text_shader_id: u32,
     pub(crate) dirty_assets: bool,
+    pub(crate) model_renderer: ModelRenderer,
+    pub(crate) model_pipeline: wgpu::RenderPipeline,
+    pub(crate) instanced_model_pipeline: wgpu::RenderPipeline,
+    pub(crate) models: Vec<Option<MeshData>>,
+    pub(crate) skins: Vec<Option<SkinData>>,
+    pub(crate) depth_texture: wgpu::Texture,
+    pub(crate) depth_view: wgpu::TextureView,
+    pub(crate) white_image_id: u32,
+    pub(crate) black_image_id: u32,
+    pub(crate) normal_image_id: u32,
+    pub(crate) scene_globals: crate::graphics::model_raw::SceneGlobals,
 }
 
 impl Graphics {
@@ -162,6 +188,137 @@ impl Graphics {
             cache: None,
         });
 
+        let model_renderer = ModelRenderer::new(&device);
+        let model_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("model_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/model.wgsl").into()),
+        });
+
+        let model_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("model_pipeline_layout"),
+            bind_group_layouts: &[
+                &model_renderer.user_globals_bind_group_layout,
+                &model_renderer.texture_bind_group_layout,
+                &model_renderer.user_shader_opts_bind_group_layout,
+                &model_renderer.bone_matrices_bind_group_layout,
+                &model_renderer.scene_globals_bind_group_layout,
+            ],
+            immediate_size: 0,
+        });
+
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("depth_texture"),
+            size: wgpu::Extent3d {
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let model_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("model_pipeline"),
+            layout: Some(&model_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &model_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Vertex::layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &model_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let instanced_model_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("model_instanced_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/model_instanced.wgsl").into()),
+        });
+
+        let instanced_model_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("instanced_model_pipeline"),
+            layout: Some(&model_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &instanced_model_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[
+                    Vertex::layout(),
+                    wgpu::VertexBufferLayout {
+                        array_stride: 64,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &[
+                            wgpu::VertexAttribute { offset: 0, shader_location: 5, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 16, shader_location: 6, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 32, shader_location: 7, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 48, shader_location: 8, format: wgpu::VertexFormat::Float32x4 },
+                        ],
+                    }
+                ],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &instanced_model_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
         let mut graphics = Self {
             device,
             queue,
@@ -169,7 +326,9 @@ impl Graphics {
             image_renderer,
             default_pipeline,
             image_pipelines,
+            model_pipelines: HashMap::new(),
             next_image_shader_id,
+            next_model_shader_id: 1,
             images: Vec::new(),
             atlases,
             batch: Vec::with_capacity(10000),
@@ -180,7 +339,35 @@ impl Graphics {
             resolved_draws: Vec::with_capacity(10000),
             text_shader_id: 0,
             dirty_assets: false,
+            model_renderer,
+            model_pipeline,
+            instanced_model_pipeline,
+            models: Vec::new(),
+            skins: Vec::new(),
+            depth_texture,
+            depth_view,
+            white_image_id: 0,
+            black_image_id: 0,
+            normal_image_id: 0,
+            scene_globals: crate::graphics::model_raw::SceneGlobals {
+                camera_pos: [0.0, 0.0, 0.0, 0.0],
+                ambient_color: [0.1, 0.1, 0.1, 1.0],
+                lights: [crate::graphics::model_raw::Light {
+                    position: [1.0, 1.0, 1.0, 0.0],
+                    color: [1.0, 1.0, 1.0, 1.0],
+                }; 4],
+            },
         };
+
+        // Create default textures
+        let white_id = graphics.create_image(1u32.into(), 1u32.into(), &[255, 255, 255, 255]).unwrap().id();
+        graphics.white_image_id = white_id;
+
+        let black_id = graphics.create_image(1u32.into(), 1u32.into(), &[0, 0, 0, 255]).unwrap().id();
+        graphics.black_image_id = black_id;
+
+        let normal_id = graphics.create_image(1u32.into(), 1u32.into(), &[128, 128, 255, 255]).unwrap().id();
+        graphics.normal_image_id = normal_id;
 
         // Register default text shader for tinting
         let text_shader_src = r#"
@@ -198,5 +385,69 @@ impl Graphics {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         surface.configure(&self.device, &self.config);
+
+        self.depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("depth_texture"),
+            size: wgpu::Extent3d {
+                width: self.config.width,
+                height: self.config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        self.depth_view = self.depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
     }
+
+    pub fn create_model(&mut self, vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<crate::model::Model> {
+        let mesh = MeshData::new(&self.device, vertices, indices);
+        mesh.upload(&self.queue, vertices, indices);
+        let id = self.models.len() as u32;
+        self.models.push(Some(mesh));
+        Ok(crate::model::Model { id, material: crate::model::Material::default() })
+    }
+
+    pub fn create_skin(&mut self, bones: Vec<Bone>, bone_matrices: Vec<[[f32; 4]; 4]>) -> u32 {
+        let id = self.skins.len() as u32;
+        self.skins.push(Some(SkinData { bones, bone_matrices }));
+        id
+    }
+
+    pub fn update_bone_matrices(&mut self, skin_id: u32, matrices: &[[[f32; 4]; 4]]) {
+        if let Some(Some(skin)) = self.skins.get_mut(skin_id as usize) {
+            for (i, matrix) in matrices.iter().enumerate() {
+                if i < skin.bone_matrices.len() {
+                    skin.bone_matrices[i] = *matrix;
+                }
+            }
+        }
+    }
+}
+
+// Basic math helpers
+pub fn identity() -> [[f32; 4]; 4] {
+    [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+}
+
+pub fn create_scale(s: [f32; 3]) -> [[f32; 4]; 4] {
+    [[s[0], 0.0, 0.0, 0.0], [0.0, s[1], 0.0, 0.0], [0.0, 0.0, s[2], 0.0], [0.0, 0.0, 0.0, 1.0]]
+}
+
+pub fn create_rotation_from_quat(q: [f32; 4]) -> [[f32; 4]; 4] {
+    let x = q[0]; let y = q[1]; let z = q[2]; let w = q[3];
+    let x2 = x + x; let y2 = y + y; let z2 = z + z;
+    let xx = x * x2; let xy = x * y2; let xz = x * z2;
+    let yy = y * y2; let yz = y * z2; let zz = z * z2;
+    let wx = w * x2; let wy = w * y2; let wz = w * z2;
+
+    [
+        [1.0 - (yy + zz), xy + wz, xz - wy, 0.0],
+        [xy - wz, 1.0 - (xx + zz), yz + wx, 0.0],
+        [xz + wy, yz - wx, 1.0 - (xx + yy), 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
 }

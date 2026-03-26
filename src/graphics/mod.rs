@@ -9,6 +9,10 @@ mod image_ops;
 mod profile;
 mod render;
 mod shader;
+mod model_raw;
 mod text_layout;
 
 pub use core::Graphics;
+pub use core::{Bone, SkinData};
+pub use core::{identity, create_scale, create_rotation_from_quat};
+pub use model_raw::{multiply, create_translation, create_rotation, create_perspective, Light, SceneGlobals};

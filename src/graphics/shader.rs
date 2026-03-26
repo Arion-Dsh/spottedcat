@@ -151,4 +151,98 @@ impl Graphics {
         self.image_pipelines.insert(shader_id, pipeline);
         shader_id
     }
+
+    pub(crate) fn register_model_shader(&mut self, user_functions: &str) -> u32 {
+        let shader_id = self.next_model_shader_id;
+        self.next_model_shader_id = self.next_model_shader_id.saturating_add(1);
+
+        let base_template = include_str!("../shaders/model.wgsl");
+        let mut combined_shader = base_template.to_string();
+
+        if let Some(vs_start) = user_functions.find("fn user_vs_hook") {
+            let vs_body_start = user_functions[vs_start..].find('{').map(|i| vs_start + i + 1).unwrap_or(vs_start);
+            let vs_end = user_functions[vs_body_start..].find("fn user_fs_hook").map(|rel| vs_body_start + rel).unwrap_or(user_functions.len());
+            let vs_body_end = user_functions[..vs_end].rfind('}').unwrap_or(vs_end);
+            let vs_src = user_functions[vs_body_start..vs_body_end].trim();
+            if !vs_src.is_empty() {
+                let marker = "// USER_VS_HOOK";
+                if let Some(pos) = combined_shader.rfind(marker) {
+                    combined_shader.insert_str(pos + marker.len(), &format!("\n{{\n{}\n}}", vs_src));
+                }
+            }
+        }
+
+        if let Some(fs_start) = user_functions.find("fn user_fs_hook") {
+            let fs_body_start = user_functions[fs_start..].find('{').map(|i| fs_start + i + 1).unwrap_or(fs_start);
+            let fs_end = user_functions.len();
+            let fs_body_end = user_functions[..fs_end].rfind('}').unwrap_or(fs_end);
+            let fs_src = user_functions[fs_body_start..fs_body_end].trim();
+            if !fs_src.is_empty() {
+                let marker = "// USER_FS_HOOK";
+                if let Some(pos) = combined_shader.rfind(marker) {
+                    combined_shader.insert_str(pos + marker.len(), &format!("\n{{\n{}\n}}", fs_src));
+                }
+            }
+        }
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("custom_model_shader"),
+            source: wgpu::ShaderSource::Wgsl(combined_shader.into()),
+        });
+
+        let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("custom_model_pipeline_layout"),
+            bind_group_layouts: &[
+                &self.model_renderer.user_globals_bind_group_layout,
+                &self.model_renderer.texture_bind_group_layout,
+                &self.model_renderer.user_shader_opts_bind_group_layout,
+                &self.model_renderer.bone_matrices_bind_group_layout,
+                &self.model_renderer.scene_globals_bind_group_layout,
+            ],
+            immediate_size: 0,
+        });
+
+        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("custom_model_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[crate::model::Vertex::layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: self.config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        self.model_pipelines.insert(shader_id, pipeline);
+        shader_id
+    }
 }

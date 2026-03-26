@@ -5,7 +5,8 @@ use winit::window::{Window, WindowId};
 
 use crate::platform;
 use crate::{
-    Context, Pt, ScenePayloadTypeId, Spot, WindowConfig, take_scene_switch_request, with_graphics,
+    Context, Pt, ScenePayloadTypeId, Spot, WindowConfig, take_quit_request,
+    take_scene_switch_request, with_graphics,
 };
 use std::rc::Rc;
 use std::time::Duration;
@@ -689,7 +690,12 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if take_quit_request() {
+            event_loop.exit();
+            return;
+        }
+
         let now = Instant::now();
         if let Some(previous) = self.previous.replace(now) {
             let elapsed = now.duration_since(previous);

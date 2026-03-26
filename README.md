@@ -1,6 +1,6 @@
 # spottedcat
 
-A simple, clean 2D graphics library for drawing images using Rust and wgpu.
+A simple, clean 2D/3D graphics library for drawing images and 3D models using Rust and wgpu.
 
 ## Why spottedcat?
 
@@ -9,15 +9,19 @@ The library is named after the **Rusty-spotted cat** (*Prionailurus rubiginosus*
 
 ## Features
 
-- **Simple API**: Minimal core types to learn: `Context`, `Spot`, `Image`, `Text`, and `run`.
+- **Simple API**: Minimal core types to learn: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run`.
 - **GPU-accelerated**: Built on wgpu for high-performance rendering.
+- **2D & 3D Support**: Draw 2D UI and images, or load and render 3D models with PBR materials and skeletal animation.
+- **3D Billboards**: Easily render 2D textures as 3D billboards that properly depth-sort with 3D objects.
+- **Instanced Rendering**: Draw thousands of identical 3D models (grass, particles, crowds) natively in a single CPU draw call via `draw_instanced`.
+- **Custom Shaders**: Inject custom WGSL code into the rendering pipeline for both 2D and 3D.
 - **Image operations**: Load from files, create from raw data, extract sub-images.
 - **Text rendering**: Custom font support, text wrapping, and styling (color, stroke).
-- **Audio support**: Play sounds (PNG/WAV/etc.), sine waves, and handle fades/volume.
+- **Audio support**: Play sounds, sine waves, and handle fades/volume.
 - **Input management**: High-level API for Keyboard, Mouse, and Touch events.
 - **Scene management**: Easy switching between game scenes with payload support.
 - **Resource management**: Built-in dependency injection for shared resources.
-- **Cross-platform**: Support for Desktop, Web (WASM), IOS and Android.
+- **Cross-platform**: Support for Desktop, Web (WASM), iOS, and Android.
 
 ## Quick Start
 
@@ -25,7 +29,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.3.1"
+spottedcat = "0.3.9"
 ```
 
 ### Basic Example
@@ -78,9 +82,11 @@ fn main() {
 
 - **`Context`**: Central state for managing draw commands, input, audio, and resources.
 - **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for drawing. Supports sub-images and raw data creation.
+- **`Image`**: GPU texture handle for 2D drawing. Supports sub-images and raw data creation.
+- **`Model`**: 3D model handle for rendering meshes, PBR materials, and skeletal animations. Supports extreme performance Instanced Rendering (`draw_instanced`).
 - **`Text`**: High-level text rendering with font registration and layout.
-- **`DrawOption`**: Unified configuration for position, rotation, scale, and clipping.
+- **`DrawOption`**: Unified configuration for position, rotation, scale, and clipping in 2D.
+- **`DrawOption3D`**: Configuration for 3D model placement (position, rotation, scale).
 
 ### Key Systems
 
@@ -88,6 +94,28 @@ fn main() {
 - **Audio**: Load and play sounds with `play_sound`, or generate tones with `play_sine`.
 - **Scenes**: Transition between states using `switch_scene::<NewScene>()`.
 - **Resources**: Share data between systems via `context.get_resource::<T>()`.
+
+## Custom Shaders
+
+You can inject custom WGSL code into the fragment shader using `register_image_shader` (2D) and `register_model_shader` (3D).
+
+### 3D Shader Exposed Variables
+
+When using custom shaders for 3D models, your code is injected at `USER_FS_HOOK` at the end of the fragment shader. The following variables are available to read or modify:
+
+- `final_color: vec4<f32>`: The computed PBR color (RGB) and opacity (A). You can modify this to change the final output.
+- `in: VertexOutput`: Contains `in.uv`, `in.normal`, `in.world_pos`, and `in.clip_position`.
+- `user_globals: array<vec4<f32>, 16>`: Custom uniform data passed from your Rust code via `ShaderOpts`.
+- `scene: SceneGlobals`: Contains `scene.camera_pos`, `scene.ambient_color`, and `scene.lights`.
+- `model_globals: ModelGlobals`: Contains `model_globals.mvp`, `model_globals.model`, `model_globals.extra` (x: opacity), and UV transforms.
+- **Textures** (with `s_sampler`): `t_albedo`, `t_pbr`, `t_normal`, `t_ao`, `t_emissive`.
+
+Example 3D shader hook:
+```wgsl
+// Make the model pulse based on the extra opacity parameter
+let pulse = (sin(model_globals.extra.x * 10.0) + 1.0) * 0.5;
+final_color = vec4<f32>(final_color.rgb * pulse, final_color.a);
+```
 
 ## Platform Support
 

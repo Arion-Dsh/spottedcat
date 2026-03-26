@@ -37,9 +37,10 @@
 mod audio;
 mod drawable;
 mod glyph_cache;
-mod graphics;
+pub mod graphics;
 mod image;
 mod image_raw;
+pub mod model;
 mod input;
 mod key;
 mod mouse;
@@ -63,10 +64,13 @@ use winit::event_loop::EventLoop;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use console_error_panic_hook;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use crate::graphics::Graphics;
 
-use drawable::DrawCommand;
-pub use drawable::DrawOption;
+use crate::drawable::{DrawCommand, DrawCommand3D};
+pub use drawable::{DrawOption, DrawOption3D};
 pub use image::{Bounds, Image};
+pub use model::Model;
 pub use input::InputManager;
 pub use key::Key;
 pub use mouse::MouseButton;
@@ -145,6 +149,7 @@ impl Default for DrawState {
 #[derive(Debug)]
 pub struct Context {
     draw_list: Vec<DrawCommand>,
+    draw_list_3d: Vec<DrawCommand3D>,
     input: InputManager,
     scale_factor: f64,
     window_logical_size: (Pt, Pt),
@@ -180,6 +185,7 @@ impl Context {
     pub fn new() -> Self {
         Self {
             draw_list: Vec::new(),
+            draw_list_3d: Vec::new(),
             input: InputManager::new(),
             scale_factor: 1.0,
             window_logical_size: (Pt(0.0), Pt(0.0)),
@@ -239,6 +245,29 @@ impl Context {
             .and_then(|v| Rc::downcast::<T>(v).ok())
     }
 
+    pub fn set_ambient_light(&mut self, color: [f32; 4]) {
+        crate::with_graphics(|g| {
+            g.scene_globals.ambient_color = color;
+        });
+    }
+
+    pub fn set_light(&mut self, index: usize, position: [f32; 4], color: [f32; 4]) {
+        crate::with_graphics(|g| {
+            if index < 4 {
+                g.scene_globals.lights[index] = crate::graphics::Light {
+                    position,
+                    color,
+                };
+            }
+        });
+    }
+
+    pub fn set_camera_pos(&mut self, pos: [f32; 3]) {
+        crate::with_graphics(|g| {
+            g.scene_globals.camera_pos = [pos[0], pos[1], pos[2], 1.0];
+        });
+    }
+
     pub(crate) fn insert_resource_dyn(&mut self, type_id: TypeId, value: Rc<dyn Any>) {
         self.resources.inner.insert(type_id, value);
     }
@@ -247,12 +276,23 @@ impl Context {
         self.resources.inner.remove(&type_id);
     }
 
+    /// Creates a skeletal skin with the specified bone hierarchy and initial matrices.
+    pub fn create_skin(&self, bones: Vec<crate::graphics::Bone>, matrices: Vec<[[f32; 4]; 4]>) -> u32 {
+        crate::with_graphics(|g| g.create_skin(bones, matrices)).unwrap_or(0)
+    }
+
+    /// Updates the bone matrices for a specific skin.
+    pub fn update_bone_matrices(&self, skin_id: u32, matrices: &[[[f32; 4]; 4]]) {
+        crate::with_graphics(|g| g.update_bone_matrices(skin_id, matrices));
+    }
+
     /// Clears all drawing commands from the previous frame.
     ///
     /// This is called automatically at the start of each frame, but can be used
     /// manually if needed.
     pub(crate) fn begin_frame(&mut self) {
         self.draw_list.clear();
+        self.draw_list_3d.clear();
         self.state_stack.clear();
         self.current_state = DrawState::default();
         self.last_image_opts.clear();
@@ -381,6 +421,10 @@ impl Context {
         self.draw_list.push(drawable);
     }
 
+    pub(crate) fn push_3d(&mut self, drawable: DrawCommand3D) {
+        self.draw_list_3d.push(drawable);
+    }
+
     fn current_draw_state(&self) -> DrawState {
         self.current_state
     }
@@ -438,6 +482,10 @@ impl Context {
     /// This is used internally by the graphics system to render the scene.
     pub(crate) fn draw_list(&self) -> &[DrawCommand] {
         &self.draw_list
+    }
+
+    pub(crate) fn draw_list_3d(&self) -> &[DrawCommand3D] {
+        &self.draw_list_3d
     }
 }
 
@@ -511,6 +559,10 @@ pub fn ime_preedit(context: &Context) -> Option<&str> {
 
 pub fn register_image_shader(wgsl_source: &str) -> u32 {
     with_graphics(|g| g.register_image_shader(wgsl_source)).unwrap_or(0)
+}
+
+pub fn register_model_shader(wgsl_source: &str) -> u32 {
+    with_graphics(|g| g.register_model_shader(wgsl_source)).unwrap_or(0)
 }
 
 pub fn register_font(font_data: Vec<u8>) -> u32 {
@@ -610,9 +662,10 @@ use std::cell::RefCell;
 
 thread_local! {
     static SCENE_SWITCH_REQUEST: RefCell<Option<SceneSwitchRequest>> = const { RefCell::new(None) };
+    static QUIT_REQUEST: RefCell<bool> = const { RefCell::new(false) };
 }
 
-fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
+pub fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
     platform::with_graphics(f)
 }
 
@@ -642,6 +695,14 @@ where
 
 pub(crate) fn take_scene_switch_request() -> Option<SceneSwitchRequest> {
     SCENE_SWITCH_REQUEST.with(|request| request.borrow_mut().take())
+}
+
+pub fn quit() {
+    QUIT_REQUEST.with(|request| *request.borrow_mut() = true);
+}
+
+pub(crate) fn take_quit_request() -> bool {
+    QUIT_REQUEST.with(|request| request.replace(false))
 }
 
 /// Runs the application with the specified Spot type.

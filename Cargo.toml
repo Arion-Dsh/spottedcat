@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -26,6 +26,10 @@ ab_glyph = "0.2"
 cpal = { version = "0.17.3", features = ["wasm-bindgen"] }
 symphonia = { version = "0.5", features = ["all"] }
 fundsp = "0.18"
+# No gltf dependencies anymore
+
+[dev-dependencies]
+gltf = "1.4"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = "0.2"
@@ -53,8 +57,8 @@ name = "text_performance_test"
 path = "examples/text_performance_test.rs"
 
 [[example]]
-name = "audio_test"
-path = "examples/audio_test.rs"
+name = "gltf_loader"
+path = "examples/gltf_loader.rs"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
