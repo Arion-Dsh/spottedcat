@@ -3,7 +3,10 @@ struct ModelGlobals {
     model: mat4x4<f32>,
 };
 
+// Group 0: Globals (only ModelGlobals needed for shadow)
 @group(0) @binding(0) var<uniform> model_globals: ModelGlobals;
+
+// Group 1: Bones
 @group(1) @binding(0) var<uniform> bone_matrices: array<mat4x4<f32>, 256>;
 
 struct VertexInput {

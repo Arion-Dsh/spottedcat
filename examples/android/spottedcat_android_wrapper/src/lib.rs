@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig};
+use spottedcat::{Context, DrawOption, DrawOption3D, Image, Model, Pt, Spot, Text, WindowConfig};
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
@@ -11,10 +11,12 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
         last_fps_time: std::time::Instant,
         frame_count: u32,
         current_fps: f32,
+        model: Model,
+        rotation: f32,
     }
 
     impl Spot for AndroidFfiSpot {
-        fn initialize(_context: &mut Context) -> Self {
+        fn initialize(context: &mut Context) -> Self {
             eprintln!("[spot][android] initialize called");
             // Load an image from assets
             const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../../../../assets/happy-tree.png");
@@ -28,11 +30,18 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
             let font_id = spottedcat::register_font(FALLBACK_FONT.to_vec());
 
-            let text = Text::new("Tap to move tree!", font_id)
+            let text = Text::new("3D Model Test!", font_id)
                 .with_font_size(Pt::from(32.0))
                 .with_color([1.0, 1.0, 1.0, 1.0]);
 
             let fps_text = Text::new("FPS: 0.0", font_id).with_font_size(Pt::from(24.0));
+
+            // Setup 3D scene
+            context.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
+            context.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
+            context.set_camera_pos([0.0, 0.0, 5.0]);
+
+            let model = Model::cube(1.0).unwrap();
 
             Self {
                 happy_tree,
@@ -42,14 +51,18 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
                 current_fps: 0.0,
+                model,
+                rotation: 0.0,
             }
         }
 
-        fn update(&mut self, context: &mut Context, _dt: std::time::Duration) {
+        fn update(&mut self, context: &mut Context, dt: std::time::Duration) {
             // Log that update is running (at low frequency to avoid spam)
             if self.frame_count % 60 == 0 {
                 eprintln!("[spot][android] update loop running");
             }
+
+            self.rotation += dt.as_secs_f32() * 1.5;
 
             // 1. Check direct touch events
             let mut active_touch = false;
@@ -97,6 +110,12 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
                 self.frame_count = 0;
             }
 
+            // Draw 3D model
+            let opts_3d = DrawOption3D::default()
+                .with_position([0.0, 0.0, 0.0])
+                .with_rotation([0.0, self.rotation, 0.0]);
+            self.model.draw(context, opts_3d);
+
             // Draw background text
             let text_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(100.0)]);
             self.text.draw(context, text_opts);
@@ -113,7 +132,7 @@ pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
                 (w / 2.0, h / 2.0)
             });
 
-            // Center the image on the touch/cursor position
+            // Draw 2D image centered on touch/cursor
             let img_opts = DrawOption::default().with_position([
                 pos.0 - self.happy_tree.width() / 2.0,
                 pos.1 - self.happy_tree.height() / 2.0,

@@ -21,8 +21,12 @@ struct SceneGlobals {
     light_view_proj: mat4x4<f32>,
 };
 
+// Group 0: Globals (ModelGlobals + SceneGlobals + UserShaderOpts)
 @group(0) @binding(0) var<uniform> model_globals: ModelGlobals;
+@group(0) @binding(1) var<uniform> scene: SceneGlobals;
+@group(0) @binding(2) var<uniform> user_globals: array<vec4<f32>, 16>;
 
+// Group 1: Textures (PBR material textures + sampler)
 @group(1) @binding(0) var t_albedo: texture_2d<f32>;
 @group(1) @binding(1) var s_sampler: sampler;
 @group(1) @binding(2) var t_pbr: texture_2d<f32>;
@@ -30,15 +34,16 @@ struct SceneGlobals {
 @group(1) @binding(4) var t_ao: texture_2d<f32>;
 @group(1) @binding(5) var t_emissive: texture_2d<f32>;
 
-@group(2) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;
-@group(3) @binding(0) var<uniform> bone_matrices: array<mat4x4<f32>, 256>;
-@group(4) @binding(0) var<uniform> scene: SceneGlobals;
-@group(5) @binding(0) var t_shadow: texture_depth_2d;
-@group(5) @binding(1) var s_shadow: sampler_comparison;
-@group(6) @binding(0) var t_irradiance: texture_cube<f32>;
-@group(6) @binding(1) var t_prefiltered: texture_cube<f32>;
-@group(6) @binding(2) var t_brdf_lut: texture_2d<f32>;
-@group(6) @binding(3) var s_ibl: sampler;
+// Group 2: Bones
+@group(2) @binding(0) var<uniform> bone_matrices: array<mat4x4<f32>, 256>;
+
+// Group 3: Environment (Shadow + IBL)
+@group(3) @binding(0) var t_shadow: texture_depth_2d;
+@group(3) @binding(1) var s_shadow: sampler_comparison;
+@group(3) @binding(2) var t_irradiance: texture_cube<f32>;
+@group(3) @binding(3) var t_prefiltered: texture_cube<f32>;
+@group(3) @binding(4) var t_brdf_lut: texture_2d<f32>;
+@group(3) @binding(5) var s_ibl: sampler;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,

@@ -193,13 +193,10 @@ impl Graphics {
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("custom_model_pipeline_layout"),
             bind_group_layouts: &[
-                &self.model_renderer.user_globals_bind_group_layout,
+                &self.model_renderer.globals_bind_group_layout,
                 &self.model_renderer.texture_bind_group_layout,
-                &self.model_renderer.user_shader_opts_bind_group_layout,
                 &self.model_renderer.bone_matrices_bind_group_layout,
-                &self.model_renderer.scene_globals_bind_group_layout,
-                &self.model_renderer.shadow_bind_group_layout,
-                &self.model_renderer.ibl_bind_group_layout,
+                &self.model_renderer.environment_bind_group_layout,
             ],
             immediate_size: 0,
         });
@@ -223,7 +220,7 @@ impl Graphics {
                 conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
+                format: wgpu::TextureFormat::Depth24Plus,
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: wgpu::StencilState::default(),

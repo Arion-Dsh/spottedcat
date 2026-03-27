@@ -301,15 +301,35 @@ impl Graphics {
                                 rpass.set_pipeline(pipeline);
                                 rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                                 rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                                rpass.set_bind_group(0, &self.model_renderer.model_globals_bind_group, &[offset]);
 
-                                if !is_shadow_pass {
+                                let mut bone_offset = 0;
+                                if let Some(skin_id) = skin_id_cmd {
+                                    if let Some(Some(skin)) = self.skins.get(*skin_id as usize) {
+                                        if let Ok(off) = self.model_renderer.upload_bone_matrices(&self.queue, &skin.bone_matrices) {
+                                            bone_offset = off;
+                                        }
+                                    }
+                                }
+
+                                if is_shadow_pass {
+                                    // Shadow pass only needs Group 0 (ModelGlobals) and Group 1 (Bones)
+                                    rpass.set_bind_group(0, &self.model_renderer.globals_bind_group, &[offset, 0]); // 0 for unused opts
+                                    rpass.set_bind_group(1, &self.model_renderer.bone_matrices_bind_group, &[bone_offset]);
+                                } else {
+                                    if let Ok(opts_offset) = self.model_renderer.upload_shader_opts_bytes(&self.queue, shader_opts.as_bytes()) {
+                                        // Group 0: [Model, Scene, UserOpts]
+                                        // dynamic offsets: [model, user_opts]
+                                        rpass.set_bind_group(0, &self.model_renderer.globals_bind_group, &[offset, opts_offset]);
+                                    }
+
                                     let get_view = |img_id: Option<u32>, fallback_id: u32| -> &wgpu::TextureView {
                                         let id = img_id.filter(|&id| self.images.get(id as usize).map(|v| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
                                         let entry = self.images[id as usize].as_ref().unwrap();
                                         let ai = entry.atlas_index.unwrap_or(0);
                                         &self.atlases[ai as usize].texture.0.view
                                     };
+
+                                    // Group 1: Textures
                                     let tex_bg = self.model_renderer.create_texture_bind_group(
                                         &self.device, 
                                         get_view(part.material.albedo, self.white_image_id),
@@ -320,34 +340,26 @@ impl Graphics {
                                     );
                                     rpass.set_bind_group(1, &tex_bg, &[]);
 
-                                    if let Ok(opts_offset) = self.model_renderer.upload_shader_opts_bytes(&self.queue, shader_opts.as_bytes()) {
-                                        rpass.set_bind_group(2, &self.model_renderer.user_shader_opts_bind_group, &[opts_offset]);
-                                    }
+                                    // Group 2: Bones
+                                    rpass.set_bind_group(2, &self.model_renderer.bone_matrices_bind_group, &[bone_offset]);
+
+                                    // Group 3: Environment
+                                    let env_bg = self.model_renderer.create_environment_bind_group(
+                                        &self.device,
+                                        &self.shadow_view,
+                                        &self.irradiance_view,
+                                        &self.prefiltered_view,
+                                        &self.brdf_lut_view,
+                                    );
+                                    rpass.set_bind_group(3, &env_bg, &[]);
                                 }
 
-                                let mut bone_offset = 0;
-                                if let Some(skin_id) = skin_id_cmd {
-                                    if let Some(Some(skin)) = self.skins.get(*skin_id as usize) {
-                                        if let Ok(off) = self.model_renderer.upload_bone_matrices(&self.queue, &skin.bone_matrices) {
-                                            bone_offset = off;
-                                        }
-                                    }
-                                }
-                                let bone_group = if is_shadow_pass { 1 } else { 3 };
-                                rpass.set_bind_group(bone_group, &self.model_renderer.bone_matrices_bind_group, &[bone_offset]);
-                                
-                                if !is_shadow_pass {
-                                    rpass.set_bind_group(4, &self.model_renderer.scene_globals_bind_group, &[]);
-                                    rpass.set_bind_group(5, &self.shadow_bind_group, &[]);
-                                    rpass.set_bind_group(6, &self.ibl_bind_group, &[]);
-                                }
-                                
                                 rpass.draw_indexed(0..mesh.index_count, 0, 0..1);
                             }
                         }
                     }
                 }
-                crate::drawable::DrawCommand3D::ModelInstanced(model, opts, _shader_id, _shader_opts, skin_id_cmd, instances) => {
+                crate::drawable::DrawCommand3D::ModelInstanced(model, opts, _shader_id, shader_opts, skin_id_cmd, instances) => {
                     if instances.is_empty() { continue; }
                     
                     let model_mat = crate::graphics::model_raw::create_translation(opts.position);
@@ -403,18 +415,6 @@ impl Graphics {
                                 rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                                 rpass.set_vertex_buffer(1, instance_buffer.slice(..));
                                 rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                                rpass.set_bind_group(0, &self.model_renderer.model_globals_bind_group, &[offset]);
-
-                                if !is_shadow_pass {
-                                    let get_view = |img_id: Option<u32>, fallback_id: u32| -> &wgpu::TextureView {
-                                        let id = img_id.filter(|&id| self.images.get(id as usize).map(|v| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
-                                        let entry = self.images[id as usize].as_ref().unwrap();
-                                        let ai = entry.atlas_index.unwrap_or(0);
-                                        &self.atlases[ai as usize].texture.0.view
-                                    };
-                                    let tex_bg = self.model_renderer.create_texture_bind_group(&self.device, get_view(part.material.albedo, self.white_image_id), get_view(part.material.pbr, self.black_image_id), get_view(part.material.normal, self.normal_image_id), get_view(part.material.occlusion, self.white_image_id), get_view(part.material.emissive, self.black_image_id));
-                                    rpass.set_bind_group(1, &tex_bg, &[]);
-                                }
 
                                 let mut bone_offset = 0;
                                 if let Some(skin_id) = skin_id_cmd {
@@ -424,13 +424,29 @@ impl Graphics {
                                         }
                                     }
                                 }
-                                let bone_group = if is_shadow_pass { 1 } else { 3 };
-                                rpass.set_bind_group(bone_group, &self.model_renderer.bone_matrices_bind_group, &[bone_offset]);
-                                
-                                if !is_shadow_pass {
-                                    rpass.set_bind_group(4, &self.model_renderer.scene_globals_bind_group, &[]);
-                                    rpass.set_bind_group(5, &self.shadow_bind_group, &[]);
-                                    rpass.set_bind_group(6, &self.ibl_bind_group, &[]);
+
+                                if is_shadow_pass {
+                                    rpass.set_bind_group(0, &self.model_renderer.globals_bind_group, &[offset, 0]);
+                                    rpass.set_bind_group(1, &self.model_renderer.bone_matrices_bind_group, &[bone_offset]);
+                                } else {
+                                    if let Ok(opts_offset) = self.model_renderer.upload_shader_opts_bytes(&self.queue, shader_opts.as_bytes()) {
+                                        rpass.set_bind_group(0, &self.model_renderer.globals_bind_group, &[offset, opts_offset]);
+                                    }
+
+                                    let get_view = |img_id: Option<u32>, fallback_id: u32| -> &wgpu::TextureView {
+                                        let id = img_id.filter(|&id| self.images.get(id as usize).map(|v| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
+                                        let entry = self.images[id as usize].as_ref().unwrap();
+                                        let ai = entry.atlas_index.unwrap_or(0);
+                                        &self.atlases[ai as usize].texture.0.view
+                                    };
+
+                                    let tex_bg = self.model_renderer.create_texture_bind_group(&self.device, get_view(part.material.albedo, self.white_image_id), get_view(part.material.pbr, self.black_image_id), get_view(part.material.normal, self.normal_image_id), get_view(part.material.occlusion, self.white_image_id), get_view(part.material.emissive, self.black_image_id));
+                                    rpass.set_bind_group(1, &tex_bg, &[]);
+
+                                    rpass.set_bind_group(2, &self.model_renderer.bone_matrices_bind_group, &[bone_offset]);
+                                    
+                                    let env_bg = self.model_renderer.create_environment_bind_group(&self.device, &self.shadow_view, &self.irradiance_view, &self.prefiltered_view, &self.brdf_lut_view);
+                                    rpass.set_bind_group(3, &env_bg, &[]);
                                 }
                                 
                                 rpass.draw_indexed(0..mesh.index_count, 0, 0..instances.len() as u32);
@@ -557,28 +573,33 @@ impl Graphics {
             None
         };
 
+        // Shadow pass in a SEPARATE command buffer to avoid Metal read-write conflict.
+        // Metal requires the shadow texture write to complete before it can be sampled.
         {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("graphics_shadow_pass"),
-                color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.shadow_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
+            let mut shadow_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("shadow_encoder"),
             });
+            {
+                let mut rpass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("graphics_shadow_pass"),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.shadow_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    ..Default::default()
+                });
 
-            // Re-use logic but with shadow scaling/projection
-            // Actually, we need to pass a different projection to render_3d
-            // Let's refine render_3d to accept an optional shadow map pass flag.
-            self.model_renderer.begin_frame(); // Reset offsets for shadow pass
-            if let Some(ctx) = _context {
-                self.render_3d_internal(&mut rpass, ctx, true);
+                self.model_renderer.begin_frame();
+                if let Some(ctx) = _context {
+                    self.render_3d_internal(&mut rpass, ctx, true);
+                }
             }
+            self.queue.submit(Some(shadow_encoder.finish()));
         }
 
         {
@@ -601,17 +622,14 @@ impl Graphics {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
+                ..Default::default()
             });
 
-            self.model_renderer.begin_frame(); // Reset offsets for main pass
+            self.model_renderer.begin_frame();
             if let Some(ctx) = _context {
                 self.render_3d_internal(&mut rpass, ctx, false);
             }
         }
-
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("graphics_render_pass_2d"),

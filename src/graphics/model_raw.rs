@@ -31,64 +31,128 @@ pub struct SceneGlobals {
 }
 
 pub struct ModelRenderer {
-    pub(crate) user_globals_bind_group_layout: wgpu::BindGroupLayout,
-    pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,
-    pub(crate) user_shader_opts_bind_group_layout: wgpu::BindGroupLayout,
-    pub(crate) bone_matrices_bind_group_layout: wgpu::BindGroupLayout, // Group 3
-    pub(crate) scene_globals_bind_group_layout: wgpu::BindGroupLayout, // Group 4
-    pub(crate) shadow_bind_group_layout: wgpu::BindGroupLayout,        // Group 5
-    pub(crate) ibl_bind_group_layout: wgpu::BindGroupLayout,           // Group 6
+    pub(crate) globals_bind_group_layout: wgpu::BindGroupLayout,     // Group 0: [Model, Scene, UserOpts]
+    pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,     // Group 1: Material textures
+    pub(crate) bone_matrices_bind_group_layout: wgpu::BindGroupLayout, // Group 2: Skinning
+    pub(crate) environment_bind_group_layout: wgpu::BindGroupLayout,   // Group 3: Shadow + IBL
+
     pub(crate) model_globals_buffer: wgpu::Buffer,
-    pub(crate) model_globals_bind_group: wgpu::BindGroup,
     pub(crate) user_shader_opts_buffer: wgpu::Buffer,
-    pub(crate) user_shader_opts_bind_group: wgpu::BindGroup,
     pub(crate) bone_matrices_buffer: wgpu::Buffer,
-    pub(crate) bone_matrices_bind_group: wgpu::BindGroup,
     pub(crate) scene_globals_buffer: wgpu::Buffer,
-    pub(crate) scene_globals_bind_group: wgpu::BindGroup,
+
+    pub(crate) globals_bind_group: wgpu::BindGroup,
+    pub(crate) bone_matrices_bind_group: wgpu::BindGroup,
+
     pub(crate) sampler: wgpu::Sampler,
     pub(crate) shadow_sampler: wgpu::Sampler,
     pub(crate) ibl_sampler: wgpu::Sampler,
-    model_globals_stride: u32,
-    user_opts_stride: u32,
-    bone_matrices_stride: u32,
-    next_model_globals: u32,
-    next_bone_batch: u32,
-    max_model_globals: u32,
+
+    pub(crate) model_globals_stride: u32,
+    pub(crate) user_opts_stride: u32,
+    pub(crate) bone_matrices_stride: u32,
+    pub(crate) next_model_globals: u32,
+    pub(crate) next_bone_batch: u32,
+    pub(crate) max_model_globals: u32,
 }
 
 impl ModelRenderer {
     pub const GLOBALS_SIZE_BYTES: usize = std::mem::size_of::<ModelGlobals>();
-    pub const USER_SHADER_OPTS_SIZE: usize = 256; // Matching ImageRenderer/ShaderOpts
+    pub const USER_SHADER_OPTS_SIZE: usize = 256;
 
     pub fn new(device: &wgpu::Device) -> Self {
-        let model_globals_stride = {
-            let align = device.limits().min_uniform_buffer_offset_alignment;
-            let size = Self::GLOBALS_SIZE_BYTES as u32;
-            ((size + align - 1) / align) * align
-        };
+        let align = device.limits().min_uniform_buffer_offset_alignment;
+        let model_globals_stride = ((Self::GLOBALS_SIZE_BYTES as u32 + align - 1) / align) * align;
+        let user_opts_stride = ((Self::USER_SHADER_OPTS_SIZE as u32 + align - 1) / align) * align;
         let max_model_globals = 4096u32;
-        let buffer_size = model_globals_stride as wgpu::BufferAddress * max_model_globals as wgpu::BufferAddress;
 
         let model_globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("model_globals_ubo"),
-            size: buffer_size,
+            size: (model_globals_stride * max_model_globals) as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let user_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let user_shader_opts_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("model_user_shader_opts_ubo"),
+            size: (user_opts_stride * max_model_globals) as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let scene_globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("model_scene_globals_ubo"),
+            size: std::mem::size_of::<SceneGlobals>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Group 0 Layout
+        let globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("model_globals_bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
+            entries: &[
+                wgpu::BindGroupLayoutEntry { // 0: Model Globals (Dynamic)
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry { // 1: Scene Globals (Static)
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: std::num::NonZeroU64::new(std::mem::size_of::<SceneGlobals>() as u64),
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry { // 2: User Ops (Dynamic)
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: std::num::NonZeroU64::new(Self::USER_SHADER_OPTS_SIZE as u64),
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("model_globals_bg"),
+            layout: &globals_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &model_globals_buffer,
+                        offset: 0,
+                        size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &scene_globals_buffer,
+                        offset: 0,
+                        size: std::num::NonZeroU64::new(std::mem::size_of::<SceneGlobals>() as u64),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &user_shader_opts_buffer,
+                        offset: 0,
+                        size: std::num::NonZeroU64::new(Self::USER_SHADER_OPTS_SIZE as u64),
+                    }),
+                },
+            ],
         });
 
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -110,7 +174,7 @@ impl ModelRenderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry { // 2: PBR (Metallic/Roughness)
+                wgpu::BindGroupLayoutEntry { // 2: PBR
                     binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
@@ -153,114 +217,20 @@ impl ModelRenderer {
             ],
         });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("model_sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Linear,
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 32.0,
-            compare: None,
-            anisotropy_clamp: 1,
-            border_color: None,
-        });
-
-        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("shadow_sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
-            ..Default::default()
-        });
-
-        let ibl_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("ibl_sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Linear,
-            ..Default::default()
-        });
-
-        let model_globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model_globals_bg"),
-            layout: &user_globals_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
+        let bone_matrices_stride = 256 * 64;
+        let bone_matrices_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model_bone_matrices_bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &model_globals_buffer,
-                    offset: 0,
-                    size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
-                }),
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: std::num::NonZeroU64::new(bone_matrices_stride as u64),
+                },
+                count: None,
             }],
         });
-
-        let user_shader_opts_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("model_user_shader_opts_bgl"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: std::num::NonZeroU64::new(Self::USER_SHADER_OPTS_SIZE as u64),
-                    },
-                    count: None,
-                }],
-            });
-
-        let user_opts_stride = {
-            let align = device.limits().min_uniform_buffer_offset_alignment;
-            let size = Self::USER_SHADER_OPTS_SIZE as u32;
-            ((size + align - 1) / align) * align
-        };
-
-        let user_shader_opts_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("model_user_shader_opts_ubo"),
-            size: (user_opts_stride * max_model_globals) as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let user_shader_opts_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model_user_shader_opts_bg"),
-            layout: &user_shader_opts_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &user_shader_opts_buffer,
-                    offset: 0,
-                    size: std::num::NonZeroU64::new(Self::USER_SHADER_OPTS_SIZE as u64),
-                }),
-            }],
-        });
-
-        let bone_matrices_stride = 256 * 64; // Support up to 256 bones per model, mat4 is 64 bytes
-
-        let bone_matrices_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("model_bone_matrices_bgl"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: std::num::NonZeroU64::new(bone_matrices_stride as u64),
-                    },
-                    count: None,
-                }],
-            });
 
         let bone_matrices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("model_bone_matrices_uniform"),
@@ -282,44 +252,10 @@ impl ModelRenderer {
             }],
         });
 
-        let scene_globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_scene_globals_bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: std::num::NonZeroU64::new(std::mem::size_of::<SceneGlobals>() as u64),
-                },
-                count: None,
-            }],
-        });
-
-        let scene_globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("model_scene_globals_ubo"),
-            size: std::mem::size_of::<SceneGlobals>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let scene_globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model_scene_globals_bg"),
-            layout: &scene_globals_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &scene_globals_buffer,
-                    offset: 0,
-                    size: std::num::NonZeroU64::new(std::mem::size_of::<SceneGlobals>() as u64),
-                }),
-            }],
-        });
-
-        let shadow_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_shadow_bgl"),
+        let environment_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("model_env_bgl"),
             entries: &[
-                wgpu::BindGroupLayoutEntry {
+                wgpu::BindGroupLayoutEntry { // 0: Shadow Map
                     binding: 0,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
@@ -329,40 +265,34 @@ impl ModelRenderer {
                     },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
+                wgpu::BindGroupLayoutEntry { // 1: Shadow Sampler
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
-            ],
-        });
-
-        let ibl_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_ibl_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::Cube,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::Cube,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
+                wgpu::BindGroupLayoutEntry { // 2: Irradiance
                     binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::Cube,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry { // 3: Prefiltered
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::Cube,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry { // 4: BRDF LUT
+                    binding: 4,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -371,8 +301,8 @@ impl ModelRenderer {
                     },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
+                wgpu::BindGroupLayoutEntry { // 5: IBL Sampler
+                    binding: 5,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
@@ -380,22 +310,44 @@ impl ModelRenderer {
             ],
         });
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("model_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 32.0,
+            ..Default::default()
+        });
+
+        let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("shadow_sampler"),
+            compare: Some(wgpu::CompareFunction::LessEqual),
+            ..Default::default()
+        });
+
+        let ibl_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("ibl_sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            ..Default::default()
+        });
+
         Self {
-            user_globals_bind_group_layout,
+            globals_bind_group_layout,
             texture_bind_group_layout,
-            user_shader_opts_bind_group_layout,
             bone_matrices_bind_group_layout,
-            scene_globals_bind_group_layout,
-            shadow_bind_group_layout,
-            ibl_bind_group_layout,
+            environment_bind_group_layout,
             model_globals_buffer,
-            model_globals_bind_group,
             user_shader_opts_buffer,
-            user_shader_opts_bind_group,
             bone_matrices_buffer,
-            bone_matrices_bind_group,
             scene_globals_buffer,
-            scene_globals_bind_group,
+            globals_bind_group,
+            bone_matrices_bind_group,
             sampler,
             shadow_sampler,
             ibl_sampler,
@@ -408,45 +360,17 @@ impl ModelRenderer {
         }
     }
 
-    pub fn create_ibl_bind_group(
+    pub fn create_environment_bind_group(
         &self,
         device: &wgpu::Device,
+        shadow_view: &wgpu::TextureView,
         irradiance_view: &wgpu::TextureView,
         prefiltered_view: &wgpu::TextureView,
         brdf_lut_view: &wgpu::TextureView,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model_ibl_bg"),
-            layout: &self.ibl_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(irradiance_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(prefiltered_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(brdf_lut_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&self.ibl_sampler),
-                },
-            ],
-        })
-    }
-
-    pub fn create_shadow_bind_group(
-        &self,
-        device: &wgpu::Device,
-        shadow_view: &wgpu::TextureView,
-    ) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("model_shadow_bg"),
-            layout: &self.shadow_bind_group_layout,
+            label: Some("model_env_bg"),
+            layout: &self.environment_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -455,6 +379,22 @@ impl ModelRenderer {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.shadow_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(irradiance_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(prefiltered_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(brdf_lut_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&self.ibl_sampler),
                 },
             ],
         })

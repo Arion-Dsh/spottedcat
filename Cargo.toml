@@ -26,6 +26,7 @@ ab_glyph = "0.2"
 cpal = { version = "0.17.3", features = ["wasm-bindgen"] }
 symphonia = { version = "0.5", features = ["all"] }
 fundsp = "0.18"
+gltf = "1.4.1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-sys = "0.6"
