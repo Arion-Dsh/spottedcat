@@ -155,5 +155,35 @@ pub fn android_main(app: AndroidApp) {
         }
     }
 
+    struct OverlaySpot {
+        text: Text,
+    }
+
+    impl Spot for OverlaySpot {
+        fn initialize(_context: &mut Context) -> Self {
+            eprintln!("[spot][android] OverlaySpot initialize called");
+            const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
+            let font_id = spottedcat::register_font(FALLBACK_FONT.to_vec());
+            let text = Text::new("Floating Cat!", font_id)
+                .with_font_size(Pt::from(24.0))
+                .with_color([1.0, 1.0, 0.0, 1.0]);
+            Self { text }
+        }
+        fn draw(&mut self, context: &mut Context) {
+            self.text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(10.0), Pt::from(30.0)]),
+            );
+        }
+        fn update(&mut self, _context: &mut Context, _dt: std::time::Duration) {}
+        fn remove(&self) {}
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        spottedcat::android::set_floating_window_scene::<OverlaySpot>();
+        spottedcat::android::set_floating_window_service("com/example/gameactivityexample/FloatingWindowService");
+    }
+
     spottedcat::run::<AndroidFfiSpot>(WindowConfig::default(), app);
 }

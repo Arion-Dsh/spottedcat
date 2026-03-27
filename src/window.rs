@@ -26,6 +26,8 @@ use web_time::Instant;
 
 type GraphicsInitState = platform::GraphicsInitState;
 
+pub type SceneFactory = Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send + Sync>;
+
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 unsafe fn handle_wasm_graphics_init_result(
     app_ptr: *mut App,
@@ -61,6 +63,7 @@ pub(crate) struct App {
     context: Context,
     spot: Option<Box<dyn Spot>>,
     scene_factory: Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send>,
+    #[allow(dead_code)]
     window_config: WindowConfig,
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     canvas_id: Option<String>,
@@ -75,11 +78,13 @@ pub(crate) struct App {
     fixed_dt: Duration,
     #[cfg(all(target_os = "android", feature = "gyroscope"))]
     sensor_state: Option<AndroidSensorState>,
+    #[cfg(target_os = "android")]
+    floating_surface: Option<wgpu::Surface<'static>>,
 }
 
 #[cfg(all(target_os = "android", feature = "gyroscope"))]
 struct AndroidSensorState {
-    manager: *mut ndk_sys::ASensorManager,
+    _manager: *mut ndk_sys::ASensorManager,
     queue: *mut ndk_sys::ASensorEventQueue,
     gyro: *const ndk_sys::ASensor,
 }
@@ -116,6 +121,8 @@ impl App {
             fixed_dt: Duration::from_secs_f64(1.0 / 60.0),
             #[cfg(all(target_os = "android", feature = "gyroscope"))]
             sensor_state: None,
+            #[cfg(target_os = "android")]
+            floating_surface: None,
         }
     }
 
@@ -259,7 +266,7 @@ impl App {
                 }
 
                 self.sensor_state = Some(AndroidSensorState {
-                    manager,
+                    _manager: manager,
                     queue,
                     gyro,
                 });
@@ -284,6 +291,13 @@ impl App {
     #[cfg(target_os = "android")]
     pub(crate) fn run_android(&mut self, app: AndroidApp) {
         use std::time::Instant;
+
+        // Initialize JVM for floating window and other Android-specific features
+        unsafe {
+            let vm = jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _).unwrap();
+            let activity = jni::objects::JObject::from_raw(app.activity_as_ptr() as *mut _);
+            crate::android::init(vm, activity);
+        }
         
         // Initialize scale factor based on screen density (160 dpi is baseline 1.0)
         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
@@ -294,6 +308,43 @@ impl App {
         self.previous = Some(Instant::now());
 
         loop {
+            // Check for new floating surface from JNI
+            if let Some(surface_obj) = crate::android::take_floating_surface() {
+                let jvm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _) }.unwrap();
+                let env = jvm.attach_current_thread().unwrap();
+                let surface_ptr = unsafe {
+                    ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), surface_obj.as_obj().as_raw())
+                };
+                if !surface_ptr.is_null() {
+                    let native_window = unsafe { ndk::native_window::NativeWindow::from_ptr(std::ptr::NonNull::new(surface_ptr).unwrap()) };
+                    let size = (native_window.width() as u32, native_window.height() as u32);
+                    
+                    match unsafe {
+                        self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                            raw_display_handle: rwh_06::RawDisplayHandle::Android(rwh_06::AndroidDisplayHandle::new()),
+                            raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
+                                rwh_06::AndroidNdkWindowHandle::new(std::ptr::NonNull::new(surface_ptr as *mut _).unwrap())
+                            }),
+                        })
+                    } {
+                        Ok(s) => {
+                            eprintln!("[spot][android][floating] surface created successfully");
+                            let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s) };
+                            self.floating_surface = Some(surface);
+                            if let Some(surface) = self.floating_surface.as_ref() {
+                                with_graphics(|g| g.resize(surface, size.0, size.1));
+                            }
+                            // Also update context size to match floating window for now
+                            self.context.set_window_logical_size(
+                                Pt::from_physical_px(size.0 as f64, self.scale_factor),
+                                Pt::from_physical_px(size.1 as f64, self.scale_factor),
+                            );
+                        }
+                        Err(e) => eprintln!("[spot][android][floating] surface creation failed: {:?}", e),
+                    }
+                }
+            }
+
             app.poll_events(Some(std::time::Duration::from_millis(0)), |poll_event| {
                 match poll_event {
                     PollEvent::Main(MainEvent::InitWindow { .. }) => {
@@ -373,6 +424,19 @@ impl App {
                     }
                     PollEvent::Main(MainEvent::Resume { .. }) => {
                         eprintln!("[spot][android] Resume");
+                        self.floating_surface = None;
+                        
+                        // Switch back to original scene only if graphics are ready
+                        if with_graphics(|_| ()).is_some() {
+                            if let Some(spot) = self.spot.take() {
+                                spot.remove();
+                            }
+                            self.spot = Some((self.scene_factory)(&mut self.context));
+                        }
+
+                        if let Some(service_class) = crate::android::floating_window_service_class() {
+                            crate::android::stop_service(service_class);
+                        }
                         if let Some(spot) = self.spot.as_mut() {
                             spot.resumed(&mut self.context);
                         }
@@ -381,6 +445,20 @@ impl App {
                     }
                     PollEvent::Main(MainEvent::Pause) => {
                         eprintln!("[spot][android] Pause");
+
+                        // Switch to floating scene if registered and graphics are ready
+                        if with_graphics(|_| ()).is_some() {
+                            if let Some(factory) = crate::android::get_floating_scene_factory() {
+                                if let Some(spot) = self.spot.take() {
+                                    spot.remove();
+                                }
+                                self.spot = Some(factory(&mut self.context));
+                            }
+                        }
+
+                        if let Some(service_class) = crate::android::floating_window_service_class() {
+                            crate::android::start_service(service_class);
+                        }
                         if let Some(spot) = self.spot.as_mut() {
                             spot.suspended(&mut self.context);
                         }
@@ -456,30 +534,40 @@ impl App {
             }
 
             // Draw
-            if let Some(surface) = self.surface.as_ref() {
-                if self.spot.is_some() {
-                    self.context.begin_frame();
+            if self.spot.is_some() {
+                // Initialize frame context
+                self.context.begin_frame();
+                if let Some(spot) = self.spot.as_mut() {
+                    spot.draw(&mut self.context);
+                }
+
+                // Handle scene switch
+                if let Some(request) = take_scene_switch_request() {
+                    if let Some(payload) = request.payload {
+                        self.context.insert_resource_dyn(payload.type_id, payload.value);
+                        self.context.insert_resource(Rc::new(ScenePayloadTypeId(payload.type_id)));
+                    } else if let Some(last) = self.context.remove_resource::<ScenePayloadTypeId>() {
+                        if let Ok(last) = std::rc::Rc::try_unwrap(last) {
+                            self.context.remove_resource_dyn(last.0);
+                        }
+                    }
+                    if let Some(old_spot) = self.spot.take() {
+                        old_spot.remove();
+                    }
+                    self.spot = Some((request.factory)(&mut self.context));
+                    
+                    // Re-draw with the new spot immediately if possible
                     if let Some(spot) = self.spot.as_mut() {
+                        self.context.begin_frame();
                         spot.draw(&mut self.context);
                     }
-                    
-                    // Handle scene switch
-                    if let Some(request) = take_scene_switch_request() {
-                        if let Some(payload) = request.payload {
-                            self.context.insert_resource_dyn(payload.type_id, payload.value);
-                            self.context.insert_resource(Rc::new(ScenePayloadTypeId(payload.type_id)));
-                        } else if let Some(last) = self.context.remove_resource::<ScenePayloadTypeId>() {
-                            if let Ok(last) = std::rc::Rc::try_unwrap(last) {
-                                self.context.remove_resource_dyn(last.0);
-                            }
-                        }
-                        if let Some(old_spot) = self.spot.take() {
-                            old_spot.remove();
-                        }
-                        self.spot = Some((request.factory)(&mut self.context));
-                    }
+                }
 
-                    // Render
+                // Render to ACTIVE surface
+                // If floating surface exists, we are in floating mode, prioritize it.
+                if let Some(surface) = self.floating_surface.as_ref() {
+                    let _ = with_graphics(|g| g.draw_context(surface, &self.context));
+                } else if let Some(surface) = self.surface.as_ref() {
                     let _ = with_graphics(|g| g.draw_context(surface, &self.context));
                 }
             }

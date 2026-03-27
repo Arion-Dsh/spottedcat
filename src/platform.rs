@@ -40,8 +40,12 @@ pub(crate) fn finalize_graphics(init_state: &mut GraphicsInitState) -> bool {
     let Some(graphics) = slot.take() else {
         return false;
     };
+    if crate::with_graphics(|_| ()).is_some() {
+        return true; // Already initialized
+    }
     if set_global_graphics(graphics).is_err() {
-        panic!("global Graphics already initialized");
+        // If it failed but with_graphics is still None, something is very wrong, but let's not panic here if possible
+        return false;
     }
     true
 }

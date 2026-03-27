@@ -2370,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "ab_glyph",
  "android-activity",
@@ -2378,6 +2378,7 @@ dependencies = [
  "bytemuck",
  "console_error_panic_hook",
  "cpal",
+ "jni 0.21.1",
  "ndk",
  "ndk-sys",
  "raw-window-handle",

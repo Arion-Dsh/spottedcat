@@ -32,6 +32,7 @@ ndk-sys = "0.6"
 android-activity = { version = "0.6.1", features = ["game-activity"] }
 ndk = "0.9.0"
 rwh_06 = { package = "raw-window-handle", version = "0.6" }
+jni = "0.21"
 
 [dev-dependencies]
 gltf = "1.4.1"

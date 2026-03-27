@@ -479,17 +479,13 @@ impl Graphics {
         scale_factor: f64,
         context: &Context,
     ) -> Result<(), wgpu::SurfaceError> {
-        let (lw, lh) = context.window_logical_size();
+        let (_lw, _lh) = context.window_logical_size();
         let sf = if scale_factor.is_finite() && scale_factor > 0.0 {
             scale_factor
         } else {
             1.0
         };
-        let expected_w = ((lw.as_f32() as f64) * sf).round().max(1.0) as u32;
-        let expected_h = ((lh.as_f32() as f64) * sf).round().max(1.0) as u32;
-        if expected_w != self.config.width || expected_h != self.config.height {
-            self.resize(surface, expected_w, expected_h);
-        }
+        // No need to resize here anymore, we'll do it in draw_drawables_internal after getting the texture
         self.draw_drawables_internal(surface, drawables, sf, Some(context))
     }
 
@@ -516,6 +512,17 @@ impl Graphics {
             None
         };
         let frame = surface.get_current_texture()?;
+        
+        // Robust resize: Ensure resources match the ACTUAL texture size
+        let (actual_w, actual_h) = (frame.texture.width(), frame.texture.height());
+        if actual_w != self.config.width || actual_h != self.config.height {
+            eprintln!("[spot][graphics] dynamic resize to match texture: {}x{}", actual_w, actual_h);
+            drop(frame); // Drop the texture before reconfiguring the surface
+            self.resize(surface, actual_w, actual_h);
+            // Re-acquire texture with new configuration
+            return self.draw_drawables_internal(surface, drawables, scale_factor, _context);
+        }
+
         let dt_acquire_ms = if let Some(t0) = t_prev {
             t0.elapsed().as_secs_f64() * 1000.0
         } else {

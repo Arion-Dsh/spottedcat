@@ -180,6 +180,7 @@ impl InputManager {
         self.text_input.clear();
     }
 
+    #[allow(dead_code)]
     pub(crate) fn handle_focus(&mut self, focused: bool) {
         self.focused = focused;
         if !focused {
@@ -198,6 +199,7 @@ impl InputManager {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn handle_received_character(&mut self, ch: char) {
         if !self.text_input_enabled {
             return;
@@ -232,6 +234,7 @@ impl InputManager {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn handle_cursor_moved(&mut self, x: Pt, y: Pt) {
         self.cursor_position = Some((x, y));
     }

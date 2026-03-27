@@ -35,6 +35,8 @@
 //! ```
 
 mod audio;
+#[cfg(target_os = "android")]
+pub mod android;
 mod drawable;
 mod glyph_cache;
 pub mod graphics;

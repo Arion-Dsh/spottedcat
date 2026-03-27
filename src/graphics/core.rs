@@ -41,6 +41,7 @@ pub(crate) struct ResolvedDraw {
 pub struct Graphics {
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
+    pub(crate) adapter: wgpu::Adapter,
     pub(crate) config: wgpu::SurfaceConfiguration,
     pub(crate) image_renderer: ImageRenderer,
     pub(crate) default_pipeline: wgpu::RenderPipeline,
@@ -117,6 +118,8 @@ impl Graphics {
                 trace: wgpu::Trace::Off,
             })
             .await?;
+
+        let adapter_clone = adapter.clone();
 
         let caps = surface.get_capabilities(&adapter);
         let mut config = surface
@@ -429,6 +432,7 @@ impl Graphics {
         let mut graphics = Self {
             device,
             queue,
+            adapter: adapter_clone,
             config,
             image_renderer,
             default_pipeline,
@@ -502,8 +506,19 @@ impl Graphics {
     pub fn resize(&mut self, surface: &wgpu::Surface<'_>, width: u32, height: u32) {
         let width = width.max(1);
         let height = height.max(1);
+        
+        let caps = surface.get_capabilities(&self.adapter);
+        if caps.formats.is_empty() {
+             eprintln!("[spot][graphics] surface has no supported formats!");
+             return;
+        }
+
         self.config.width = width;
         self.config.height = height;
+        self.config.format = caps.formats[0]; // Ensure we use a format this surface supports
+        self.config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
+        self.config.usage = crate::platform::surface_usage(&caps);
+        
         surface.configure(&self.device, &self.config);
 
         self.depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
