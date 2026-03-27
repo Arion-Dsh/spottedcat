@@ -145,9 +145,7 @@ fn fresnelSchlickRoughness(cosTheta: f32, F0: vec3<f32>, roughness: f32) -> vec3
 }
 
 fn fetch_shadow(shadow_pos: vec3<f32>) -> f32 {
-    if (shadow_pos.x < 0.0 || shadow_pos.x > 1.0 || shadow_pos.y < 0.0 || shadow_pos.y > 1.0) {
-        return 1.0;
-    }
+    let in_bounds = f32(shadow_pos.x >= 0.0 && shadow_pos.x <= 1.0 && shadow_pos.y >= 0.0 && shadow_pos.y <= 1.0);
     
     var shadow: f32 = 0.0;
     let texel_size = 1.0 / 2048.0;
@@ -157,7 +155,7 @@ fn fetch_shadow(shadow_pos: vec3<f32>) -> f32 {
             shadow += textureSampleCompare(t_shadow, s_shadow, shadow_pos.xy + offset, shadow_pos.z - 0.005);
         }
     }
-    return shadow / 9.0;
+    return mix(1.0, shadow / 9.0, in_bounds);
 }
 
 @fragment
@@ -219,7 +217,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let specular = numerator / denominator;
 
         let NdotL = max(dot(N, L), 0.0);
-        let shadow = select(1.0, fetch_shadow(in.shadow_pos), i == 0); // Only first light casts shadows
+        let shadow_val = fetch_shadow(in.shadow_pos);
+        let shadow = select(1.0, shadow_val, i == 0); // Only first light casts shadows
         Lo += (kD * albedo / PI + specular) * radiance * NdotL * shadow;
     }
 

@@ -93,6 +93,8 @@ impl Graphics {
         width: u32,
         height: u32,
     ) -> anyhow::Result<Self> {
+        let width = width.max(1);
+        let height = height.max(1);
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -496,8 +498,10 @@ impl Graphics {
     }
 
     pub fn resize(&mut self, surface: &wgpu::Surface<'_>, width: u32, height: u32) {
-        self.config.width = width.max(1);
-        self.config.height = height.max(1);
+        let width = width.max(1);
+        let height = height.max(1);
+        self.config.width = width;
+        self.config.height = height;
         surface.configure(&self.device, &self.config);
 
         self.depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {

@@ -129,7 +129,7 @@ pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         return wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::BROWSER_WEBGPU,
+            backends: wgpu::Backends::all(),
             ..Default::default()
         });
     }

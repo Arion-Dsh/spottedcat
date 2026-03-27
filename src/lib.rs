@@ -64,7 +64,7 @@ use winit::event_loop::EventLoop;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use console_error_panic_hook;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+
 use crate::graphics::Graphics;
 
 use crate::drawable::{DrawCommand, DrawCommand3D};
@@ -121,7 +121,6 @@ impl Default for WindowConfig {
     }
 }
 
-use crate::graphics::Graphics;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DrawState {

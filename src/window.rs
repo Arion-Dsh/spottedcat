@@ -26,6 +26,7 @@ unsafe fn handle_wasm_graphics_init_result(
 ) {
     match graphics_r {
         Ok(graphics) => {
+            web_sys::console::log_1(&"[spot][wasm] Graphics initialized successfully".into());
             (*app_ptr).init_state = GraphicsInitState::Ready(Some(graphics));
         }
         Err(e) => {
@@ -264,6 +265,9 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        web_sys::console::log_1(&"[spot][wasm] resumed() called".into());
+
         event_loop.set_control_flow(ControlFlow::Poll);
         self.previous = Some(Instant::now());
         self.lag = Duration::ZERO;
