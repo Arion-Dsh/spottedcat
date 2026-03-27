@@ -583,12 +583,12 @@ impl Graphics {
         self.depth_view = self.depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
     }
 
-    pub fn create_model(&mut self, vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<crate::model::Model> {
+    pub fn create_mesh(&mut self, vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<u32> {
         let mesh = MeshData::new(&self.device, vertices, indices);
         mesh.upload(&self.queue, vertices, indices);
         let id = self.models.len() as u32;
         self.models.push(Some(mesh));
-        Ok(crate::model::Model { id, material: crate::model::Material::default() })
+        Ok(id)
     }
 
     pub fn create_skin(&mut self, bones: Vec<Bone>, bone_matrices: Vec<[[f32; 4]; 4]>) -> u32 {

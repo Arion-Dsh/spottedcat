@@ -75,6 +75,7 @@ pub fn load_gltf(ctx: &Context, path: &str) -> anyhow::Result<(Model, u32)> {
                     pos,
                     uv,
                     normal: norm,
+                    tangent: [1.0, 0.0, 0.0], // Default tangent
                     joint_indices: [joints[0] as u32, joints[1] as u32, joints[2] as u32, joints[3] as u32],
                     joint_weights: weights,
                 });

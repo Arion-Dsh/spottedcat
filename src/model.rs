@@ -12,52 +12,114 @@ pub struct Material {
     pub emissive: Option<u32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Model {
+impl Material {
+    pub fn with_albedo(mut self, image: crate::Image) -> Self {
+        self.albedo = Some(image.id());
+        self
+    }
+    pub fn with_pbr(mut self, image: crate::Image) -> Self {
+        self.pbr = Some(image.id());
+        self
+    }
+    pub fn with_normal(mut self, image: crate::Image) -> Self {
+        self.normal = Some(image.id());
+        self
+    }
+    pub fn with_occlusion(mut self, image: crate::Image) -> Self {
+        self.occlusion = Some(image.id());
+        self
+    }
+    pub fn with_emissive(mut self, image: crate::Image) -> Self {
+        self.emissive = Some(image.id());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ModelPart {
     pub(crate) id: u32,
     pub(crate) material: Material,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Model {
+    pub(crate) parts: Vec<ModelPart>,
+}
+
 impl Model {
-    pub fn id(&self) -> u32 {
-        self.id
+    pub fn first_id(&self) -> u32 {
+        self.parts.first().map(|p| p.id).unwrap_or(0)
     }
 
     /// Creates a new model from vertex and index data.
     pub fn new(vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<Self> {
-        with_graphics(|g| g.create_model(vertices, indices))
-            .ok_or_else(|| anyhow::anyhow!("Graphics not initialized"))?
+        let mesh_id = with_graphics(|g| g.create_mesh(vertices, indices))
+            .ok_or_else(|| anyhow::anyhow!("Graphics not initialized"))??;
+        Ok(Self { parts: vec![ModelPart { id: mesh_id, material: Material::default() }] })
     }
 
     /// Sets the albedo material (texture) for this model.
     pub fn with_material(mut self, image: crate::Image) -> Self {
-        self.material.albedo = Some(image.id());
+        for part in &mut self.parts {
+            part.material.albedo = Some(image.id());
+        }
         self
     }
 
     pub fn with_albedo(mut self, image: crate::Image) -> Self {
-        self.material.albedo = Some(image.id());
+        for part in &mut self.parts {
+            part.material.albedo = Some(image.id());
+        }
         self
     }
 
     pub fn with_normal_map(mut self, image: crate::Image) -> Self {
-        self.material.normal = Some(image.id());
+        for part in &mut self.parts {
+            part.material.normal = Some(image.id());
+        }
         self
     }
 
     pub fn with_pbr_map(mut self, image: crate::Image) -> Self {
-        self.material.pbr = Some(image.id());
+        for part in &mut self.parts {
+            part.material.pbr = Some(image.id());
+        }
         self
     }
 
     pub fn with_ao_map(mut self, image: crate::Image) -> Self {
-        self.material.occlusion = Some(image.id());
+        for part in &mut self.parts {
+            part.material.occlusion = Some(image.id());
+        }
         self
     }
 
     pub fn with_emissive_map(mut self, image: crate::Image) -> Self {
-        self.material.emissive = Some(image.id());
+        for part in &mut self.parts {
+            part.material.emissive = Some(image.id());
+        }
         self
+    }
+
+    pub fn with_part_material(mut self, index: usize, material: Material) -> Self {
+        if let Some(part) = self.parts.get_mut(index) {
+            part.material = material;
+        }
+        self
+    }
+
+    /// Appends a new sub-mesh part to the model.
+    pub fn add_part(&mut self, vertices: &[Vertex], indices: &[u32], material: Material) -> anyhow::Result<&mut Self> {
+        let mesh_id = with_graphics(|g| g.create_mesh(vertices, indices))
+            .ok_or_else(|| anyhow::anyhow!("Graphics not initialized"))??;
+        self.parts.push(ModelPart { id: mesh_id, material });
+        Ok(self)
+    }
+
+    /// Chaining version of add_part.
+    pub fn with_part(mut self, vertices: &[Vertex], indices: &[u32], material: Material) -> anyhow::Result<Self> {
+        self.add_part(vertices, indices, material)?;
+        Ok(self)
     }
 
     /// Creates a simple cube model with the specified size.
@@ -100,9 +162,7 @@ impl Model {
             20, 21, 22, 20, 22, 23, // Left
         ];
 
-        let mut model = Self::new(&vertices, &indices)?;
-        model.material = Material::default();
-        Ok(model)
+        Self::new(&vertices, &indices)
     }
 
     /// Creates a 2D plane model in 3D space, facing +Z. Good for billboards or ground planes.
@@ -120,9 +180,7 @@ impl Model {
 
         let indices = vec![0, 1, 2, 0, 2, 3];
 
-        let mut model = Self::new(&vertices, &indices)?;
-        model.material = Material::default();
-        Ok(model)
+        Self::new(&vertices, &indices)
     }
 
     /// Creates a UV sphere model with the specified radius.
@@ -176,14 +234,12 @@ impl Model {
             }
         }
 
-        let mut model = Self::new(&vertices, &indices)?;
-        model.material = Material::default();
-        Ok(model)
+        Self::new(&vertices, &indices)
     }
 
     pub fn draw(&self, context: &mut crate::Context, options: crate::DrawOption3D) {
         context.push_3d(crate::drawable::DrawCommand3D::Model(
-            *self,
+            self.clone(),
             options,
             0,
             crate::ShaderOpts::default(),
@@ -198,7 +254,7 @@ impl Model {
         skin_id: u32,
     ) {
         context.push_3d(crate::drawable::DrawCommand3D::Model(
-            *self,
+            self.clone(),
             options,
             0,
             crate::ShaderOpts::default(),
@@ -215,7 +271,7 @@ impl Model {
         skin_id: Option<u32>,
     ) {
         context.push_3d(crate::drawable::DrawCommand3D::Model(
-            *self,
+            self.clone(),
             options,
             shader_id,
             shader_opts,
@@ -235,7 +291,7 @@ impl Model {
     ) {
         if transforms.is_empty() { return; }
         context.push_3d(crate::drawable::DrawCommand3D::ModelInstanced(
-            *self,
+            self.clone(),
             options,
             0,
             crate::ShaderOpts::default(),

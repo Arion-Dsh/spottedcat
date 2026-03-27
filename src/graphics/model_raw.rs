@@ -608,6 +608,15 @@ pub fn create_perspective(aspect: f32, fov_y: f32, near: f32, far: f32) -> [[f32
     ]
 }
 
+pub fn create_scale(scale: [f32; 3]) -> [[f32; 4]; 4] {
+    [
+        [scale[0], 0.0, 0.0, 0.0],
+        [0.0, scale[1], 0.0, 0.0],
+        [0.0, 0.0, scale[2], 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+}
+
 pub fn create_translation(pos: [f32; 3]) -> [[f32; 4]; 4] {
     [
         [1.0, 0.0, 0.0, 0.0],
