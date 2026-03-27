@@ -59,8 +59,6 @@ use std::rc::Rc;
 use std::time::Duration;
 #[cfg(not(target_os = "android"))]
 use winit::event_loop::EventLoop;
-#[cfg(target_os = "android")]
-use winit::event_loop::EventLoop;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use console_error_panic_hook;
@@ -78,6 +76,8 @@ pub use pt::Pt;
 pub use shader_opts::ShaderOpts;
 pub use text::Text;
 pub use touch::{TouchInfo, TouchPhase};
+#[cfg(target_os = "android")]
+pub use android_activity::AndroidApp;
 
 #[derive(Debug, Clone)]
 pub struct SoundOptions {
@@ -747,17 +747,10 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
 #[cfg(target_os = "android")]
 pub fn run<T: Spot + 'static>(
     window: WindowConfig,
-    app: winit::platform::android::activity::AndroidApp,
+    app: AndroidApp,
 ) {
-    use winit::platform::android::EventLoopBuilderExtAndroid;
-
-    let event_loop = EventLoop::builder()
-        .with_android_app(app)
-        .build()
-        .expect("failed to create winit EventLoop for Android");
-
-    let mut app = window::App::new::<T>(window);
-    event_loop.run_app(&mut app).expect("event loop error");
+    let mut app_impl = window::App::new::<T>(window);
+    app_impl.run_android(app);
 }
 
 /// Switches to a new scene of the specified type.

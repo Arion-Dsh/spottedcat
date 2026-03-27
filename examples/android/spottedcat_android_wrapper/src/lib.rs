@@ -1,8 +1,10 @@
-use spottedcat::{Context, DrawOption, DrawOption3D, Image, Model, Pt, Spot, Text, WindowConfig};
+use spottedcat::{
+    AndroidApp, Context, DrawOption, DrawOption3D, Image, Model, Pt, Spot, Text, WindowConfig,
+};
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
-pub fn android_main(app: winit::platform::android::activity::AndroidApp) {
+pub fn android_main(app: AndroidApp) {
     struct AndroidFfiSpot {
         happy_tree: Image,
         text: Text,

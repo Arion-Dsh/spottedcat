@@ -122,6 +122,7 @@ impl Key {
         self as usize
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn from_winit_key_code(code: winit::keyboard::KeyCode) -> Option<Self> {
         use winit::keyboard::KeyCode;
         Some(match code {

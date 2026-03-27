@@ -8,6 +8,7 @@ pub enum TouchPhase {
     Cancelled,
 }
 
+#[cfg(not(target_os = "android"))]
 impl TouchPhase {
     pub(crate) fn from_winit(phase: winit::event::TouchPhase) -> Self {
         match phase {

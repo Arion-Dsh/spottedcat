@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
+#[cfg(not(target_os = "android"))]
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, Touch};
+#[cfg(not(target_os = "android"))]
 use winit::keyboard::PhysicalKey;
 
 use crate::Key;
@@ -207,6 +209,7 @@ impl InputManager {
         self.text_input.push(ch);
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn handle_ime(&mut self, ime: Ime) {
         match ime {
             Ime::Preedit(value, _cursor) => {
@@ -233,6 +236,7 @@ impl InputManager {
         self.cursor_position = Some((x, y));
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn handle_mouse_input(&mut self, state: ElementState, button: MouseButton) {
         let button = SpotMouseButton::from_winit(button);
         match (state, button.bit_index(), button) {
@@ -261,6 +265,7 @@ impl InputManager {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn handle_mouse_wheel(&mut self, delta: MouseScrollDelta) {
         match delta {
             MouseScrollDelta::LineDelta(x, y) => {
@@ -274,6 +279,7 @@ impl InputManager {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn handle_keyboard_input(&mut self, state: ElementState, physical_key: PhysicalKey) {
         let PhysicalKey::Code(code) = physical_key else {
             return;
@@ -299,36 +305,41 @@ impl InputManager {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn handle_touch(&mut self, touch: Touch, scale_factor: f64) {
         let x = Pt::from_physical_px(touch.location.x, scale_factor);
         let y = Pt::from_physical_px(touch.location.y, scale_factor);
         let pos = (x, y);
         let phase = TouchPhase::from_winit(touch.phase);
 
+        self.handle_touch_raw(touch.id, pos, phase);
+    }
+
+    pub(crate) fn handle_touch_raw(&mut self, id: u64, position: (Pt, Pt), phase: TouchPhase) {
         match phase {
             TouchPhase::Started => {
                 // Ensure we don't have duplicates
-                self.touches.retain(|t| t.id != touch.id);
+                self.touches.retain(|t| t.id != id);
                 self.touches.push(TouchInfo {
-                    id: touch.id,
-                    position: pos,
+                    id,
+                    position,
                     phase,
                 });
             }
             TouchPhase::Moved => {
-                if let Some(t) = self.touches.iter_mut().find(|t| t.id == touch.id) {
-                    t.position = pos;
+                if let Some(t) = self.touches.iter_mut().find(|t| t.id == id) {
+                    t.position = position;
                     t.phase = phase;
                 } else {
                     self.touches.push(TouchInfo {
-                        id: touch.id,
-                        position: pos,
+                        id,
+                        position,
                         phase,
                     });
                 }
             }
             TouchPhase::Ended | TouchPhase::Cancelled => {
-                self.touches.retain(|t| t.id != touch.id);
+                self.touches.retain(|t| t.id != id);
             }
         }
     }

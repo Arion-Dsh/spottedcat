@@ -22,6 +22,7 @@ impl MouseButton {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn from_winit(button: winit::event::MouseButton) -> Self {
         use winit::event::MouseButton as W;
         match button {
