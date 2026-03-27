@@ -61,6 +61,15 @@ pub(crate) struct App {
     previous: Option<Instant>,
     lag: Duration,
     fixed_dt: Duration,
+    #[cfg(all(target_os = "android", feature = "gyroscope"))]
+    sensor_state: Option<AndroidSensorState>,
+}
+
+#[cfg(all(target_os = "android", feature = "gyroscope"))]
+struct AndroidSensorState {
+    manager: *mut ndk_sys::ASensorManager,
+    queue: *mut ndk_sys::ASensorEventQueue,
+    gyro: *const ndk_sys::ASensor,
 }
 
 impl App {
@@ -89,6 +98,8 @@ impl App {
             previous: None,
             lag: Duration::ZERO,
             fixed_dt: Duration::from_secs_f64(1.0 / 60.0),
+            #[cfg(all(target_os = "android", feature = "gyroscope"))]
+            sensor_state: None,
         }
     }
 
@@ -190,6 +201,65 @@ impl App {
         // Ensure winit is aware of the effective surface size too.
         window.request_redraw();
     }
+
+    #[cfg(all(target_os = "android", feature = "gyroscope"))]
+    fn init_sensors(&mut self) {
+        unsafe {
+            if self.sensor_state.is_none() {
+                let manager = ndk_sys::ASensorManager_getInstance();
+                if manager.is_null() {
+                    return;
+                }
+
+                // ASENSOR_TYPE_GYROSCOPE = 4
+                let gyro = ndk_sys::ASensorManager_getDefaultSensor(manager, 4);
+                if gyro.is_null() {
+                    return;
+                }
+
+                // Create a looper-less event queue (null looper)
+                // However, ASensorManager_createEventQueue requires a looper in some versions?
+                // Actually, if we use a non-looper queue, we can poll it.
+                // But the easiest way is to use the current thread's looper if it exists.
+                let looper = ndk_sys::ALooper_forThread();
+                if looper.is_null() {
+                    return;
+                }
+
+                let queue = ndk_sys::ASensorManager_createEventQueue(
+                    manager,
+                    looper,
+                    ndk_sys::ALOOPER_POLL_CALLBACK as i32,
+                    None,
+                    std::ptr::null_mut(),
+                );
+
+                if queue.is_null() {
+                    return;
+                }
+
+                self.sensor_state = Some(AndroidSensorState {
+                    manager,
+                    queue,
+                    gyro,
+                });
+            }
+
+            if let Some(state) = self.sensor_state.as_ref() {
+                ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.gyro);
+                ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000); // 50Hz
+            }
+        }
+    }
+
+    #[cfg(all(target_os = "android", feature = "gyroscope"))]
+    fn disable_sensors(&mut self) {
+        unsafe {
+            if let Some(state) = self.sensor_state.as_ref() {
+                ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.gyro);
+            }
+        }
+    }
 }
 
 impl ApplicationHandler for App {
@@ -198,256 +268,123 @@ impl ApplicationHandler for App {
         self.previous = Some(Instant::now());
         self.lag = Duration::ZERO;
 
-        #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
-        {
-            // Android can keep the winit Window alive while the underlying native surface is
-            // recreated multiple times. Even if we still have a Surface handle, it may be stale.
-            // Recreate and reconfigure the surface on every resume.
-            if let Some(window) = self.window.as_ref() {
-                self.scale_factor = window.scale_factor();
-                self.context.set_scale_factor(self.scale_factor);
-                let size = window.inner_size();
-
-                self.context.set_window_logical_size(
-                    Pt::from_physical_px(size.width as f64, self.scale_factor),
-                    Pt::from_physical_px(size.height as f64, self.scale_factor),
-                );
-
-                let surface_r = self.instance.create_surface(window);
-                match surface_r {
-                    Ok(s) => {
-                        let surface = unsafe {
-                            std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
-                        };
-                        self.surface = Some(surface);
-
-                        if let Some(surface) = self.surface.as_ref() {
-                            with_graphics(|g| g.resize(surface, size.width, size.height));
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[spot][android][surface] recreate on resume failed: {:?}",
-                            e
-                        );
-                        self.surface.take();
-                    }
-                }
-
-                if let Some(spot) = self.spot.as_mut() {
-                    spot.resumed(&mut self.context);
-                }
-                window.request_redraw();
-                return;
-            }
-        }
-
-        // If we already have a window but the surface was dropped (common on Android backgrounding),
-        // recreate just the surface and reconfigure it. Creating a second window here can lead to
-        // invalid surface state and wgpu panics.
-        if self.window.is_some() && self.surface.is_none() {
-            if let Some(window) = self.window.as_ref() {
-                let size = window.inner_size();
-                let surface_r = self.instance.create_surface(window);
-                match surface_r {
-                    Ok(s) => {
-                        let surface = unsafe {
-                            std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
-                        };
-                        self.surface = Some(surface);
-
-                        if let Some(surface) = self.surface.as_ref() {
-                            with_graphics(|g| g.resize(surface, size.width, size.height));
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[spot][android][surface] recreate on resume failed: {:?}",
-                            e
-                        );
-                        self.surface.take();
-                    }
-                }
-
-                if let Some(spot) = self.spot.as_mut() {
-                    spot.resumed(&mut self.context);
-                }
-                window.request_redraw();
-            }
-            return;
-        }
-
-        if self.window.is_some() && self.surface.is_some() {
-            if let Some(window) = self.window.as_ref() {
-                if let Some(spot) = self.spot.as_mut() {
-                    spot.resumed(&mut self.context);
-                }
-                window.request_redraw();
-            }
-            return;
-        }
-
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             web_sys::console::log_1(&"[spot][wasm] resumed".into());
         }
 
-        let w = (self.window_config.width.0).max(1.0) as f64;
-        let h = (self.window_config.height.0).max(1.0) as f64;
+        // 1. Create window if it doesn't exist
+        if self.window.is_none() {
+            let _w = self.window_config.width.0.max(1.0) as f64;
+            let _h = self.window_config.height.0.max(1.0) as f64;
 
-        let window = {
+            let attributes = Window::default_attributes()
+                .with_title(self.window_config.title.clone())
+                .with_resizable(self.window_config.resizable);
+
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-            {
+            let attributes = {
                 use wasm_bindgen::JsCast;
                 use winit::platform::web::WindowAttributesExtWebSys;
-
                 let canvas = self.canvas_id.as_deref().and_then(|id| {
                     web_sys::window()
                         .and_then(|w| w.document())
                         .and_then(|d| d.get_element_by_id(id))
                         .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
                 });
-
-                event_loop
-                    .create_window(
-                        Window::default_attributes()
-                            .with_title(self.window_config.title.clone())
-                            .with_inner_size(winit::dpi::LogicalSize::new(w, h))
-                            .with_resizable(self.window_config.resizable)
-                            .with_canvas(canvas),
-                    )
-                    .expect("failed to create window")
-            }
-
-            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-            {
-                let mut attributes = Window::default_attributes()
-                    .with_title(self.window_config.title.clone())
-                    .with_resizable(self.window_config.resizable);
-
-                #[cfg(not(any(target_os = "ios", target_os = "android")))]
-                {
-                    attributes = attributes.with_inner_size(winit::dpi::LogicalSize::new(w, h));
-                }
-
-                event_loop
-                    .create_window(attributes)
-                    .expect("failed to create window")
-            }
-        };
-
-        window.set_ime_allowed(true);
-        self.scale_factor = window.scale_factor();
-        self.context.set_scale_factor(self.scale_factor);
-        let size = window.inner_size();
-        self.context.set_window_logical_size(
-            Pt::from_physical_px(size.width as f64, self.scale_factor),
-            Pt::from_physical_px(size.height as f64, self.scale_factor),
-        );
-
-        self.window_id = Some(window.id());
-        self.window = Some(window);
-
-        #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
-        {
-            let size = size;
-
-            for &backends in platform::PREFERRED_WGPU_BACKENDS {
-                self.instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-                    backends,
-                    ..Default::default()
-                });
-
-                let window = self.window.as_ref().expect("window");
-                let surface = unsafe {
-                    let s = self
-                        .instance
-                        .create_surface(window)
-                        .expect("failed to create surface");
-                    std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
-                };
-                self.surface = Some(surface);
-
-                self.init_state = GraphicsInitState::NotStarted;
-                let s = self.surface.as_ref().expect("surface");
-                platform::begin_graphics_init(
-                    &mut self.init_state,
-                    &self.instance,
-                    s,
-                    size.width,
-                    size.height,
-                );
-
-                if !matches!(self.init_state, GraphicsInitState::Failed) {
-                    break;
-                }
-                self.surface.take();
-            }
-        }
-
-        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
-        {
-            let window = self.window.as_ref().expect("window");
-            let surface = unsafe {
-                let s = self
-                    .instance
-                    .create_surface(window)
-                    .expect("failed to create surface");
-                std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
+                attributes.with_inner_size(winit::dpi::LogicalSize::new(_w, _h)).with_canvas(canvas)
             };
-            self.surface = Some(surface);
-        }
 
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        {
-            let window = self.window.as_ref().expect("window");
-            let surface = unsafe {
-                let s = self
-                    .instance
-                    .create_surface(window)
-                    .expect("failed to create surface");
-                std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
-            };
-            self.surface = Some(surface);
-        }
+            #[cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))]
+            let attributes = attributes.with_inner_size(winit::dpi::LogicalSize::new(_w, _h));
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let s = self.surface.as_ref().expect("surface");
-            platform::begin_graphics_init(
-                &mut self.init_state,
-                &self.instance,
-                s,
-                size.width,
-                size.height,
+            let window = event_loop.create_window(attributes).expect("failed to create window");
+            window.set_ime_allowed(true);
+            
+            self.scale_factor = window.scale_factor();
+            self.context.set_scale_factor(self.scale_factor);
+            let size = window.inner_size();
+            self.context.set_window_logical_size(
+                Pt::from_physical_px(size.width as f64, self.scale_factor),
+                Pt::from_physical_px(size.height as f64, self.scale_factor),
             );
+            eprintln!("[spot][init] Window created: {}x{} (dpr: {})", size.width, size.height, self.scale_factor);
+
+            self.window_id = Some(window.id());
+            self.window = Some(window);
         }
 
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        {
-            let s = self.surface.as_ref().expect("surface");
-            let instance = self.instance.clone();
-            let surface_ptr: *const wgpu::Surface<'static> = s;
-            let app_ptr: *mut App = self;
-            let w = size.width;
-            let h = size.height;
-
-            platform::begin_graphics_init(
-                &mut self.init_state,
-                instance,
-                surface_ptr,
-                w,
-                h,
-                Box::new(move |graphics_r| unsafe {
-                    handle_wasm_graphics_init_result(app_ptr, graphics_r)
-                }),
-            );
+        // 2. (Re)create surface if needed
+        if let Some(window) = self.window.as_ref() {
+            if self.surface.is_none() {
+                let size = window.inner_size();
+                match self.instance.create_surface(window) {
+                    Ok(s) => {
+                        let surface = unsafe {
+                            std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
+                        };
+                        self.surface = Some(surface);
+                        
+                        // If graphics is already initialized, resize the surface
+                        if let GraphicsInitState::Ready(_) = self.init_state {
+                            if let Some(surface) = self.surface.as_ref() {
+                                with_graphics(|g| g.resize(surface, size.width, size.height));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[spot][surface] create failed: {:?}", e);
+                    }
+                }
+            }
         }
+
+        // 3. Initialize graphics if not already started
+        if let GraphicsInitState::NotStarted = self.init_state {
+            if let Some(surface) = self.surface.as_ref() {
+                if let Some(window) = self.window.as_ref() {
+                    let size = window.inner_size();
+                    
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        platform::begin_graphics_init(
+                            &mut self.init_state,
+                            &self.instance,
+                            surface,
+                            size.width,
+                            size.height,
+                        );
+                    }
+
+                    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                    {
+                        let instance = self.instance.clone();
+                        let surface_ptr: *const wgpu::Surface<'static> = surface;
+                        let app_ptr: *mut App = self;
+                        platform::begin_graphics_init(
+                            &mut self.init_state,
+                            instance,
+                            surface_ptr,
+                            size.width,
+                            size.height,
+                            Box::new(move |graphics_r| unsafe {
+                                handle_wasm_graphics_init_result(app_ptr, graphics_r)
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+
+        // 4. Handle app-level resume and sensors
+        if let Some(spot) = self.spot.as_mut() {
+            spot.resumed(&mut self.context);
+        }
+
+        #[cfg(all(target_os = "android", feature = "gyroscope"))]
+        self.init_sensors();
 
         if let Some(window) = self.window.as_ref() {
-            if let Some(spot) = self.spot.as_mut() {
-                spot.resumed(&mut self.context);
-            }
             window.request_redraw();
         }
     }
@@ -459,6 +396,9 @@ impl ApplicationHandler for App {
             spot.suspended(&mut self.context);
         }
         self.surface.take();
+
+        #[cfg(all(target_os = "android", feature = "gyroscope"))]
+        self.disable_sensors();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -712,6 +652,27 @@ impl ApplicationHandler for App {
 
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
+        }
+
+        #[cfg(all(target_os = "android", feature = "gyroscope"))]
+        {
+            if let Some(state) = self.sensor_state.as_ref() {
+                unsafe {
+                    let mut event = std::mem::zeroed::<ndk_sys::ASensorEvent>();
+                    while ndk_sys::ASensorEventQueue_getEvents(state.queue, &mut event, 1) > 0 {
+                        // ASENSOR_TYPE_GYROSCOPE = 4
+                        if event.type_ == 4 {
+                            // event.unnamed_field.vector.v is [f32; 3]
+                            // but ndk-sys has it as a union.
+                            // In 0.6.0 it should be accessible.
+                            let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
+                            let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
+                            let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
+                            self.context.input_mut().handle_gyroscope(x, y, z);
+                        }
+                    }
+                }
+            }
         }
     }
 

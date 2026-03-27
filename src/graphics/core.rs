@@ -13,7 +13,6 @@ use crate::texture::Texture;
 use ab_glyph::FontArc;
 use std::collections::HashMap;
 
-use super::profile::pick_present_mode;
 
 pub(crate) struct AtlasSlot {
     pub packer: AtlasPacker,
@@ -101,6 +100,9 @@ impl Graphics {
             })
             .await?;
 
+        let info = adapter.get_info();
+        eprintln!("[spot][init] Selected adapter: {:?} ({:?})", info.name, info.backend);
+
         let adapter_limits = adapter.limits();
 
         let (device, queue) = adapter
@@ -114,32 +116,26 @@ impl Graphics {
             })
             .await?;
 
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .copied()
-            .find(|f| f.is_srgb())
-            .unwrap_or(surface_caps.formats[0]);
+        let caps = surface.get_capabilities(&adapter);
+        let config = surface
+            .get_default_config(&adapter, width, height)
+            .unwrap_or_else(|| wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: caps.formats[0],
+                width: width.max(1),
+                height: height.max(1),
+                present_mode: caps.present_modes[0],
+                alpha_mode: caps.alpha_modes[0],
+                view_formats: vec![],
+                desired_maximum_frame_latency: 2,
+            });
 
-        let usage = platform::surface_usage(&surface_caps);
-        let present_mode = pick_present_mode(&surface_caps);
-
-        let config = wgpu::SurfaceConfiguration {
-            usage,
-            format: surface_format,
-            width: width.max(1),
-            height: height.max(1),
-            present_mode,
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
         surface.configure(&device, &config);
 
         let image_renderer = ImageRenderer::new(&device, config.format, 200000);
-        let image_pipelines = HashMap::new();
+
         let next_image_shader_id = 1;
+        let image_pipelines = HashMap::new();
 
         let atlas_size = 4096;
         let packer = AtlasPacker::new(atlas_size, atlas_size, 2);

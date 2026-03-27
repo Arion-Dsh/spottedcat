@@ -549,6 +549,11 @@ pub fn touches(context: &Context) -> &[TouchInfo] {
     context.input().touches()
 }
 
+#[cfg(feature = "gyroscope")]
+pub fn gyroscope(context: &Context) -> Option<[f32; 3]> {
+    context.input().gyroscope()
+}
+
 pub fn touch_down(context: &Context) -> bool {
     !context.input().touches().is_empty()
 }

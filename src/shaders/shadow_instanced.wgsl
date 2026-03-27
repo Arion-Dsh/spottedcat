@@ -4,7 +4,7 @@ struct ModelGlobals {
 };
 
 @group(0) @binding(0) var<uniform> model_globals: ModelGlobals;
-@group(1) @binding(0) var<storage, read> bone_matrices: array<mat4x4<f32>>;
+@group(1) @binding(0) var<uniform> bone_matrices: array<mat4x4<f32>, 256>;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,

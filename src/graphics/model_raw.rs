@@ -245,6 +245,8 @@ impl ModelRenderer {
             }],
         });
 
+        let bone_matrices_stride = 256 * 64; // Support up to 256 bones per model, mat4 is 64 bytes
+
         let bone_matrices_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("model_bone_matrices_bgl"),
@@ -252,19 +254,18 @@ impl ModelRenderer {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: true,
-                        min_binding_size: None,
+                        min_binding_size: std::num::NonZeroU64::new(bone_matrices_stride as u64),
                     },
                     count: None,
                 }],
             });
 
-        let bone_matrices_stride = 256 * 64; // Support up to 256 bones per model, mat4 is 64 bytes
         let bone_matrices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("model_bone_matrices_storage"),
+            label: Some("model_bone_matrices_uniform"),
             size: (bone_matrices_stride as u64 * max_model_globals as u64),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 

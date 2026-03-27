@@ -31,6 +31,8 @@ pub struct InputManager {
     ime_preedit: Option<String>,
 
     touches: Vec<TouchInfo>,
+    #[cfg(feature = "gyroscope")]
+    gyroscope: Option<[f32; 3]>,
 }
 
 impl Default for InputManager {
@@ -57,6 +59,8 @@ impl Default for InputManager {
             ime_preedit: None,
 
             touches: Vec::new(),
+            #[cfg(feature = "gyroscope")]
+            gyroscope: None,
         }
     }
 }
@@ -105,6 +109,11 @@ impl InputManager {
 
     pub fn touches(&self) -> &[TouchInfo] {
         &self.touches
+    }
+
+    #[cfg(feature = "gyroscope")]
+    pub fn gyroscope(&self) -> Option<[f32; 3]> {
+        self.gyroscope
     }
 
     pub fn key_down(&self, key: Key) -> bool {
@@ -322,5 +331,11 @@ impl InputManager {
                 self.touches.retain(|t| t.id != touch.id);
             }
         }
+    }
+
+    #[cfg(feature = "gyroscope")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_gyroscope(&mut self, x: f32, y: f32, z: f32) {
+        self.gyroscope = Some([x, y, z]);
     }
 }

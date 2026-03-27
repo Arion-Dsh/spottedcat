@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
 pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] =
-    &[wgpu::Backends::VULKAN, wgpu::Backends::GL];
+    &[wgpu::Backends::GL];
 
 #[cfg(not(all(not(target_arch = "wasm32"), target_os = "android")))]
 #[allow(dead_code)]
@@ -117,7 +117,7 @@ pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
     #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
     {
         return wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::GL,
+            backends: wgpu::Backends::GL,
             ..Default::default()
         });
     }

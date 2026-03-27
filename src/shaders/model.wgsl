@@ -31,7 +31,7 @@ struct SceneGlobals {
 @group(1) @binding(5) var t_emissive: texture_2d<f32>;
 
 @group(2) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;
-@group(3) @binding(0) var<storage, read> bone_matrices: array<mat4x4<f32>>;
+@group(3) @binding(0) var<uniform> bone_matrices: array<mat4x4<f32>, 256>;
 @group(4) @binding(0) var<uniform> scene: SceneGlobals;
 @group(5) @binding(0) var t_shadow: texture_depth_2d;
 @group(5) @binding(1) var s_shadow: sampler_comparison;
