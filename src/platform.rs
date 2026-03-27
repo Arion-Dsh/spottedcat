@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 
 #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
+#[allow(dead_code)]
 pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] =
     &[wgpu::Backends::PRIMARY];
 

@@ -8,7 +8,6 @@ use crate::image_raw::{ImageRenderer, InstanceData};
 use crate::model::Vertex;
 use crate::graphics::model_raw::{ModelRenderer, MeshData};
 use crate::packer::AtlasPacker;
-use crate::platform;
 use crate::texture::Texture;
 use ab_glyph::FontArc;
 use std::collections::HashMap;
@@ -120,7 +119,7 @@ impl Graphics {
             .await?;
 
         let caps = surface.get_capabilities(&adapter);
-        let config = surface
+        let mut config = surface
             .get_default_config(&adapter, width, height)
             .unwrap_or_else(|| wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -132,6 +131,9 @@ impl Graphics {
                 view_formats: vec![],
                 desired_maximum_frame_latency: 2,
             });
+
+        config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
+        config.usage = crate::platform::surface_usage(&caps);
 
         surface.configure(&device, &config);
 
@@ -492,7 +494,7 @@ impl Graphics {
                 color = vec4<f32>(color.rgb * tint.rgb, color.a * tint.a);
             }
         "#;
-//        graphics.text_shader_id = graphics.register_image_shader(text_shader_src);
+        graphics.text_shader_id = graphics.register_image_shader(text_shader_src);
 
         Ok(graphics)
     }
