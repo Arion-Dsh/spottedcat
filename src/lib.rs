@@ -650,7 +650,7 @@ pub fn play_sine(freq: f32, volume: f32) -> Option<u64> {
     platform::with_audio(|a| a.play_sine(freq, volume)).flatten()
 }
 
-type SceneFactory = Box<dyn FnOnce(&mut Context) -> Box<dyn Spot>>;
+type SceneFactory = Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send + Sync>;
 
 pub(crate) struct ScenePayload {
     pub(crate) type_id: TypeId,
@@ -677,7 +677,7 @@ pub fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
 
 fn request_scene_switch<F>(factory: F)
 where
-    F: FnOnce(&mut Context) -> Box<dyn Spot> + 'static,
+    F: Fn(&mut Context) -> Box<dyn Spot> + Send + Sync + 'static,
 {
     SCENE_SWITCH_REQUEST.with(|request| {
         *request.borrow_mut() = Some(SceneSwitchRequest {
@@ -689,7 +689,7 @@ where
 
 fn request_scene_switch_with<F>(factory: F, payload: ScenePayload)
 where
-    F: FnOnce(&mut Context) -> Box<dyn Spot> + 'static,
+    F: Fn(&mut Context) -> Box<dyn Spot> + Send + Sync + 'static,
 {
     SCENE_SWITCH_REQUEST.with(|request| {
         *request.borrow_mut() = Some(SceneSwitchRequest {
@@ -752,7 +752,7 @@ pub fn run<T: Spot + 'static>(
     app: AndroidApp,
 ) {
     let mut app_impl = window::App::new::<T>(window);
-    app_impl.run_android(app);
+    app_impl.run(app);
 }
 
 /// Switches to a new scene of the specified type.

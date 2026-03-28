@@ -2588,6 +2588,7 @@ dependencies = [
  "fundsp",
  "gltf",
  "image",
+ "jni 0.21.1",
  "ndk",
  "ndk-sys",
  "raw-window-handle",

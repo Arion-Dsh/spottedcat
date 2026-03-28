@@ -2,13 +2,17 @@
 use std::sync::OnceLock;
 #[cfg(target_os = "android")]
 use std::sync::Mutex;
+#[cfg(target_os = "android")]
+use android_activity::AndroidApp;
 
+#[cfg(target_os = "android")]
+static ANDROID_APP: OnceLock<AndroidApp> = OnceLock::new();
 #[cfg(target_os = "android")]
 static JVM: OnceLock<jni::JavaVM> = OnceLock::new();
 static ACTIVITY: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
 static FLOATING_SERVICE_CLASS: OnceLock<String> = OnceLock::new();
 static FLOATING_SURFACE: Mutex<Option<jni::objects::GlobalRef>> = Mutex::new(None);
-static FLOATING_SCENE_FACTORY: OnceLock<crate::window::SceneFactory> = OnceLock::new();
+static FLOATING_SCENE_FACTORY: OnceLock<crate::SceneFactory> = OnceLock::new();
 
 
 #[cfg(target_os = "android")]
@@ -34,30 +38,37 @@ fn find_class<'a>(env: &mut jni::JNIEnv<'a>, class_name: &str) -> jni::errors::R
 }
 
 #[cfg(target_os = "android")]
-pub fn init(vm: jni::JavaVM, activity: jni::objects::JObject) {
-    let _ = JVM.set(vm);
-    let mut env = JVM.get().unwrap().attach_current_thread().unwrap();
-    let _ = ACTIVITY.set(env.new_global_ref(activity).unwrap());
+pub fn init(app: AndroidApp) {
+    let _ = ANDROID_APP.set(app.clone());
 
-    // If service class was already set, register it now
-    if let Some(class_name) = floating_window_service_class() {
-        if let Ok(class) = find_class(&mut env, class_name) {
-            let methods = [
-                jni::NativeMethod {
-                    name: "onFloatingSurfaceCreated".into(),
-                    sig: "(Landroid/view/Surface;)V".into(),
-                    fn_ptr: native_on_floating_surface_created as *mut std::ffi::c_void,
-                },
-                jni::NativeMethod {
-                    name: "onFloatingSurfaceDestroyed".into(),
-                    sig: "()V".into(),
-                    fn_ptr: native_on_floating_surface_destroyed as *mut std::ffi::c_void,
-                },
-            ];
-            env.register_native_methods(class, &methods).expect("Failed to register native methods for floating window service");
+    unsafe {
+        let vm = jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _).unwrap();
+        let activity = jni::objects::JObject::from_raw(app.activity_as_ptr() as *mut _);
+        let _ = JVM.set(vm);
+        let mut env = JVM.get().unwrap().attach_current_thread().unwrap();
+        let _ = ACTIVITY.set(env.new_global_ref(activity).unwrap());
+
+        // If service class was already set, register it now
+        if let Some(class_name) = floating_window_service_class() {
+            if let Ok(class) = find_class(&mut env, class_name) {
+                let methods = [
+                    jni::NativeMethod {
+                        name: "onFloatingSurfaceCreated".into(),
+                        sig: "(Landroid/view/Surface;)V".into(),
+                        fn_ptr: native_on_floating_surface_created as *mut std::ffi::c_void,
+                    },
+                    jni::NativeMethod {
+                        name: "onFloatingSurfaceDestroyed".into(),
+                        sig: "()V".into(),
+                        fn_ptr: native_on_floating_surface_destroyed as *mut std::ffi::c_void,
+                    },
+                ];
+                env.register_native_methods(class, &methods).expect("Failed to register native methods for floating window service");
+            }
         }
     }
 }
+
 
 #[cfg(target_os = "android")]
 pub fn set_floating_window_scene<T: crate::Spot + 'static>() {
@@ -65,7 +76,7 @@ pub fn set_floating_window_scene<T: crate::Spot + 'static>() {
 }
 
 #[cfg(target_os = "android")]
-pub(crate) fn get_floating_scene_factory() -> Option<&'static crate::window::SceneFactory> {
+pub(crate) fn get_floating_scene_factory() -> Option<&'static crate::SceneFactory> {
     FLOATING_SCENE_FACTORY.get()
 }
 
@@ -129,6 +140,7 @@ pub fn set_floating_window_service(class_name: &str) {
         }
     }
 }
+
 
 #[cfg(target_os = "android")]
 pub(crate) fn floating_window_service_class() -> Option<&'static str> {

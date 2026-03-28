@@ -9,12 +9,14 @@ pub fn android_main(app: AndroidApp) {
         happy_tree: Image,
         text: Text,
         fps_text: Text,
+        gyro_text: Text,
         touch_pos: Option<(Pt, Pt)>,
         last_fps_time: std::time::Instant,
         frame_count: u32,
         current_fps: f32,
         model: Model,
         rotation: f32,
+        gyro_data: [f32; 3],
     }
 
     impl Spot for AndroidFfiSpot {
@@ -32,29 +34,32 @@ pub fn android_main(app: AndroidApp) {
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
             let font_id = spottedcat::register_font(FALLBACK_FONT.to_vec());
 
-            let text = Text::new("3D Model Test!", font_id)
+            let text = Text::new("3D Model & Gyro Test!", font_id)
                 .with_font_size(Pt::from(32.0))
                 .with_color([1.0, 1.0, 1.0, 1.0]);
 
             let fps_text = Text::new("FPS: 0.0", font_id).with_font_size(Pt::from(24.0));
+            let gyro_text = Text::new("Gyro: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(24.0));
 
             // Setup 3D scene
             context.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
             context.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
             context.set_camera_pos([0.0, 0.0, 5.0]);
 
-            let model = Model::cube(1.0).unwrap();
+            let model = Model::cube(1.5).unwrap();
 
             Self {
                 happy_tree,
                 text,
                 fps_text,
+                gyro_text,
                 touch_pos: None,
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
                 current_fps: 0.0,
                 model,
                 rotation: 0.0,
+                gyro_data: [0.0; 3],
             }
         }
 
@@ -65,6 +70,13 @@ pub fn android_main(app: AndroidApp) {
             }
 
             self.rotation += dt.as_secs_f32() * 1.5;
+
+            // Update gyroscope data
+            self.gyro_data = spottedcat::gyroscope(context).unwrap_or([0.0; 3]);
+            self.gyro_text.set_content(format!(
+                "Gyro: {:.2}, {:.2}, {:.2}",
+                self.gyro_data[0], self.gyro_data[1], self.gyro_data[2]
+            ));
 
             // 1. Check direct touch events
             let mut active_touch = false;
@@ -90,7 +102,7 @@ pub fn android_main(app: AndroidApp) {
                 active_touch = true;
             }
 
-            // 2. Fallback to mouse/cursor (synthesis from touch works on most backends)
+            // 2. Fallback to mouse/cursor
             if !active_touch {
                 if let Some(cursor) = spottedcat::cursor_position(context) {
                     self.touch_pos = Some(cursor);
@@ -99,7 +111,6 @@ pub fn android_main(app: AndroidApp) {
         }
 
         fn draw(&mut self, context: &mut Context) {
-            // Calculate Real FPS based on draw calls
             self.frame_count += 1;
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(self.last_fps_time);
@@ -112,20 +123,29 @@ pub fn android_main(app: AndroidApp) {
                 self.frame_count = 0;
             }
 
-            // Draw 3D model
+            // Draw 3D model with gyroscope tilt
+            // We use gyro X and Y to nudge the rotation
             let opts_3d = DrawOption3D::default()
                 .with_position([0.0, 0.0, 0.0])
-                .with_rotation([0.0, self.rotation, 0.0]);
+                .with_rotation([
+                    self.gyro_data[0] * 0.5, 
+                    self.rotation + self.gyro_data[1] * 0.5, 
+                    self.gyro_data[2] * 0.5
+                ]);
             self.model.draw(context, opts_3d);
 
-            // Draw background text
+            // Draw UI
             let text_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(100.0)]);
             self.text.draw(context, text_opts);
 
-            // Draw current FPS value
             self.fps_text.draw(
                 context,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(150.0)]),
+            );
+            
+            self.gyro_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(190.0)]),
             );
 
             // Draw image at touch position or center
@@ -134,7 +154,6 @@ pub fn android_main(app: AndroidApp) {
                 (w / 2.0, h / 2.0)
             });
 
-            // Draw 2D image centered on touch/cursor
             let img_opts = DrawOption::default().with_position([
                 pos.0 - self.happy_tree.width() / 2.0,
                 pos.1 - self.happy_tree.height() / 2.0,
