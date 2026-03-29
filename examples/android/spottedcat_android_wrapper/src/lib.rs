@@ -13,6 +13,10 @@ pub fn android_main(app: AndroidApp) {
         accel_text: Text,
         mag_text: Text,
         rot_text: Text,
+        rot_data: [f32; 4],
+        step_text: Text,
+        step_count: f32,
+        step_detected_timer: f32,
         touch_pos: Option<(Pt, Pt)>,
         last_fps_time: std::time::Instant,
         frame_count: u32,
@@ -22,7 +26,6 @@ pub fn android_main(app: AndroidApp) {
         gyro_data: [f32; 3],
         accel_data: [f32; 3],
         mag_data: [f32; 3],
-        rot_data: [f32; 4],
     }
 
     impl Spot for AndroidFfiSpot {
@@ -50,6 +53,7 @@ pub fn android_main(app: AndroidApp) {
             let accel_text = Text::new("Accel: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
             let mag_text = Text::new("Mag: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
             let rot_text = Text::new("Rot: 0.0, 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
+            let step_text = Text::new("Steps: 0", font_id).with_font_size(Pt::from(20.0));
 
             // Setup 3D scene
             context.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
@@ -66,6 +70,10 @@ pub fn android_main(app: AndroidApp) {
                 accel_text,
                 mag_text,
                 rot_text,
+                rot_data: [0.0; 4],
+                step_text,
+                step_count: 0.0,
+                step_detected_timer: 0.0,
                 touch_pos: None,
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
@@ -75,7 +83,6 @@ pub fn android_main(app: AndroidApp) {
                 gyro_data: [0.0; 3],
                 accel_data: [0.0; 3],
                 mag_data: [0.0; 3],
-                rot_data: [0.0; 4],
             }
         }
 
@@ -109,6 +116,18 @@ pub fn android_main(app: AndroidApp) {
                 "Rot: {:.2}, {:.2}, {:.2}, {:.2}",
                 self.rot_data[0], self.rot_data[1], self.rot_data[2], self.rot_data[3]
             ));
+            
+            self.step_count = spottedcat::step_count(context).unwrap_or(0.0);
+            if spottedcat::step_detected(context) {
+                self.step_detected_timer = 0.5;
+            }
+            self.step_detected_timer = (self.step_detected_timer - dt.as_secs_f32()).max(0.0);
+            self.step_text.set_content(format!("Steps: {:.0}", self.step_count));
+            if self.step_detected_timer > 0.0 {
+                self.step_text.set_color([1.0, 1.0, 0.0, 1.0]); // Yellow on detection
+            } else {
+                self.step_text.set_color([1.0, 1.0, 1.0, 1.0]);
+            }
 
             // 1. Check direct touch events
             let mut active_touch = false;
@@ -193,6 +212,11 @@ pub fn android_main(app: AndroidApp) {
             self.rot_text.draw(
                 context,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(280.0)]),
+            );
+            
+            self.step_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(310.0)]),
             );
 
             // Draw image at touch position or center

@@ -41,6 +41,10 @@ pub struct InputManager {
     magnetometer: Option<[f32; 3]>,
     #[cfg(feature = "sensors")]
     rotation: Option<[f32; 4]>,
+    #[cfg(feature = "sensors")]
+    step_count: Option<f32>,
+    #[cfg(feature = "sensors")]
+    step_detected: bool,
 }
 
 impl Default for InputManager {
@@ -75,6 +79,10 @@ impl Default for InputManager {
             magnetometer: None,
             #[cfg(feature = "sensors")]
             rotation: None,
+            #[cfg(feature = "sensors")]
+            step_count: None,
+            #[cfg(feature = "sensors")]
+            step_detected: false,
         }
     }
 }
@@ -145,6 +153,16 @@ impl InputManager {
         self.rotation
     }
 
+    #[cfg(feature = "sensors")]
+    pub fn step_count(&self) -> Option<f32> {
+        self.step_count
+    }
+
+    #[cfg(feature = "sensors")]
+    pub fn step_detected(&self) -> bool {
+        self.step_detected
+    }
+
     pub fn key_down(&self, key: Key) -> bool {
         let (w, m) = key_word_bit(key);
         (self.keys_down[w] & m) != 0
@@ -205,6 +223,10 @@ impl InputManager {
         self.mouse_other_released.clear();
         self.scroll_delta = (0.0, 0.0);
         self.text_input.clear();
+        #[cfg(feature = "sensors")]
+        {
+            self.step_detected = false;
+        }
     }
 
     #[allow(dead_code)]
@@ -396,5 +418,17 @@ impl InputManager {
     #[allow(dead_code)]
     pub(crate) fn handle_rotation(&mut self, x: f32, y: f32, z: f32, w: f32) {
         self.rotation = Some([x, y, z, w]);
+    }
+
+    #[cfg(feature = "sensors")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_step_counter(&mut self, count: f32) {
+        self.step_count = Some(count);
+    }
+
+    #[cfg(feature = "sensors")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_step_detector(&mut self) {
+        self.step_detected = true;
     }
 }

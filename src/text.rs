@@ -53,6 +53,10 @@ impl Text {
         self.content = content.into();
     }
 
+    pub fn set_color(&mut self, color: [f32; 4]) {
+        self.color = color;
+    }
+
     pub fn with_font_size(mut self, font_size: crate::Pt) -> Self {
         self.font_size = font_size;
         self

@@ -571,6 +571,16 @@ pub fn rotation(context: &Context) -> Option<[f32; 4]> {
     context.input().rotation()
 }
 
+#[cfg(feature = "sensors")]
+pub fn step_count(context: &Context) -> Option<f32> {
+    context.input().step_count()
+}
+
+#[cfg(feature = "sensors")]
+pub fn step_detected(context: &Context) -> bool {
+    context.input().step_detected()
+}
+
 pub fn touch_down(context: &Context) -> bool {
     !context.input().touches().is_empty()
 }
