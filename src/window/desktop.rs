@@ -384,17 +384,17 @@ impl ApplicationHandler for App {
             return;
         }
 
-        #[cfg(all(target_os = "ios", feature = "sensors"))]
-        if let Some(state) = self.platform.sensor_state.as_ref() {
-            state.poll(&mut self.context.input_mut());
-        }
-
         let now = Instant::now();
         if let Some(previous) = self.previous.replace(now) {
             let elapsed = now.duration_since(previous);
             self.lag = self.lag.saturating_add(elapsed);
 
             while self.lag >= self.fixed_dt {
+                #[cfg(all(target_os = "ios", feature = "sensors"))]
+                if let Some(state) = self.platform.sensor_state.as_ref() {
+                    state.poll(&mut self.context.input_mut());
+                }
+
                 if let Some(spot) = self.spot.as_mut() {
                     spot.update(&mut self.context, self.fixed_dt);
                 }
