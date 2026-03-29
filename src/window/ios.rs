@@ -1,16 +1,16 @@
-#[cfg(target_os = "ios")]
+#[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2_core_motion::{CMMotionManager, CMAccelerometerData, CMGyroData, CMMagnetometerData, CMDeviceMotion};
-#[cfg(target_os = "ios")]
+#[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2_foundation::{NSOperationQueue, MainThreadMarker};
-#[cfg(target_os = "ios")]
+#[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2::rc::Retained;
 
-#[cfg(target_os = "ios")]
+#[cfg(all(target_os = "ios", feature = "sensors"))]
 pub(crate) struct IosSensorState {
     manager: Retained<CMMotionManager>,
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(all(target_os = "ios", feature = "sensors"))]
 impl IosSensorState {
     pub fn new() -> Self {
         let mtm = MainThreadMarker::new().expect("must be on main thread to initialize CMMotionManager");

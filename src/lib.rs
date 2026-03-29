@@ -99,7 +99,6 @@ impl Default for SoundOptions {
         }
     }
 }
-
 #[derive(Debug, Clone)]
 pub struct WindowConfig {
     pub title: String,
@@ -108,6 +107,7 @@ pub struct WindowConfig {
     pub resizable: bool,
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     pub canvas_id: Option<String>,
+    pub transparent: bool,
 }
 
 impl Default for WindowConfig {
@@ -119,6 +119,7 @@ impl Default for WindowConfig {
             resizable: true,
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             canvas_id: None,
+            transparent: false,
         }
     }
 }
@@ -606,6 +607,16 @@ pub fn compress_assets() {
     with_graphics(|g| {
         let _ = g.compress_assets();
     });
+}
+
+pub fn set_background_transparent(context: &Context, transparent: bool) {
+    let _ = context; // Placeholder if needed in future, currently global
+    with_graphics(|g| g.set_transparent(transparent));
+}
+
+pub fn is_background_transparent(context: &Context) -> bool {
+    let _ = context;
+    with_graphics(|g| g.transparent()).unwrap_or(false)
 }
 
 pub fn register_sound(bytes: Vec<u8>) -> u32 {

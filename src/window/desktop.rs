@@ -55,7 +55,8 @@ impl ApplicationHandler for App {
 
             let attributes = Window::default_attributes()
                 .with_title(self.window_config.title.clone())
-                .with_resizable(self.window_config.resizable);
+                .with_resizable(self.window_config.resizable)
+                .with_transparent(true); // Always enable transparency capability
 
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             let attributes = {
@@ -128,6 +129,7 @@ impl ApplicationHandler for App {
                             surface,
                             size.width,
                             size.height,
+                            self.window_config.transparent,
                         );
                     }
 
@@ -142,6 +144,7 @@ impl ApplicationHandler for App {
                             surface_ptr,
                             size.width,
                             size.height,
+                            self.window_config.transparent,
                             Box::new(move |graphics_r| unsafe {
                                 super::wasm::handle_wasm_graphics_init_result(app_ptr, graphics_r)
                             }),

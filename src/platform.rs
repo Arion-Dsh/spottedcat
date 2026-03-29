@@ -57,13 +57,14 @@ pub(crate) fn begin_graphics_init(
     surface: &wgpu::Surface<'static>,
     width: u32,
     height: u32,
+    transparent: bool,
 ) {
     match init_state {
         GraphicsInitState::NotStarted => {}
         GraphicsInitState::Ready(_) | GraphicsInitState::Failed => return,
     }
 
-    let graphics_r = block_on(Graphics::new(instance, surface, width, height));
+    let graphics_r = block_on(Graphics::new(instance, surface, width, height, transparent));
     match graphics_r {
         Ok(graphics) => *init_state = GraphicsInitState::Ready(Some(graphics)),
         Err(e) => {
@@ -90,7 +91,7 @@ pub(crate) fn begin_graphics_init(
     }
 
     *init_state = GraphicsInitState::Pending;
-    spawn_graphics_init(instance, surface_ptr, width, height, callback);
+    spawn_graphics_init(instance, surface_ptr, width, height, transparent, callback);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -146,11 +147,12 @@ pub(crate) fn spawn_graphics_init(
     surface_ptr: *const wgpu::Surface<'static>,
     width: u32,
     height: u32,
+    transparent: bool,
     callback: Box<dyn FnOnce(anyhow::Result<Graphics>)>,
 ) {
     wasm_bindgen_futures::spawn_local(async move {
         let surface = unsafe { &*surface_ptr };
-        let r = Graphics::new(&instance, surface, width, height).await;
+        let r = Graphics::new(&instance, surface, width, height, transparent).await;
         callback(r);
     });
 }

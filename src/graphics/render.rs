@@ -617,7 +617,11 @@ impl Graphics {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(if self.transparent {
+                            wgpu::Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }
+                        } else {
+                            wgpu::Color::BLACK
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

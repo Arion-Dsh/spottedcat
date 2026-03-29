@@ -84,6 +84,7 @@ pub struct Graphics {
     pub(crate) brdf_lut_texture: wgpu::Texture,
     pub(crate) brdf_lut_view: wgpu::TextureView,
     pub(crate) scene_globals: crate::graphics::model_raw::SceneGlobals,
+    pub(crate) transparent: bool,
 }
 
 impl Graphics {
@@ -92,6 +93,7 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         width: u32,
         height: u32,
+        transparent: bool,
     ) -> anyhow::Result<Self> {
         let width = width.max(1);
         let height = height.max(1);
@@ -126,7 +128,7 @@ impl Graphics {
             .get_default_config(&adapter, width, height)
             .unwrap_or_else(|| wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: caps.formats[0],
+                format: pick_surface_format(&caps),
                 width: width.max(1),
                 height: height.max(1),
                 present_mode: caps.present_modes[0],
@@ -134,6 +136,8 @@ impl Graphics {
                 view_formats: vec![],
                 desired_maximum_frame_latency: 2,
             });
+
+        config.alpha_mode = pick_alpha_mode(&caps, transparent);
 
         config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
         config.usage = crate::platform::surface_usage(&caps);
@@ -479,6 +483,7 @@ impl Graphics {
                 }; 4],
                 light_view_proj: identity(),
             },
+            transparent,
         };
 
         // Create default textures
@@ -515,9 +520,10 @@ impl Graphics {
 
         self.config.width = width;
         self.config.height = height;
-        self.config.format = caps.formats[0]; // Ensure we use a format this surface supports
+        self.config.format = pick_surface_format(&caps);
         self.config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
         self.config.usage = crate::platform::surface_usage(&caps);
+        self.config.alpha_mode = pick_alpha_mode(&caps, self.transparent);
         
         surface.configure(&self.device, &self.config);
 
@@ -561,6 +567,14 @@ impl Graphics {
             }
         }
     }
+
+    pub fn set_transparent(&mut self, transparent: bool) {
+        self.transparent = transparent;
+    }
+
+    pub fn transparent(&self) -> bool {
+        self.transparent
+    }
 }
 
 // Basic math helpers
@@ -585,4 +599,43 @@ pub fn create_rotation_from_quat(q: [f32; 4]) -> [[f32; 4]; 4] {
         [xz + wy, yz - wx, 1.0 - (xx + yy), 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ]
+}
+
+fn pick_surface_format(caps: &wgpu::SurfaceCapabilities) -> wgpu::TextureFormat {
+    // Prefer Srgb formats with alpha
+    let preferred = [
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        wgpu::TextureFormat::Bgra8UnormSrgb,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureFormat::Bgra8Unorm,
+    ];
+
+    for &fmt in &preferred {
+        if caps.formats.contains(&fmt) {
+            return fmt;
+        }
+    }
+    caps.formats[0]
+}
+
+fn pick_alpha_mode(caps: &wgpu::SurfaceCapabilities, _requested_transparent: bool) -> wgpu::CompositeAlphaMode {
+    // If transparent is requested, try to find a transparent-capable mode.
+    // Even if not requested, we might want to use a transparent-capable mode 
+    // to allow dynamic toggling later.
+    let transparent_modes = [
+        #[cfg(target_os = "android")]
+        wgpu::CompositeAlphaMode::Inherit, // Android GLES usually needs Inherit for transparency
+        wgpu::CompositeAlphaMode::PostMultiplied,
+        wgpu::CompositeAlphaMode::PreMultiplied,
+        #[cfg(not(target_os = "android"))]
+        wgpu::CompositeAlphaMode::Inherit,
+    ];
+
+    for mode in transparent_modes {
+        if caps.alpha_modes.contains(&mode) {
+            return mode;
+        }
+    }
+
+    caps.alpha_modes[0]
 }

@@ -18,16 +18,12 @@ pub mod android;
 pub mod ios;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub mod wasm;
-#[cfg(all(not(target_os = "android"), not(target_os = "ios"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
+#[cfg(all(not(target_os = "android"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
 pub mod desktop;
 
 #[cfg(target_os = "android")]
 pub(crate) use self::android::PlatformData;
-#[cfg(target_os = "ios")]
-pub(crate) use self::desktop::PlatformData;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-pub(crate) use self::wasm::PlatformData;
-#[cfg(all(not(target_os = "android"), not(target_os = "ios"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
+#[cfg(all(not(target_os = "android"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
 pub(crate) use self::desktop::PlatformData;
 
 pub(crate) struct App {
@@ -37,7 +33,6 @@ pub(crate) struct App {
     pub(crate) context: Context,
     pub(crate) spot: Option<Box<dyn Spot>>,
     pub(crate) scene_factory: Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send + Sync>,
-    #[cfg(not(target_os = "android"))]
     pub(crate) window_config: WindowConfig,
     pub(crate) init_state: GraphicsInitState,
     pub(crate) scale_factor: f64,
@@ -48,8 +43,6 @@ pub(crate) struct App {
 
 impl App {
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
-        #[cfg(target_os = "android")]
-        let _ = window_config;
         let instance = platform::create_wgpu_instance();
         let audio = crate::audio::AudioSystem::new().expect("failed to initialize audio system");
         let _ = platform::set_global_audio(audio);
@@ -61,7 +54,6 @@ impl App {
             context: Context::new(),
             spot: None,
             scene_factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
-            #[cfg(not(target_os = "android"))]
             window_config,
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
@@ -84,7 +76,6 @@ impl App {
             context: Context::new(),
             spot: None,
             scene_factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
-            #[cfg(not(target_os = "android"))]
             window_config,
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,

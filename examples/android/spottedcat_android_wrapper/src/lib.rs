@@ -27,6 +27,7 @@ pub fn android_main(app: AndroidApp) {
 
     impl Spot for AndroidFfiSpot {
         fn initialize(context: &mut Context) -> Self {
+            spottedcat::set_background_transparent(context, false);
             eprintln!("[spot][android] initialize called");
             // Load an image from assets
             const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../../../../assets/happy-tree.png");
@@ -223,10 +224,12 @@ pub fn android_main(app: AndroidApp) {
     struct OverlaySpot {
         text: Text,
     }
-
+    
     impl Spot for OverlaySpot {
-        fn initialize(_context: &mut Context) -> Self {
+        fn initialize(context: &mut Context) -> Self {
+            spottedcat::set_background_transparent(context, true);
             eprintln!("[spot][android] OverlaySpot initialize called");
+            
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
             let font_id = spottedcat::register_font(FALLBACK_FONT.to_vec());
             let text = Text::new("Floating Cat!", font_id)

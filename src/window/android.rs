@@ -62,6 +62,16 @@ impl App {
                     let native_window = unsafe { ndk::native_window::NativeWindow::from_ptr(std::ptr::NonNull::new(surface_ptr).unwrap()) };
                     let size = (native_window.width() as u32, native_window.height() as u32);
                     
+                    // Force RGBA_8888 for floating window transparency
+                    unsafe {
+                        ndk_sys::ANativeWindow_setBuffersGeometry(surface_ptr, 0, 0, 1);
+                    }
+                    
+                    // Force RGBA_8888 for floating window transparency BEFORE creating surface
+                    unsafe {
+                        ndk_sys::ANativeWindow_setBuffersGeometry(surface_ptr, 0, 0, 1);
+                    }
+
                     match unsafe {
                         self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
                             raw_display_handle: rwh_06::RawDisplayHandle::Android(rwh_06::AndroidDisplayHandle::new()),
@@ -114,6 +124,11 @@ impl App {
                                         >(s)
                                     };
                                     self.surface = Some(surface);
+                                    
+                                    // Force RGBA_8888 for better transparency support
+                                    unsafe {
+                                        ndk_sys::ANativeWindow_setBuffersGeometry(window.ptr().as_ptr() as *mut _, 0, 0, 1);
+                                    }
 
                                     if let Some(surface) = self.surface.as_ref() {
                                         with_graphics(|g| g.resize(surface, size.0, size.1));
@@ -136,15 +151,12 @@ impl App {
                                             self.surface.as_ref().unwrap(),
                                             size.0,
                                             size.1,
+                                            true, // Force transparency capability for Android
                                         );
                                     }
-                                    self.context.set_window_logical_size(
-                                        Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                                        Pt::from_physical_px(size.1 as f64, self.scale_factor),
-                                    );
                                 }
                                 Err(e) => {
-                                    eprintln!("[spot][android][surface] creation failed: {:?}", e);
+                                    eprintln!("[spot][android] Failed to create surface: {:?}", e);
                                 }
                             }
                         }
@@ -349,7 +361,7 @@ impl App {
                                     let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
                                     let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
                                     let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
-                                    let w = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.azimuth; // 4th element is stored here in some union versions
+                                    let w = event.__bindgen_anon_1.__bindgen_anon_1.data[3]; 
                                     self.context.input_mut().handle_rotation(x, y, z, w);
                                 }
                                 _ => {}
