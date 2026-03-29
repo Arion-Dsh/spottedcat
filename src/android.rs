@@ -14,6 +14,16 @@ static FLOATING_SERVICE_CLASS: OnceLock<String> = OnceLock::new();
 static FLOATING_SURFACE: Mutex<Option<jni::objects::GlobalRef>> = Mutex::new(None);
 static FLOATING_SCENE_FACTORY: OnceLock<crate::SceneFactory> = OnceLock::new();
 
+#[cfg(target_os = "android")]
+pub fn get_jvm() -> Option<&'static jni::JavaVM> {
+    JVM.get()
+}
+
+#[cfg(target_os = "android")]
+pub fn get_activity() -> Option<&'static jni::objects::GlobalRef> {
+    ACTIVITY.get()
+}
+
 
 #[cfg(target_os = "android")]
 fn find_class<'a>(env: &mut jni::JNIEnv<'a>, class_name: &str) -> jni::errors::Result<jni::objects::JClass<'a>> {

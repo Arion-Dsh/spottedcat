@@ -48,6 +48,7 @@ mod key;
 mod mouse;
 mod packer;
 mod platform;
+mod platform_events;
 mod pt;
 mod shader_opts;
 mod text;
@@ -80,6 +81,7 @@ pub use text::Text;
 pub use touch::{TouchInfo, TouchPhase};
 #[cfg(target_os = "android")]
 pub use android_activity::AndroidApp;
+pub use platform_events::PlatformEvent;
 
 #[derive(Debug, Clone)]
 pub struct SoundOptions {
@@ -579,6 +581,14 @@ pub fn step_count(context: &Context) -> Option<f32> {
 #[cfg(feature = "sensors")]
 pub fn step_detected(context: &Context) -> bool {
     context.input().step_detected()
+}
+
+pub fn poll_platform_events(_context: &Context) -> Vec<PlatformEvent> {
+    platform_events::poll_events()
+}
+
+pub fn push_platform_event(event: PlatformEvent) {
+    platform_events::push_event(event);
 }
 
 pub fn touch_down(context: &Context) -> bool {

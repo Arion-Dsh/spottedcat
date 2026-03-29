@@ -1,6 +1,25 @@
 use spottedcat::{
-    AndroidApp, Context, DrawOption, DrawOption3D, Image, Model, Pt, Spot, Text, WindowConfig,
+    AndroidApp, Context, DrawOption, DrawOption3D, Image, Model, PlatformEvent, Pt, Spot, Text,
+    WindowConfig,
 };
+#[cfg(target_os = "android")]
+use jni::{
+    objects::{JClass, JString},
+    JNIEnv,
+};
+
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn Java_com_example_gameactivityexample_MainActivity_sendNativeEvent(
+    mut env: JNIEnv,
+    _class: JClass,
+    event_type: JString,
+    data: JString,
+) {
+    let t: String = env.get_string(&event_type).unwrap().into();
+    let d: String = env.get_string(&data).unwrap().into();
+    spottedcat::push_platform_event(PlatformEvent::Event(t, d));
+}
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
@@ -15,6 +34,7 @@ pub fn android_main(app: AndroidApp) {
         rot_text: Text,
         rot_data: [f32; 4],
         step_text: Text,
+        bridge_text: Text,
         step_count: f32,
         step_detected_timer: f32,
         touch_pos: Option<(Pt, Pt)>,
@@ -72,6 +92,9 @@ pub fn android_main(app: AndroidApp) {
                 rot_text,
                 rot_data: [0.0; 4],
                 step_text,
+                bridge_text: Text::new("Bridge: No Event", font_id)
+                    .with_font_size(Pt::from(20.0))
+                    .with_color([0.5, 1.0, 0.5, 1.0]),
                 step_count: 0.0,
                 step_detected_timer: 0.0,
                 touch_pos: None,
@@ -127,6 +150,29 @@ pub fn android_main(app: AndroidApp) {
                 self.step_text.set_color([1.0, 1.0, 0.0, 1.0]); // Yellow on detection
             } else {
                 self.step_text.set_color([1.0, 1.0, 1.0, 1.0]);
+            }
+
+            // --- Platform Bridge Example ---
+            for event in spottedcat::poll_platform_events(context) {
+                let PlatformEvent::Event(t, d) = event;
+                self.bridge_text.set_content(format!("{}: {}", t, d));
+            }
+
+            // Touch to trigger Kotlin method
+            if spottedcat::touch_down(context) {
+                #[cfg(target_os = "android")]
+                if let (Some(jvm), Some(activity)) =
+                    (spottedcat::android::get_jvm(), spottedcat::android::get_activity())
+                {
+                    let mut env = jvm.attach_current_thread().unwrap();
+                    let msg = env.new_string("Hello from Rust!").unwrap();
+                    let _ = env.call_method(
+                        activity.as_obj(),
+                        "triggerTestEvent",
+                        "(Ljava/lang/String;)V",
+                        &[(&msg).into()],
+                    );
+                }
             }
 
             // 1. Check direct touch events
@@ -217,6 +263,17 @@ pub fn android_main(app: AndroidApp) {
             self.step_text.draw(
                 context,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(310.0)]),
+            );
+
+            self.bridge_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(340.0)]),
+            );
+
+            // Draw Bridge text
+            self.bridge_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(300.0)]),
             );
 
             // Draw image at touch position or center
