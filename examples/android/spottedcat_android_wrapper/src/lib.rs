@@ -10,13 +10,19 @@ pub fn android_main(app: AndroidApp) {
         text: Text,
         fps_text: Text,
         gyro_text: Text,
+        accel_text: Text,
+        mag_text: Text,
+        rot_text: Text,
         touch_pos: Option<(Pt, Pt)>,
         last_fps_time: std::time::Instant,
         frame_count: u32,
         current_fps: f32,
         model: Model,
-        rotation: f32,
+        rotation_anim: f32,
         gyro_data: [f32; 3],
+        accel_data: [f32; 3],
+        mag_data: [f32; 3],
+        rot_data: [f32; 4],
     }
 
     impl Spot for AndroidFfiSpot {
@@ -39,7 +45,10 @@ pub fn android_main(app: AndroidApp) {
                 .with_color([1.0, 1.0, 1.0, 1.0]);
 
             let fps_text = Text::new("FPS: 0.0", font_id).with_font_size(Pt::from(24.0));
-            let gyro_text = Text::new("Gyro: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(24.0));
+            let gyro_text = Text::new("Gyro: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
+            let accel_text = Text::new("Accel: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
+            let mag_text = Text::new("Mag: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
+            let rot_text = Text::new("Rot: 0.0, 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
 
             // Setup 3D scene
             context.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
@@ -53,13 +62,19 @@ pub fn android_main(app: AndroidApp) {
                 text,
                 fps_text,
                 gyro_text,
+                accel_text,
+                mag_text,
+                rot_text,
                 touch_pos: None,
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
                 current_fps: 0.0,
                 model,
-                rotation: 0.0,
+                rotation_anim: 0.0,
                 gyro_data: [0.0; 3],
+                accel_data: [0.0; 3],
+                mag_data: [0.0; 3],
+                rot_data: [0.0; 4],
             }
         }
 
@@ -69,13 +84,29 @@ pub fn android_main(app: AndroidApp) {
                 eprintln!("[spot][android] update loop running");
             }
 
-            self.rotation += dt.as_secs_f32() * 1.5;
+            self.rotation_anim += dt.as_secs_f32() * 1.5;
 
-            // Update gyroscope data
+            // Update sensor data
             self.gyro_data = spottedcat::gyroscope(context).unwrap_or([0.0; 3]);
+            self.accel_data = spottedcat::accelerometer(context).unwrap_or([0.0; 3]);
+            self.mag_data = spottedcat::magnetometer(context).unwrap_or([0.0; 3]);
+            self.rot_data = spottedcat::rotation(context).unwrap_or([0.0; 4]);
+
             self.gyro_text.set_content(format!(
                 "Gyro: {:.2}, {:.2}, {:.2}",
                 self.gyro_data[0], self.gyro_data[1], self.gyro_data[2]
+            ));
+            self.accel_text.set_content(format!(
+                "Accel: {:.2}, {:.2}, {:.2}",
+                self.accel_data[0], self.accel_data[1], self.accel_data[2]
+            ));
+            self.mag_text.set_content(format!(
+                "Mag: {:.2}, {:.2}, {:.2}",
+                self.mag_data[0], self.mag_data[1], self.mag_data[2]
+            ));
+            self.rot_text.set_content(format!(
+                "Rot: {:.2}, {:.2}, {:.2}, {:.2}",
+                self.rot_data[0], self.rot_data[1], self.rot_data[2], self.rot_data[3]
             ));
 
             // 1. Check direct touch events
@@ -129,7 +160,7 @@ pub fn android_main(app: AndroidApp) {
                 .with_position([0.0, 0.0, 0.0])
                 .with_rotation([
                     self.gyro_data[0] * 0.5, 
-                    self.rotation + self.gyro_data[1] * 0.5, 
+                    self.rotation_anim + self.gyro_data[1] * 0.5, 
                     self.gyro_data[2] * 0.5
                 ]);
             self.model.draw(context, opts_3d);
@@ -146,6 +177,21 @@ pub fn android_main(app: AndroidApp) {
             self.gyro_text.draw(
                 context,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(190.0)]),
+            );
+
+            self.accel_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(220.0)]),
+            );
+
+            self.mag_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(250.0)]),
+            );
+
+            self.rot_text.draw(
+                context,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(280.0)]),
             );
 
             // Draw image at touch position or center

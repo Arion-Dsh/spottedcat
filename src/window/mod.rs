@@ -14,16 +14,20 @@ pub(crate) type GraphicsInitState = platform::GraphicsInitState;
 
 #[cfg(target_os = "android")]
 pub mod android;
+#[cfg(target_os = "ios")]
+pub mod ios;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub mod wasm;
-#[cfg(all(not(target_os = "android"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
+#[cfg(all(not(target_os = "android"), not(target_os = "ios"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
 pub mod desktop;
 
 #[cfg(target_os = "android")]
 pub(crate) use self::android::PlatformData;
+#[cfg(target_os = "ios")]
+pub(crate) use self::desktop::PlatformData;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub(crate) use self::wasm::PlatformData;
-#[cfg(all(not(target_os = "android"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
+#[cfg(all(not(target_os = "android"), not(target_os = "ios"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
 pub(crate) use self::desktop::PlatformData;
 
 pub(crate) struct App {

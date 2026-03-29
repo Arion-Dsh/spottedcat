@@ -9,17 +9,20 @@ use std::time::Instant;
 use super::App;
 use crate::platform;
 
-#[cfg(feature = "gyroscope")]
+#[cfg(feature = "sensors")]
 pub(crate) struct AndroidSensorState {
     pub(crate) _manager: *mut ndk_sys::ASensorManager,
     pub(crate) queue: *mut ndk_sys::ASensorEventQueue,
     pub(crate) gyro: *const ndk_sys::ASensor,
+    pub(crate) accel: *const ndk_sys::ASensor,
+    pub(crate) mag: *const ndk_sys::ASensor,
+    pub(crate) rot: *const ndk_sys::ASensor,
 }
 
 pub(crate) struct PlatformData {
     pub(crate) native_window: Option<ndk::native_window::NativeWindow>,
     pub(crate) floating_surface: Option<wgpu::Surface<'static>>,
-    #[cfg(feature = "gyroscope")]
+    #[cfg(feature = "sensors")]
     pub(crate) sensor_state: Option<AndroidSensorState>,
 }
 
@@ -28,7 +31,7 @@ impl PlatformData {
         Self {
             native_window: None,
             floating_surface: None,
-            #[cfg(feature = "gyroscope")]
+            #[cfg(feature = "sensors")]
             sensor_state: None,
         }
     }
@@ -180,7 +183,7 @@ impl App {
                         if let Some(spot) = self.spot.as_mut() {
                             spot.resumed(&mut self.context);
                         }
-                        #[cfg(feature = "gyroscope")]
+                        #[cfg(feature = "sensors")]
                         self.init_sensors();
                     }
                     PollEvent::Main(MainEvent::Pause) => {
@@ -202,7 +205,7 @@ impl App {
                         if let Some(spot) = self.spot.as_mut() {
                             spot.suspended(&mut self.context);
                         }
-                        #[cfg(feature = "gyroscope")]
+                        #[cfg(feature = "sensors")]
                         self.disable_sensors();
                     }
                     PollEvent::Main(MainEvent::ConfigChanged { .. }) => {
@@ -316,18 +319,40 @@ impl App {
                 break;
             }
 
-            // Gyroscope polling if enabled
-            #[cfg(feature = "gyroscope")]
+            // Sensor polling if enabled
+            #[cfg(feature = "sensors")]
             {
                 if let Some(state) = self.platform.sensor_state.as_ref() {
                     unsafe {
                         let mut event = std::mem::zeroed::<ndk_sys::ASensorEvent>();
                         while ndk_sys::ASensorEventQueue_getEvents(state.queue, &mut event, 1) > 0 {
-                            if event.type_ == 4 { // ASENSOR_TYPE_GYROSCOPE
-                                let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
-                                let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
-                                let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
-                                self.context.input_mut().handle_gyroscope(x, y, z);
+                            match event.type_ {
+                                1 => { // ASENSOR_TYPE_ACCELEROMETER
+                                    let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
+                                    let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
+                                    let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
+                                    self.context.input_mut().handle_accelerometer(x, y, z);
+                                }
+                                2 => { // ASENSOR_TYPE_MAGNETIC_FIELD
+                                    let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
+                                    let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
+                                    let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
+                                    self.context.input_mut().handle_magnetometer(x, y, z);
+                                }
+                                4 => { // ASENSOR_TYPE_GYROSCOPE
+                                    let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
+                                    let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
+                                    let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
+                                    self.context.input_mut().handle_gyroscope(x, y, z);
+                                }
+                                11 => { // ASENSOR_TYPE_ROTATION_VECTOR
+                                    let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
+                                    let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
+                                    let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
+                                    let w = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.azimuth; // 4th element is stored here in some union versions
+                                    self.context.input_mut().handle_rotation(x, y, z, w);
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -336,7 +361,7 @@ impl App {
         }
     }
 
-    #[cfg(feature = "gyroscope")]
+    #[cfg(feature = "sensors")]
     pub(crate) fn init_sensors(&mut self) {
         unsafe {
             if self.platform.sensor_state.is_none() {
@@ -345,11 +370,10 @@ impl App {
                     return;
                 }
 
-                // ASENSOR_TYPE_GYROSCOPE = 4
+                let accel = ndk_sys::ASensorManager_getDefaultSensor(manager, 1);
+                let mag = ndk_sys::ASensorManager_getDefaultSensor(manager, 2);
                 let gyro = ndk_sys::ASensorManager_getDefaultSensor(manager, 4);
-                if gyro.is_null() {
-                    return;
-                }
+                let rot = ndk_sys::ASensorManager_getDefaultSensor(manager, 11);
 
                 // Create a looper-less event queue (null looper)
                 let looper = ndk_sys::ALooper_forThread();
@@ -373,21 +397,41 @@ impl App {
                     _manager: manager,
                     queue,
                     gyro,
+                    accel,
+                    mag,
+                    rot,
                 });
             }
 
             if let Some(state) = self.platform.sensor_state.as_ref() {
-                ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.gyro);
-                ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000); // 50Hz
+                if !state.accel.is_null() {
+                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.accel);
+                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.accel, 20_000);
+                }
+                if !state.mag.is_null() {
+                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.mag);
+                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.mag, 20_000);
+                }
+                if !state.gyro.is_null() {
+                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.gyro);
+                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000);
+                }
+                if !state.rot.is_null() {
+                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.rot);
+                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.rot, 20_000);
+                }
             }
         }
     }
 
-    #[cfg(feature = "gyroscope")]
+    #[cfg(feature = "sensors")]
     pub(crate) fn disable_sensors(&mut self) {
         unsafe {
             if let Some(state) = self.platform.sensor_state.as_ref() {
-                ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.gyro);
+                if !state.accel.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.accel); }
+                if !state.mag.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.mag); }
+                if !state.gyro.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.gyro); }
+                if !state.rot.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.rot); }
             }
         }
     }

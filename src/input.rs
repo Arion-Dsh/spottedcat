@@ -33,8 +33,14 @@ pub struct InputManager {
     ime_preedit: Option<String>,
 
     touches: Vec<TouchInfo>,
-    #[cfg(feature = "gyroscope")]
+    #[cfg(feature = "sensors")]
     gyroscope: Option<[f32; 3]>,
+    #[cfg(feature = "sensors")]
+    accelerometer: Option<[f32; 3]>,
+    #[cfg(feature = "sensors")]
+    magnetometer: Option<[f32; 3]>,
+    #[cfg(feature = "sensors")]
+    rotation: Option<[f32; 4]>,
 }
 
 impl Default for InputManager {
@@ -61,8 +67,14 @@ impl Default for InputManager {
             ime_preedit: None,
 
             touches: Vec::new(),
-            #[cfg(feature = "gyroscope")]
+            #[cfg(feature = "sensors")]
             gyroscope: None,
+            #[cfg(feature = "sensors")]
+            accelerometer: None,
+            #[cfg(feature = "sensors")]
+            magnetometer: None,
+            #[cfg(feature = "sensors")]
+            rotation: None,
         }
     }
 }
@@ -113,9 +125,24 @@ impl InputManager {
         &self.touches
     }
 
-    #[cfg(feature = "gyroscope")]
+    #[cfg(feature = "sensors")]
     pub fn gyroscope(&self) -> Option<[f32; 3]> {
         self.gyroscope
+    }
+
+    #[cfg(feature = "sensors")]
+    pub fn accelerometer(&self) -> Option<[f32; 3]> {
+        self.accelerometer
+    }
+
+    #[cfg(feature = "sensors")]
+    pub fn magnetometer(&self) -> Option<[f32; 3]> {
+        self.magnetometer
+    }
+
+    #[cfg(feature = "sensors")]
+    pub fn rotation(&self) -> Option<[f32; 4]> {
+        self.rotation
     }
 
     pub fn key_down(&self, key: Key) -> bool {
@@ -347,9 +374,27 @@ impl InputManager {
         }
     }
 
-    #[cfg(feature = "gyroscope")]
+    #[cfg(feature = "sensors")]
     #[allow(dead_code)]
     pub(crate) fn handle_gyroscope(&mut self, x: f32, y: f32, z: f32) {
         self.gyroscope = Some([x, y, z]);
+    }
+
+    #[cfg(feature = "sensors")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_accelerometer(&mut self, x: f32, y: f32, z: f32) {
+        self.accelerometer = Some([x, y, z]);
+    }
+
+    #[cfg(feature = "sensors")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_magnetometer(&mut self, x: f32, y: f32, z: f32) {
+        self.magnetometer = Some([x, y, z]);
+    }
+
+    #[cfg(feature = "sensors")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_rotation(&mut self, x: f32, y: f32, z: f32, w: f32) {
+        self.rotation = Some([x, y, z, w]);
     }
 }

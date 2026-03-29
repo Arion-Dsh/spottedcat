@@ -550,9 +550,24 @@ pub fn touches(context: &Context) -> &[TouchInfo] {
     context.input().touches()
 }
 
-#[cfg(feature = "gyroscope")]
+#[cfg(feature = "sensors")]
 pub fn gyroscope(context: &Context) -> Option<[f32; 3]> {
     context.input().gyroscope()
+}
+
+#[cfg(feature = "sensors")]
+pub fn accelerometer(context: &Context) -> Option<[f32; 3]> {
+    context.input().accelerometer()
+}
+
+#[cfg(feature = "sensors")]
+pub fn magnetometer(context: &Context) -> Option<[f32; 3]> {
+    context.input().magnetometer()
+}
+
+#[cfg(feature = "sensors")]
+pub fn rotation(context: &Context) -> Option<[f32; 4]> {
+    context.input().rotation()
 }
 
 pub fn touch_down(context: &Context) -> bool {

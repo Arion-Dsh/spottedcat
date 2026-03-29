@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -34,13 +34,18 @@ ndk = "0.9.0"
 rwh_06 = { package = "raw-window-handle", version = "0.6" }
 jni = "0.21"
 
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = { version = "0.5.2", optional = true }
+objc2-foundation = { version = "0.2.2", optional = true }
+objc2-core-motion = { version = "0.2.2", optional = true }
+
 [dev-dependencies]
 gltf = "1.4.1"
 image = "0.25"
 fundsp = "0.18"
 [features]
 default = []
-gyroscope = []
+sensors = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-core-motion"]
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = "0.2"

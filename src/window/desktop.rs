@@ -19,6 +19,8 @@ use crate::platform;
 pub(crate) struct PlatformData {
     pub(crate) window: Option<Window>,
     pub(crate) window_id: Option<WindowId>,
+    #[cfg(all(target_os = "ios", feature = "sensors"))]
+    pub(crate) sensor_state: Option<super::ios::IosSensorState>,
 }
 
 impl PlatformData {
@@ -26,6 +28,8 @@ impl PlatformData {
         Self {
             window: None,
             window_id: None,
+            #[cfg(all(target_os = "ios", feature = "sensors"))]
+            sensor_state: None,
         }
     }
 }
@@ -152,6 +156,16 @@ impl ApplicationHandler for App {
             spot.resumed(&mut self.context);
         }
 
+        #[cfg(all(target_os = "ios", feature = "sensors"))]
+        {
+            if self.platform.sensor_state.is_none() {
+                self.platform.sensor_state = Some(super::ios::IosSensorState::new());
+            }
+            if let Some(state) = self.platform.sensor_state.as_ref() {
+                state.enable();
+            }
+        }
+
         if let Some(window) = self.platform.window.as_ref() {
             window.request_redraw();
         }
@@ -160,6 +174,10 @@ impl ApplicationHandler for App {
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(spot) = self.spot.as_mut() {
             spot.suspended(&mut self.context);
+        }
+        #[cfg(all(target_os = "ios", feature = "sensors"))]
+        if let Some(state) = self.platform.sensor_state.as_ref() {
+            state.disable();
         }
         self.surface.take();
     }
@@ -361,6 +379,11 @@ impl ApplicationHandler for App {
         if take_quit_request() {
             event_loop.exit();
             return;
+        }
+
+        #[cfg(all(target_os = "ios", feature = "sensors"))]
+        if let Some(state) = self.platform.sensor_state.as_ref() {
+            state.poll(&mut self.context.input_mut());
         }
 
         let now = Instant::now();
