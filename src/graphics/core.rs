@@ -675,7 +675,13 @@ fn pick_surface_format(caps: &wgpu::SurfaceCapabilities) -> wgpu::TextureFormat 
     caps.formats[0]
 }
 
-fn pick_alpha_mode(caps: &wgpu::SurfaceCapabilities, _requested_transparent: bool) -> wgpu::CompositeAlphaMode {
+fn pick_alpha_mode(caps: &wgpu::SurfaceCapabilities, requested_transparent: bool) -> wgpu::CompositeAlphaMode {
+    if !requested_transparent {
+        if caps.alpha_modes.contains(&wgpu::CompositeAlphaMode::Opaque) {
+            return wgpu::CompositeAlphaMode::Opaque;
+        }
+    }
+
     // If transparent is requested, try to find a transparent-capable mode.
     // Even if not requested, we might want to use a transparent-capable mode 
     // to allow dynamic toggling later.

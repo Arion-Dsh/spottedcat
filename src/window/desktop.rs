@@ -308,6 +308,7 @@ impl ApplicationHandler for App {
                             if let Some(Err(e)) = r {
                                 match e {
                                     wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                                        eprintln!("[spot][surface] Surface lost or outdated: {:?}. Recreating...", e);
                                         if let Some(window) = self.platform.window.as_ref() {
                                             let size = window.inner_size();
                                             let surface_r = self.instance.create_surface(window);
@@ -332,6 +333,7 @@ impl ApplicationHandler for App {
                                                             )
                                                         });
                                                     }
+                                                    eprintln!("[spot][surface] Surface recreated successfully.");
                                                 }
                                                 Err(e) => {
                                                     eprintln!(

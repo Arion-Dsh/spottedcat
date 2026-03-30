@@ -58,6 +58,60 @@ impl PlatformData {
 }
 
 impl App {
+    fn setup_native_window_surface(&mut self, window: &ndk::native_window::NativeWindow) {
+        let size = (window.width() as u32, window.height() as u32);
+        
+        // Force RGBA_8888 for better transparency support
+        unsafe {
+            ndk_sys::ANativeWindow_setBuffersGeometry(window.ptr().as_ptr() as *mut _, 0, 0, 1);
+        }
+
+        match unsafe {
+            self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                raw_display_handle: rwh_06::RawDisplayHandle::Android(rwh_06::AndroidDisplayHandle::new()),
+                raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
+                    let handle = rwh_06::AndroidNdkWindowHandle::new(std::ptr::NonNull::new(window.ptr().as_mut() as *mut _ as *mut _).unwrap());
+                    handle
+                }),
+            })
+        } {
+            Ok(s) => {
+                let surface = unsafe {
+                    std::mem::transmute::<
+                        wgpu::Surface<'_>,
+                        wgpu::Surface<'static>,
+                    >(s)
+                };
+                self.surface = Some(surface);
+
+                if let Some(surface) = self.surface.as_ref() {
+                    with_graphics(|g| g.resize(surface, size.0, size.1));
+                }
+                
+                self.context.set_window_logical_size(
+                    Pt::from_physical_px(size.0 as f64, self.scale_factor),
+                    Pt::from_physical_px(size.1 as f64, self.scale_factor),
+                );
+                
+                // Initialize graphics if not started
+                if let platform::GraphicsInitState::NotStarted = self.init_state {
+                    platform::begin_graphics_init(
+                        &mut self.init_state,
+                        &self.instance,
+                        self.surface.as_ref().unwrap(),
+                        size.0,
+                        size.1,
+                        true, // Force transparency capability for Android
+                    );
+                }
+                eprintln!("[spot][android] Surface setup successfully: {}x{}", size.0, size.1);
+            }
+            Err(e) => {
+                eprintln!("[spot][android] Failed to create surface: {:?}", e);
+            }
+        }
+    }
+
     pub(crate) fn run(&mut self, app: AndroidApp) {
         // Initialize Android-specific features (JVM, Activity, floating window service registration)
         crate::android::init(app.clone());
@@ -118,62 +172,8 @@ impl App {
                     PollEvent::Main(MainEvent::InitWindow { .. }) => {
                         eprintln!("[spot][android] InitWindow");
                         self.platform.native_window = app.native_window();
-                        if let Some(window) = self.platform.native_window.as_ref() {
-                            let size = (window.width() as u32, window.height() as u32);
-                            
-                            // Re-enable surface creation using unsafe so we don't need trait bounds for native window
-                            match unsafe {
-                                self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                                    raw_display_handle: rwh_06::RawDisplayHandle::Android(rwh_06::AndroidDisplayHandle::new()),
-                                    raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
-                                        let handle = rwh_06::AndroidNdkWindowHandle::new(std::ptr::NonNull::new(window.ptr().as_mut() as *mut _ as *mut _).unwrap());
-                                        handle
-                                    }),
-                                })
-                            } {
-                                Ok(s) => {
-                                    let surface = unsafe {
-                                        std::mem::transmute::<
-                                            wgpu::Surface<'_>,
-                                            wgpu::Surface<'static>,
-                                        >(s)
-                                    };
-                                    self.surface = Some(surface);
-                                    
-                                    // Force RGBA_8888 for better transparency support
-                                    unsafe {
-                                        ndk_sys::ANativeWindow_setBuffersGeometry(window.ptr().as_ptr() as *mut _, 0, 0, 1);
-                                    }
-
-                                    if let Some(surface) = self.surface.as_ref() {
-                                        with_graphics(|g| g.resize(surface, size.0, size.1));
-                                    }
-                                    
-                                    self.context.set_window_logical_size(
-                                        Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                                        Pt::from_physical_px(size.1 as f64, self.scale_factor),
-                                    );
-                                    
-                                    // Initialize graphics if not started
-                                    if let platform::GraphicsInitState::Ready(_) = self.init_state {
-                                         if let Some(surface) = self.surface.as_ref() {
-                                             with_graphics(|g| g.resize(surface, size.0, size.1));
-                                         }
-                                    } else if let platform::GraphicsInitState::NotStarted = self.init_state {
-                                        platform::begin_graphics_init(
-                                            &mut self.init_state,
-                                            &self.instance,
-                                            self.surface.as_ref().unwrap(),
-                                            size.0,
-                                            size.1,
-                                            true, // Force transparency capability for Android
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("[spot][android] Failed to create surface: {:?}", e);
-                                }
-                            }
+                        if let Some(window) = self.platform.native_window.clone() {
+                            self.setup_native_window_surface(&window);
                         }
                     }
                     PollEvent::Main(MainEvent::TerminateWindow { .. }) => {
@@ -196,6 +196,12 @@ impl App {
                         eprintln!("[spot][android] Resume");
                         self.platform.floating_surface = None;
                         
+                        // Force surface reconfiguration on resume if we have one
+                        if let (Some(surface), Some(window)) = (self.surface.as_ref(), self.platform.native_window.clone()) {
+                             let size = (window.width() as u32, window.height() as u32);
+                             with_graphics(|g| g.resize(surface, size.0, size.1));
+                        }
+
                         // Switch back to original scene only if graphics are ready
                         if with_graphics(|_| ()).is_some() {
                             if let Some(spot) = self.spot.take() {
@@ -389,10 +395,30 @@ impl App {
 
                 // Render to ACTIVE surface
                 // If floating surface exists, we are in floating mode, prioritize it.
-                if let Some(surface) = self.platform.floating_surface.as_ref() {
-                    let _ = with_graphics(|g| g.draw_context(surface, &self.context));
+                let draw_result = if let Some(surface) = self.platform.floating_surface.as_ref() {
+                    with_graphics(|g| g.draw_context(surface, &self.context))
                 } else if let Some(surface) = self.surface.as_ref() {
-                    let _ = with_graphics(|g| g.draw_context(surface, &self.context));
+                    with_graphics(|g| g.draw_context(surface, &self.context))
+                } else {
+                    None
+                };
+
+                if let Some(Err(e)) = draw_result {
+                    match e {
+                        wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                            eprintln!("[spot][android] Surface error: {:?}. Attempting recovery.", e);
+                            if let Some(window) = self.platform.native_window.clone() {
+                                self.setup_native_window_surface(&window);
+                            }
+                        }
+                        wgpu::SurfaceError::OutOfMemory => {
+                            eprintln!("[spot][android] Out of memory error. Surface dropped.");
+                            self.surface.take();
+                        }
+                        _ => {
+                            eprintln!("[spot][android] Surface draw error: {:?}", e);
+                        }
+                    }
                 }
 
                 // Force Android driver to reclaim memory by polling with Wait.
