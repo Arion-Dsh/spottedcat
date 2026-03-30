@@ -14,6 +14,7 @@ pub(crate) struct IosSensorState {
     manager: Retained<CMMotionManager>,
     pedometer: Retained<CMPedometer>,
     latest_steps: Arc<Mutex<Option<f32>>>,
+    previous_steps: Mutex<f32>,
 }
 
 #[cfg(all(target_os = "ios", feature = "sensors"))]
@@ -38,6 +39,7 @@ impl IosSensorState {
             manager,
             pedometer,
             latest_steps: Arc::new(Mutex::new(None)),
+            previous_steps: Mutex::new(0.0),
         }
     }
 
@@ -63,7 +65,10 @@ impl IosSensorState {
             let pedo_avail: bool = msg_send![objc2::class!(CMPedometer), isStepCountingAvailable];
             if pedo_avail {
                 let latest_steps = self.latest_steps.clone();
+                let calendar: Retained<objc2_foundation::NSCalendar> = msg_send![objc2::class!(NSCalendar), currentCalendar];
                 let now: Retained<objc2_foundation::NSDate> = msg_send![objc2::class!(NSDate), date];
+                let start_of_day: Retained<objc2_foundation::NSDate> = msg_send![&calendar, startOfDayForDate: &*now];
+
                 let handler = block2::RcBlock::new(
                     move |data: *mut CMPedometerData, _error: *mut objc2::runtime::AnyObject| {
                         if !data.is_null() {
@@ -72,14 +77,15 @@ impl IosSensorState {
                             let steps_obj: *mut objc2::runtime::AnyObject = msg_send![data, numberOfSteps];
                             if !steps_obj.is_null() {
                                 let steps: i32 = msg_send![steps_obj, intValue];
+                                let count = steps as f32;
                                 if let Ok(mut latest) = latest_steps.lock() {
-                                    *latest = Some(steps as f32);
+                                    *latest = Some(count);
                                 }
                             }
                         }
                     },
                 );
-                let _: () = msg_send![&self.pedometer, startPedometerUpdatesFromDate: &*now, withHandler: &*handler];
+                let _: () = msg_send![&self.pedometer, startPedometerUpdatesFromDate: &*start_of_day, withHandler: &*handler];
             }
         }
     }
@@ -121,6 +127,12 @@ impl IosSensorState {
         if let Ok(steps) = self.latest_steps.lock() {
             if let Some(count) = *steps {
                 input.handle_step_counter(count);
+                if let Ok(mut prev) = self.previous_steps.lock() {
+                    if count > *prev {
+                        input.handle_step_detector();
+                    }
+                    *prev = count;
+                }
             }
         }
     }

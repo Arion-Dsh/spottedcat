@@ -20,6 +20,10 @@ pub(crate) struct AndroidSensorState {
     pub(crate) step_counter: *const ndk_sys::ASensor,
     pub(crate) step_detector: *const ndk_sys::ASensor,
     pub(crate) event_buffer: std::sync::Arc<std::sync::Mutex<Vec<ndk_sys::ASensorEvent>>>,
+    pub(crate) initial_hardware_count: f32,
+    pub(crate) last_system_day: u64,
+    pub(crate) last_hardware_count: f32,
+    pub(crate) internal_data_path: std::path::PathBuf,
 }
 
 #[cfg(feature = "sensors")]
@@ -44,6 +48,7 @@ pub(crate) struct PlatformData {
     pub(crate) floating_surface: Option<wgpu::Surface<'static>>,
     #[cfg(feature = "sensors")]
     pub(crate) sensor_state: Option<AndroidSensorState>,
+    pub(crate) internal_data_path: Option<std::path::PathBuf>,
 }
 
 impl PlatformData {
@@ -53,6 +58,7 @@ impl PlatformData {
             floating_surface: None,
             #[cfg(feature = "sensors")]
             sensor_state: None,
+            internal_data_path: None,
         }
     }
 }
@@ -119,6 +125,7 @@ impl App {
         // Initialize scale factor based on screen density (160 dpi is baseline 1.0)
         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
         self.context.set_scale_factor(self.scale_factor);
+        self.platform.internal_data_path = app.internal_data_path();
         
         eprintln!("[spot][android] entering run loop. scale_factor: {}", self.scale_factor);
         
@@ -170,9 +177,10 @@ impl App {
             app.poll_events(Some(std::time::Duration::from_millis(0)), |poll_event| {
                 match poll_event {
                     PollEvent::Main(MainEvent::InitWindow { .. }) => {
-                        eprintln!("[spot][android] InitWindow");
                         self.platform.native_window = app.native_window();
                         if let Some(window) = self.platform.native_window.clone() {
+                            let size = (window.width(), window.height());
+                            eprintln!("[spot][android] InitWindow: {}x{}", size.0, size.1);
                             self.setup_native_window_surface(&window);
                         }
                     }
@@ -185,11 +193,13 @@ impl App {
                         if let (Some(surface), Some(window)) = (self.surface.as_ref(), self.platform.native_window.as_ref()) {
                             let size = (window.width() as u32, window.height() as u32);
                             eprintln!("[spot][android] WindowResized: {}x{}", size.0, size.1);
-                            with_graphics(|g| g.resize(surface, size.0, size.1));
-                            self.context.set_window_logical_size(
-                                Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                                Pt::from_physical_px(size.1 as f64, self.scale_factor),
-                            );
+                            if size.0 > 0 && size.1 > 0 {
+                                with_graphics(|g| g.resize(surface, size.0, size.1));
+                                self.context.set_window_logical_size(
+                                    Pt::from_physical_px(size.0 as f64, self.scale_factor),
+                                    Pt::from_physical_px(size.1 as f64, self.scale_factor),
+                                );
+                            }
                         }
                     }
                     PollEvent::Main(MainEvent::Resume { .. }) => {
@@ -199,15 +209,32 @@ impl App {
                         // Force surface reconfiguration on resume if we have one
                         if let (Some(surface), Some(window)) = (self.surface.as_ref(), self.platform.native_window.clone()) {
                              let size = (window.width() as u32, window.height() as u32);
-                             with_graphics(|g| g.resize(surface, size.0, size.1));
+                             eprintln!("[spot][android] Resuming with surface: {}x{}", size.0, size.1);
+                             if size.0 > 0 && size.1 > 0 {
+                                 with_graphics(|g| g.resize(surface, size.0, size.1));
+
+                                 // CRITICAL: Update context logical size so components like UiManager
+                                 // have the correct dimensions immediately on resume.
+                                 self.context.set_window_logical_size(
+                                    Pt::from_physical_px(size.0 as f64, self.scale_factor),
+                                    Pt::from_physical_px(size.1 as f64, self.scale_factor),
+                                 );
+                             }
+                        } else {
+                             eprintln!("[spot][android] Resume: No surface or window available yet");
                         }
 
-                        // Switch back to original scene only if graphics are ready
+                        // Switch back to original scene only if we were in a floating scene or need first-time init.
+                        // This prevents resetting the game state (and leaking resources) on every sleep/wake cycle.
                         if with_graphics(|_| ()).is_some() {
-                            if let Some(spot) = self.spot.take() {
-                                spot.remove();
+                            if self.is_floating_scene || self.spot.is_none() {
+                                eprintln!("[spot][android] Re-initializing main scene (was_floating: {})", self.is_floating_scene);
+                                if let Some(spot) = self.spot.take() {
+                                    spot.remove();
+                                }
+                                self.spot = Some((self.scene_factory)(&mut self.context));
+                                self.is_floating_scene = false;
                             }
-                            self.spot = Some((self.scene_factory)(&mut self.context));
                         }
 
                         if let Some(service_class) = crate::android::floating_window_service_class() {
@@ -229,6 +256,7 @@ impl App {
                                     spot.remove();
                                 }
                                 self.spot = Some(factory(&mut self.context));
+                                self.is_floating_scene = true;
                             }
                         }
 
@@ -334,7 +362,26 @@ impl App {
                             }
                             18 => { // ASENSOR_TYPE_STEP_COUNTER
                                 let count = event.__bindgen_anon_1.__bindgen_anon_1.data[0];
-                                self.context.input_mut().handle_step_counter(count);
+                                
+                                let state = self.platform.sensor_state.as_mut().unwrap();
+                                let current_day = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_secs() / 86400)
+                                    .unwrap_or(0);
+                                
+                                if state.initial_hardware_count < 0.0 || current_day > state.last_system_day || count < state.last_hardware_count {
+                                    state.initial_hardware_count = count;
+                                    state.last_system_day = current_day;
+                                    
+                                    // Save immediately on reset for robustness
+                                    let steps_file = state.internal_data_path.join("steps.txt");
+                                    let content = format!("{} {} {}", state.initial_hardware_count, state.last_system_day, count);
+                                    let _ = std::fs::write(steps_file, content);
+                                }
+                                state.last_hardware_count = count;
+                                
+                                let steps_today = count - state.initial_hardware_count;
+                                self.context.input_mut().handle_step_counter(steps_today);
                             }
                             _ => {}
                         }
@@ -456,6 +503,22 @@ impl App {
                 let step_detector = ndk_sys::ASensorManager_getDefaultSensor(manager, 17);
                 let step_counter = ndk_sys::ASensorManager_getDefaultSensor(manager, 18);
 
+                let data_path = self.platform.internal_data_path.clone().unwrap_or_else(|| std::path::PathBuf::from("/sdcard"));
+                let steps_file = data_path.join("steps.txt");
+                
+                let mut initial_hardware_count = -1.0f32;
+                let mut last_system_day = 0u64;
+                let mut last_hardware_count = 0.0f32;
+
+                if let Ok(content) = std::fs::read_to_string(&steps_file) {
+                    let parts: Vec<&str> = content.split_whitespace().collect();
+                    if parts.len() >= 3 {
+                        initial_hardware_count = parts[0].parse().unwrap_or(-1.0);
+                        last_system_day = parts[1].parse().unwrap_or(0);
+                        last_hardware_count = parts[2].parse().unwrap_or(0.0);
+                    }
+                }
+
                 let sensor_state = AndroidSensorState {
                     _manager: manager,
                     queue: std::ptr::null_mut(),
@@ -466,6 +529,10 @@ impl App {
                     step_counter,
                     step_detector,
                     event_buffer: std::sync::Arc::new(std::sync::Mutex::new(Vec::with_capacity(32))),
+                    initial_hardware_count,
+                    last_system_day,
+                    last_hardware_count,
+                    internal_data_path: data_path,
                 };
 
                 let looper = ndk_sys::ALooper_forThread();
@@ -533,6 +600,11 @@ impl App {
                 if !state.rot.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.rot); }
                 if !state.step_counter.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_counter); }
                 if !state.step_detector.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_detector); }
+
+                // Persist step data
+                let steps_file = state.internal_data_path.join("steps.txt");
+                let content = format!("{} {} {}", state.initial_hardware_count, state.last_system_day, state.last_hardware_count);
+                let _ = std::fs::write(steps_file, content);
             }
         }
     }

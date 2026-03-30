@@ -39,6 +39,7 @@ pub(crate) struct App {
     pub(crate) previous: Option<Instant>,
     pub(crate) lag: Duration,
     pub(crate) fixed_dt: Duration,
+    pub(crate) is_floating_scene: bool,
 }
 
 impl App {
@@ -60,6 +61,7 @@ impl App {
             previous: None,
             lag: Duration::ZERO,
             fixed_dt: Duration::from_secs_f64(1.0 / 60.0),
+            is_floating_scene: false,
         }
     }
 
@@ -82,6 +84,7 @@ impl App {
             previous: None,
             lag: Duration::ZERO,
             fixed_dt: Duration::from_nanos(8_333_333),
+            is_floating_scene: false,
         }
     }
 }

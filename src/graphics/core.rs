@@ -555,39 +555,57 @@ impl Graphics {
     }
 
     pub fn resize(&mut self, surface: &wgpu::Surface<'_>, width: u32, height: u32) {
-        let width = width.max(1);
-        let height = height.max(1);
-        
+        if width == 0 || height == 0 {
+            eprintln!("[spot][graphics] Warning: Attempted resize with zero dimension: {}x{}", width, height);
+            return;
+        }
+
         let caps = surface.get_capabilities(&self.adapter);
         if caps.formats.is_empty() {
-             eprintln!("[spot][graphics] surface has no supported formats!");
+             eprintln!("[spot][graphics] Surface has no supported formats on resize!");
              return;
         }
 
+        let old_width = self.config.width;
+        let old_height = self.config.height;
+        let old_format = self.config.format;
+
         self.config.width = width;
         self.config.height = height;
-        self.config.format = pick_surface_format(&caps);
+        
+        // Try to keep the same format if possible to avoid pipeline incompatibility
+        if !caps.formats.contains(&old_format) {
+            let new_fmt = pick_surface_format(&caps);
+            eprintln!("[spot][graphics] Warning: Original surface format {:?} not supported by new surface. Switching to {:?}. Pipelines may become invalid!", old_format, new_fmt);
+            self.config.format = new_fmt;
+        } else {
+            self.config.format = old_format;
+        }
+
         self.config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
         self.config.usage = crate::platform::surface_usage(&caps);
         self.config.alpha_mode = pick_alpha_mode(&caps, self.transparent);
         
         surface.configure(&self.device, &self.config);
 
-        self.depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("depth_texture"),
-            size: wgpu::Extent3d {
-                width: self.config.width,
-                height: self.config.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth24Plus,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        self.depth_view = self.depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        // Only recreate depth texture if size changed
+        if width != old_width || height != old_height {
+            self.depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("depth_texture"),
+                size: wgpu::Extent3d {
+                    width: self.config.width,
+                    height: self.config.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth24Plus,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            self.depth_view = self.depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        }
     }
 
     pub fn create_mesh(&mut self, vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<u32> {

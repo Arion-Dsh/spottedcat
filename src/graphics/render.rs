@@ -528,7 +528,13 @@ impl Graphics {
         scale_factor: f64,
         context: Option<&Context>,
     ) -> Result<(), wgpu::SurfaceError> {
-        let frame = surface.get_current_texture()?;
+        let frame = match surface.get_current_texture() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("[spot][graphics] get_current_texture failed: {:?}", e);
+                return Err(e);
+            }
+        };
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("command_encoder"),
