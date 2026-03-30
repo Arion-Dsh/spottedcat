@@ -39,6 +39,7 @@ pub struct ModelRenderer {
     pub(crate) model_globals_buffer: wgpu::Buffer,
     pub(crate) user_shader_opts_buffer: wgpu::Buffer,
     pub(crate) bone_matrices_buffer: wgpu::Buffer,
+    pub(crate) instance_buffer: wgpu::Buffer,
     pub(crate) scene_globals_buffer: wgpu::Buffer,
 
     pub(crate) globals_bind_group: wgpu::BindGroup,
@@ -54,6 +55,7 @@ pub struct ModelRenderer {
     pub(crate) next_model_globals: u32,
     pub(crate) next_bone_batch: u32,
     pub(crate) max_model_globals: u32,
+    pub(crate) max_instances: u32,
 }
 
 impl ModelRenderer {
@@ -65,6 +67,7 @@ impl ModelRenderer {
         let model_globals_stride = ((Self::GLOBALS_SIZE_BYTES as u32 + align - 1) / align) * align;
         let user_opts_stride = ((Self::USER_SHADER_OPTS_SIZE as u32 + align - 1) / align) * align;
         let max_model_globals = 4096u32;
+        let max_instances = 65536u32;
 
         let model_globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("model_globals_ubo"),
@@ -84,6 +87,13 @@ impl ModelRenderer {
             label: Some("model_scene_globals_ubo"),
             size: std::mem::size_of::<SceneGlobals>() as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("model_instance_buffer"),
+            size: (max_instances as usize * std::mem::size_of::<[[f32; 4]; 4]>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -345,7 +355,10 @@ impl ModelRenderer {
             model_globals_buffer,
             user_shader_opts_buffer,
             bone_matrices_buffer,
+            instance_buffer,
             scene_globals_buffer,
+
+
             globals_bind_group,
             bone_matrices_bind_group,
             sampler,
@@ -357,6 +370,7 @@ impl ModelRenderer {
             next_model_globals: 0,
             next_bone_batch: 0,
             max_model_globals,
+            max_instances,
         }
     }
 
@@ -501,6 +515,14 @@ impl ModelRenderer {
 
     pub fn upload_scene_globals(&self, queue: &wgpu::Queue, scene: &SceneGlobals) {
         queue.write_buffer(&self.scene_globals_buffer, 0, bytemuck::bytes_of(scene));
+    }
+
+    pub fn upload_instances(&self, queue: &wgpu::Queue, instances: &[[[f32; 4]; 4]]) -> anyhow::Result<()> {
+        if instances.len() > self.max_instances as usize {
+            return Err(anyhow::anyhow!("too many instances! max is {}", self.max_instances));
+        }
+        queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(instances));
+        Ok(())
     }
 }
 

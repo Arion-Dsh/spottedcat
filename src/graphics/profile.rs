@@ -3,8 +3,10 @@
 use std::sync::Mutex;
 use std::sync::OnceLock;
 
+#[allow(dead_code)]
 pub(crate) static PROFILE_RENDER: OnceLock<bool> = OnceLock::new();
 
+#[allow(dead_code)]
 pub(crate) struct RenderProfileStats {
     pub frame: u64,
     pub sum_total_ms: f64,
@@ -27,6 +29,7 @@ impl Default for RenderProfileStats {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) static PROFILE_STATS: OnceLock<Mutex<RenderProfileStats>> = OnceLock::new();
 
 pub(crate) fn parse_present_mode_from_env() -> Option<wgpu::PresentMode> {

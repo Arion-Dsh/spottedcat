@@ -389,7 +389,8 @@ impl ApplicationHandler for App {
             let elapsed = now.duration_since(previous);
             self.lag = self.lag.saturating_add(elapsed);
 
-            while self.lag >= self.fixed_dt {
+            let mut updates = 0;
+            while self.lag >= self.fixed_dt && updates < 8 {
                 #[cfg(all(target_os = "ios", feature = "sensors"))]
                 if let Some(state) = self.platform.sensor_state.as_ref() {
                     state.poll(&mut self.context.input_mut());
@@ -400,6 +401,12 @@ impl ApplicationHandler for App {
                 }
                 self.context.input_mut().end_frame();
                 self.lag = self.lag.saturating_sub(self.fixed_dt);
+                updates += 1;
+            }
+            if self.lag >= self.fixed_dt {
+                // Death spiral prevention: if we can't catch up after 8 updates, 
+                // clear the lag and skip logic until the next frame.
+                self.lag = Duration::ZERO;
             }
         }
 

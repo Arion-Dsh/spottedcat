@@ -36,6 +36,7 @@ pub(crate) struct ResolvedDraw {
     pub opts: DrawOption,
     pub shader_id: u32,
     pub shader_opts: ShaderOpts,
+    pub layer: i32,
 }
 
 pub struct Graphics {
@@ -134,7 +135,7 @@ impl Graphics {
                 present_mode: caps.present_modes[0],
                 alpha_mode: caps.alpha_modes[0],
                 view_formats: vec![],
-                desired_maximum_frame_latency: 2,
+                desired_maximum_frame_latency: 1,
             });
 
         config.alpha_mode = pick_alpha_mode(&caps, transparent);
@@ -193,7 +194,14 @@ impl Graphics {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth24Plus,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -431,7 +439,44 @@ impl Graphics {
             cache: None,
         });
 
-        let instanced_shadow_pipeline = shadow_pipeline.clone(); // Stub for now
+        let instanced_shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("instanced_shadow_pipeline"),
+            layout: Some(&shadow_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[
+                    Vertex::layout(),
+                    wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &[
+                            wgpu::VertexAttribute { offset: 0, shader_location: 5, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 16, shader_location: 6, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 32, shader_location: 7, format: wgpu::VertexFormat::Float32x4 },
+                            wgpu::VertexAttribute { offset: 48, shader_location: 8, format: wgpu::VertexFormat::Float32x4 },
+                        ],
+                    }
+                ],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth24Plus,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        });
 
         let mut graphics = Self {
             device,
@@ -465,6 +510,7 @@ impl Graphics {
             shadow_view,
             shadow_pipeline,
             instanced_shadow_pipeline,
+
             irradiance_texture,
             irradiance_view,
             prefiltered_texture,
@@ -570,6 +616,17 @@ impl Graphics {
 
     pub fn set_transparent(&mut self, transparent: bool) {
         self.transparent = transparent;
+    }
+
+    pub fn poll_device(&self, force_wait: bool) {
+        let _ = self.device.poll(if force_wait {
+            wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_millis(1)),
+            }
+        } else {
+            wgpu::PollType::Poll
+        });
     }
 
     pub fn transparent(&self) -> bool {

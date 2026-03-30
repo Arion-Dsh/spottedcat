@@ -24,6 +24,11 @@ pub fn get_activity() -> Option<&'static jni::objects::GlobalRef> {
     ACTIVITY.get()
 }
 
+#[cfg(target_os = "android")]
+pub fn get_app() -> Option<AndroidApp> {
+    ANDROID_APP.get().cloned()
+}
+
 
 #[cfg(target_os = "android")]
 fn find_class<'a>(env: &mut jni::JNIEnv<'a>, class_name: &str) -> jni::errors::Result<jni::objects::JClass<'a>> {

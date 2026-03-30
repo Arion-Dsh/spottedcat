@@ -2,8 +2,6 @@
 
 use crate::DrawOption;
 use crate::ShaderOpts;
-use crate::Text;
-use crate::glyph_cache::GlyphCacheKey;
 use crate::pt::Pt;
 
 use super::Graphics;
@@ -12,12 +10,52 @@ use super::core::ResolvedDraw;
 impl Graphics {
     pub(crate) fn layout_and_queue_text(
         &mut self,
-        text: &Text,
+        text: &crate::Text,
         opts: &DrawOption,
         viewport_rect: [f32; 4],
     ) -> anyhow::Result<()> {
         use ab_glyph::{Font as _, FontArc, PxScale, ScaleFont as _};
+        use crate::text::{CachedGlyph, TextLayout};
 
+        use std::sync::atomic::Ordering;
+
+        let start_pos = opts.position();
+        let mut shader_opts = ShaderOpts::default();
+        shader_opts.set_vec4(0, text.color);
+
+        {
+            let cache_lock = text.layout_cache.as_ref().lock().unwrap();
+            if !text.dirty.load(Ordering::SeqCst) {
+                if let Some(layout) = cache_lock.as_ref() {
+                    for glyph in &layout.glyphs {
+                        let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
+                        let final_y = start_pos[1].as_f32() + glyph.instance.pos[1];
+
+                        if final_x + glyph.instance.size[0] >= viewport_rect[0]
+                            && final_x <= viewport_rect[2]
+                            && final_y + glyph.instance.size[1] >= viewport_rect[1]
+                            && final_y <= viewport_rect[3]
+                        {
+                            if let Some(Some(img_entry)) = self.images.get(glyph.image_id as usize) {
+                                let mut glyph_opts = *opts;
+                                glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
+
+                                self.resolved_draws.push(ResolvedDraw {
+                                    img_entry: img_entry.clone(),
+                                    opts: glyph_opts,
+                                    shader_id: self.text_shader_id,
+                                    shader_opts,
+                                    layer: opts.layer(),
+                                });
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+        }
+
+        // 2. Cache miss or dirty - Perform layout
         let font_id = text.font_id;
         let font_data = self
             .get_font(font_id)
@@ -45,11 +83,8 @@ impl Graphics {
             vec![std::borrow::Cow::Borrowed(text.content.as_str())]
         };
 
-        let start_pos = opts.position();
-        let mut caret_pos = start_pos;
+        let mut caret_pos = [Pt(0.0), Pt(0.0)]; // Relative to start_pos
 
-        // Calculate y_offset without calling text.measure_with_y_offset() to avoid re-entrant lock.
-        // We use the same ink-bounds logic as the measure system.
         let mut global_min_y = scaled.ascent();
         for line in &lines {
             for ch in line.chars() {
@@ -69,15 +104,13 @@ impl Graphics {
         let descent = scaled.descent();
         let line_height = ascent - descent + scaled.line_gap();
 
-        // Adjust caret_pos[1] so that the first line's baseline aligns with the ink bounds top
-        // baseline_y = caret_pos[1] + ascent
-        // We want baseline_y = start_pos[1] + y_offset
-        // So caret_pos[1] = start_pos[1] + Pt::from(y_offset - ascent)
         caret_pos[1] += Pt::from(y_offset - ascent);
 
         let image_scale = opts.scale();
         let sx = image_scale[0];
         let sy = image_scale[1];
+
+        let mut cached_glyphs = Vec::new();
 
         for line in lines {
             let mut prev: Option<ab_glyph::GlyphId> = None;
@@ -85,14 +118,13 @@ impl Graphics {
 
             for ch in line.chars() {
                 let glyph_id = scaled.glyph_id(ch);
-                // ... (rest same)
 
                 if let Some(p) = prev {
                     caret_pos[0] += Pt::from(scaled.kern(p, glyph_id));
                 }
                 prev = Some(glyph_id);
 
-                let cache_key = GlyphCacheKey {
+                let cache_key = crate::glyph_cache::GlyphCacheKey {
                     font_id,
                     font_size_bits: px_size.to_bits(),
                     glyph_id: glyph_id.0 as u32,
@@ -110,8 +142,8 @@ impl Graphics {
                     }
                 };
 
-                let img_id = entry.image.id() as usize;
-                let img_entry = if let Some(Some(e)) = self.images.get(img_id) {
+                let img_id = entry.image.id() as u32;
+                let img_entry = if let Some(Some(e)) = self.images.get(img_id as usize) {
                     e
                 } else {
                     caret_pos[0] += Pt::from(entry.advance);
@@ -121,46 +153,63 @@ impl Graphics {
                 let draw_x = caret_pos[0] + Pt::from(entry.offset[0]);
                 let draw_y = baseline_y + Pt::from(entry.offset[1]);
 
-                let rel_x = (draw_x - start_pos[0]).as_f32() * sx;
-                let rel_y = (draw_y - start_pos[1]).as_f32() * sy;
-
-                let final_x = start_pos[0].as_f32() + rel_x;
-                let final_y = start_pos[1].as_f32() + rel_y;
+                let rel_x = draw_x.as_f32() * sx;
+                let rel_y = draw_y.as_f32() * sy;
 
                 let w = img_entry.bounds.width.as_f32() * sx;
                 let h = img_entry.bounds.height.as_f32() * sy;
 
-                let x1 = final_x + w;
-                let y1 = final_y + h;
-                let min_x = final_x.min(x1);
-                let max_x = final_x.max(x1);
-                let min_y = final_y.min(y1);
-                let max_y = final_y.max(y1);
+                cached_glyphs.push(CachedGlyph {
+                    instance: crate::image_raw::InstanceData {
+                        pos: [rel_x, rel_y],
+                        rotation: 0.0,
+                        size: [w, h],
+                        uv_rect: img_entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]),
+                    },
+                    image_id: img_id,
+                });
 
-                if max_x >= viewport_rect[0]
-                    && min_x <= viewport_rect[2]
-                    && max_y >= viewport_rect[1]
-                    && min_y <= viewport_rect[3]
-                {
+                caret_pos[0] += Pt::from(entry.advance);
+            }
+            caret_pos[0] = Pt(0.0);
+            caret_pos[1] += Pt::from(line_height);
+        }
+
+        // 3. Store in cache
+        let new_layout = TextLayout {
+            glyphs: cached_glyphs,
+            bounds: (0.0, 0.0, y_offset), // width/height not fully used here but good to have
+        };
+        
+        // Push TO resolved_draws for the current frame before completing
+        for glyph in &new_layout.glyphs {
+            let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
+            let final_y = start_pos[1].as_f32() + glyph.instance.pos[1];
+
+            if final_x + glyph.instance.size[0] >= viewport_rect[0]
+                && final_x <= viewport_rect[2]
+                && final_y + glyph.instance.size[1] >= viewport_rect[1]
+                && final_y <= viewport_rect[3]
+            {
+                if let Some(Some(img_entry)) = self.images.get(glyph.image_id as usize) {
                     let mut glyph_opts = *opts;
                     glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
-
-                    let mut shader_opts = ShaderOpts::default();
-                    shader_opts.set_vec4(0, text.color);
 
                     self.resolved_draws.push(ResolvedDraw {
                         img_entry: img_entry.clone(),
                         opts: glyph_opts,
                         shader_id: self.text_shader_id,
                         shader_opts,
+                        layer: opts.layer(),
                     });
                 }
-
-                caret_pos[0] += Pt::from(entry.advance);
             }
-            caret_pos[0] = start_pos[0];
-            caret_pos[1] += Pt::from(line_height);
         }
+
+        let mut cache_lock = text.layout_cache.as_ref().lock().unwrap();
+        *cache_lock = Some(new_layout);
+        text.dirty.store(false, Ordering::SeqCst);
+        
         Ok(())
     }
 }

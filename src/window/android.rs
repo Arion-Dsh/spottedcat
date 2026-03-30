@@ -5,7 +5,7 @@ use crate::{
     ScenePayloadTypeId,
 };
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use super::App;
 use crate::platform;
 
@@ -19,6 +19,24 @@ pub(crate) struct AndroidSensorState {
     pub(crate) rot: *const ndk_sys::ASensor,
     pub(crate) step_counter: *const ndk_sys::ASensor,
     pub(crate) step_detector: *const ndk_sys::ASensor,
+    pub(crate) event_buffer: std::sync::Arc<std::sync::Mutex<Vec<ndk_sys::ASensorEvent>>>,
+}
+
+#[cfg(feature = "sensors")]
+unsafe extern "C" fn sensor_callback(
+    _fd: i32,
+    _events: i32,
+    data: *mut std::ffi::c_void,
+) -> i32 {
+    let state = unsafe { &*(data as *const AndroidSensorState) };
+    let mut buffer = state.event_buffer.lock().unwrap();
+    unsafe {
+        let mut event = std::mem::zeroed::<ndk_sys::ASensorEvent>();
+        while ndk_sys::ASensorEventQueue_getEvents(state.queue, &mut event, 1) > 0 {
+            buffer.push(event);
+        }
+    }
+    1 // Continue receiving callbacks
 }
 
 pub(crate) struct PlatformData {
@@ -65,11 +83,6 @@ impl App {
                     let size = (native_window.width() as u32, native_window.height() as u32);
                     
                     // Force RGBA_8888 for floating window transparency
-                    unsafe {
-                        ndk_sys::ANativeWindow_setBuffersGeometry(surface_ptr, 0, 0, 1);
-                    }
-                    
-                    // Force RGBA_8888 for floating window transparency BEFORE creating surface
                     unsafe {
                         ndk_sys::ANativeWindow_setBuffersGeometry(surface_ptr, 0, 0, 1);
                     }
@@ -279,8 +292,11 @@ impl App {
             #[cfg(feature = "sensors")]
             if let Some(state) = self.platform.sensor_state.as_ref() {
                 unsafe {
-                    let mut event = std::mem::zeroed::<ndk_sys::ASensorEvent>();
-                    while ndk_sys::ASensorEventQueue_getEvents(state.queue, &mut event, 1) > 0 {
+                    let events = {
+                        let mut buffer = state.event_buffer.lock().unwrap();
+                        std::mem::take(&mut *buffer)
+                    };
+                    for event in events {
                         match event.type_ {
                             1 => { // ASENSOR_TYPE_ACCELEROMETER
                                 let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
@@ -326,12 +342,18 @@ impl App {
                 let elapsed = now.duration_since(previous);
                 self.lag = self.lag.saturating_add(elapsed);
 
-                while self.lag >= self.fixed_dt {
+                let mut updates = 0;
+                while self.lag >= self.fixed_dt && updates < 4 {
                     if let Some(spot) = self.spot.as_mut() {
                         spot.update(&mut self.context, self.fixed_dt);
                     }
                     self.context.input_mut().end_frame();
                     self.lag = self.lag.saturating_sub(self.fixed_dt);
+                    updates += 1;
+                }
+                if self.lag >= self.fixed_dt {
+                    // Spiral of death prevention
+                    self.lag = std::time::Duration::from_millis(0);
                 }
             }
 
@@ -372,6 +394,18 @@ impl App {
                 } else if let Some(surface) = self.surface.as_ref() {
                     let _ = with_graphics(|g| g.draw_context(surface, &self.context));
                 }
+
+                // Force Android driver to reclaim memory by polling with Wait.
+                // This addresses the memory leak (~0.8MB/10s at 60FPS) observed on Android
+                // even with minimal rendering.
+                with_graphics(|g| g.poll_device(true));
+
+                // Throttle to 60 FPS to prevent driver-level memory growth due to high-frequency acquire calls
+                let frame_time = Duration::from_micros(16666);
+                let elapsed = now.elapsed();
+                if elapsed < frame_time {
+                    std::thread::sleep(frame_time - elapsed);
+                }
             }
 
             if take_quit_request() {
@@ -396,34 +430,44 @@ impl App {
                 let step_detector = ndk_sys::ASensorManager_getDefaultSensor(manager, 17);
                 let step_counter = ndk_sys::ASensorManager_getDefaultSensor(manager, 18);
 
-                // Create a looper-less event queue (null looper)
-                let looper = ndk_sys::ALooper_forThread();
-                if looper.is_null() {
-                    return;
-                }
-
-                let queue = ndk_sys::ASensorManager_createEventQueue(
-                    manager,
-                    looper,
-                    ndk_sys::ALOOPER_POLL_CALLBACK as i32,
-                    None,
-                    std::ptr::null_mut(),
-                );
-
-                if queue.is_null() {
-                    return;
-                }
-
-                self.platform.sensor_state = Some(AndroidSensorState {
+                let sensor_state = AndroidSensorState {
                     _manager: manager,
-                    queue,
+                    queue: std::ptr::null_mut(),
                     gyro,
                     accel,
                     mag,
                     rot,
                     step_counter,
                     step_detector,
-                });
+                    event_buffer: std::sync::Arc::new(std::sync::Mutex::new(Vec::with_capacity(32))),
+                };
+
+                let looper = ndk_sys::ALooper_forThread();
+                if looper.is_null() {
+                    return;
+                }
+
+                // We need a stable pointer. Since sensor_state is in an Option in self.platform,
+                // and App (self) is pinned in the run loop's stack, it's mostly safe, 
+                // but let's be careful. Actually, ASensorManager_createEventQueue 
+                // requires a callback and data. 
+                // We'll store the state first.
+                self.platform.sensor_state = Some(sensor_state);
+                let state_ref = self.platform.sensor_state.as_mut().unwrap();
+
+                let queue = ndk_sys::ASensorManager_createEventQueue(
+                    manager,
+                    looper,
+                    ndk_sys::ALOOPER_POLL_CALLBACK as i32,
+                    Some(sensor_callback),
+                    state_ref as *mut _ as *mut std::ffi::c_void,
+                );
+
+                if queue.is_null() {
+                    self.platform.sensor_state = None;
+                    return;
+                }
+                state_ref.queue = queue;
             }
 
             if let Some(state) = self.platform.sensor_state.as_ref() {

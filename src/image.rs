@@ -265,6 +265,7 @@ impl Image {
             ]),
             shader_id: context.current_draw_state().shader_id,
             shader_opts: context.current_draw_state().shader_opts,
+            layer: 0,
         };
 
         context.push_state(state);

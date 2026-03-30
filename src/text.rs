@@ -6,7 +6,7 @@ use std::fmt;
 ///
 /// Text can be created and drawn with custom fonts, sizes, colors, and positions.
 /// Supports text wrapping with maximum width constraints.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub struct Text {
     pub(crate) content: String,
     pub(crate) font_size: crate::Pt,
@@ -15,6 +15,48 @@ pub struct Text {
     pub(crate) stroke_width: crate::Pt,
     pub(crate) stroke_color: [f32; 4],
     pub(crate) max_width: Option<crate::Pt>,
+    pub(crate) layout_cache: std::sync::Arc<std::sync::Mutex<Option<TextLayout>>>,
+    pub(crate) dirty: std::sync::atomic::AtomicBool,
+}
+
+impl Clone for Text {
+    fn clone(&self) -> Self {
+        Self {
+            content: self.content.clone(),
+            font_size: self.font_size,
+            color: self.color,
+            font_id: self.font_id,
+            stroke_width: self.stroke_width,
+            stroke_color: self.stroke_color,
+            max_width: self.max_width,
+            layout_cache: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            dirty: std::sync::atomic::AtomicBool::new(true),
+        }
+    }
+}
+
+impl PartialEq for Text {
+    fn eq(&self, other: &Self) -> bool {
+        self.content == other.content
+            && self.font_size == other.font_size
+            && self.color == other.color
+            && self.font_id == other.font_id
+            && self.stroke_width == other.stroke_width
+            && self.stroke_color == other.stroke_color
+            && self.max_width == other.max_width
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TextLayout {
+    pub(crate) glyphs: Vec<CachedGlyph>,
+    pub(crate) bounds: (f32, f32, f32), // width, height, y_offset
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CachedGlyph {
+    pub(crate) instance: crate::image_raw::InstanceData,
+    pub(crate) image_id: u32,
 }
 
 impl fmt::Display for Text {
@@ -45,40 +87,62 @@ impl Text {
             stroke_width: crate::Pt(0.0),
             stroke_color: [0.0, 0.0, 0.0, 1.0],
             max_width: None,
+            layout_cache: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            dirty: std::sync::atomic::AtomicBool::new(true),
         }
     }
 
     /// Sets the text content safely without re-allocating the entire struct.
     pub fn set_content(&mut self, content: impl Into<String>) {
-        self.content = content.into();
+        let new_content = content.into();
+        if self.content != new_content {
+            self.content = new_content;
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
     }
 
     pub fn set_color(&mut self, color: [f32; 4]) {
-        self.color = color;
+        if self.color != color {
+            self.color = color;
+            // self.dirty = true; // Color change does not need re-layout if using tinting
+        }
     }
 
     pub fn with_font_size(mut self, font_size: crate::Pt) -> Self {
-        self.font_size = font_size;
+        if self.font_size != font_size {
+            self.font_size = font_size;
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         self
     }
 
     pub fn with_color(mut self, color: [f32; 4]) -> Self {
         self.color = color;
+        // self.dirty.store(true, Ordering::SeqCst);
         self
     }
 
     pub fn with_stroke_width(mut self, stroke_width: crate::Pt) -> Self {
-        self.stroke_width = stroke_width;
+        if self.stroke_width != stroke_width {
+            self.stroke_width = stroke_width;
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         self
     }
 
     pub fn with_stroke_color(mut self, stroke_color: [f32; 4]) -> Self {
-        self.stroke_color = stroke_color;
+        if self.stroke_color != stroke_color {
+            self.stroke_color = stroke_color;
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         self
     }
 
     pub fn with_max_width(mut self, max_width: crate::Pt) -> Self {
-        self.max_width = Some(max_width);
+        if self.max_width != Some(max_width) {
+            self.max_width = Some(max_width);
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         self
     }
 
@@ -99,6 +163,10 @@ impl Text {
 
     pub fn font_id(&self) -> u32 {
         self.font_id
+    }
+
+    pub fn max_width(&self) -> Option<crate::Pt> {
+        self.max_width
     }
 
     /// Draws this text to the context with the specified options.

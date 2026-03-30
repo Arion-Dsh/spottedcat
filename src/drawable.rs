@@ -77,6 +77,8 @@ pub struct DrawOption {
     /// Scale factors (x, y). Applied after size.
     scale: [f32; 2],
     opacity: f32,
+    /// Layer for sorting (z-index). Higher values are drawn later.
+    layer: i32,
     /// Optional clipping rectangle [x, y, width, height] in screen pixels.
     clip: Option<[Pt; 4]>,
 }
@@ -88,18 +90,20 @@ impl Default for DrawOption {
             scale: [1.0, 1.0],
             rotation: 0.0,
             opacity: 1.0,
+            layer: 0,
             clip: None,
         }
     }
 }
 
 impl DrawOption {
-    pub fn new(position: [Pt; 2], rotation: f32, scale: [f32; 2]) -> Self {
+    pub fn new(position: [Pt; 2], rotation: f32, scale: [f32; 2], layer: i32) -> Self {
         Self {
             position,
             rotation,
             scale,
             opacity: 1.0,
+            layer,
             clip: None,
         }
     }
@@ -144,6 +148,15 @@ impl DrawOption {
         self
     }
 
+    pub fn layer(&self) -> i32 {
+        self.layer
+    }
+
+    pub fn with_layer(mut self, layer: i32) -> Self {
+        self.layer = layer;
+        self
+    }
+
     pub fn with_clip(mut self, clip: Option<[Pt; 4]>) -> Self {
         self.clip = clip;
         self
@@ -159,6 +172,10 @@ impl DrawOption {
         // Add current state's position to our relative position to get absolute screen position
         new_opts.position[0] += state.position[0];
         new_opts.position[1] += state.position[1];
+
+        // Layer is usually absolute or additive? Let's make it additive for nested offsets.
+        // Actually, let's just use the DrawOption layer as the base.
+        // If we want nested layers, we need state.layer too.
 
         // Merge clip
         if let Some(state_clip_abs) = state.clip {

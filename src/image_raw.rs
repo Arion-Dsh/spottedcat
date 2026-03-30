@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct ImageTransform {
     pub mvp: [[f32; 4]; 4],
     pub uvp: [[f32; 4]; 4],
@@ -29,7 +29,7 @@ impl Default for ImageTransform {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct InstanceData {
     pub pos: [f32; 2],
     pub rotation: f32,
@@ -38,7 +38,7 @@ pub struct InstanceData {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct EngineGlobals {
     // screen[0].xy = [2.0/logical_w, 2.0/logical_h] (sw_inv_2, sh_inv_2)
     // screen[0].zw = [1.0/logical_w, 1.0/logical_h] (sw_inv, sh_inv)

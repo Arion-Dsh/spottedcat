@@ -133,6 +133,7 @@ pub(crate) struct DrawState {
     pub clip: Option<[Pt; 4]>,
     pub shader_id: Option<u32>,
     pub shader_opts: Option<ShaderOpts>,
+    pub layer: i32,
 }
 
 impl Default for DrawState {
@@ -142,6 +143,7 @@ impl Default for DrawState {
             clip: None,
             shader_id: None,
             shader_opts: None,
+            layer: 0,
         }
     }
 }
@@ -302,11 +304,11 @@ impl Context {
         self.last_image_opts.clear();
     }
 
-    pub(crate) fn input(&self) -> &InputManager {
+    pub fn input(&self) -> &InputManager {
         &self.input
     }
 
-    pub(crate) fn input_mut(&mut self) -> &mut InputManager {
+    pub fn input_mut(&mut self) -> &mut InputManager {
         &mut self.input
     }
 
@@ -326,6 +328,7 @@ impl Context {
         match &mut drawable {
             DrawCommand::Image(_id, opts, shader_id, shader_opts, _) => {
                 *opts = opts.apply_state(&self.current_state);
+                *opts = opts.with_layer(opts.layer() + self.current_state.layer);
                 // Inherit shader if not explicitly set
                 if *shader_id == 0 {
                     if let Some(parent_shader_id) = self.current_state.shader_id {
@@ -339,6 +342,7 @@ impl Context {
             }
             DrawCommand::Text(_, opts) => {
                 *opts = opts.apply_state(&self.current_state);
+                *opts = opts.with_layer(opts.layer() + self.current_state.layer);
             }
         }
         if let DrawCommand::Image(id, opts, _, _, size) = &drawable {
@@ -445,6 +449,7 @@ impl Context {
         // We add it to the current absolute position to get the new origin for children.
         self.current_state.position[0] += state.position[0];
         self.current_state.position[1] += state.position[1];
+        self.current_state.layer += state.layer;
 
         // Merge clip: clip in state is already absolute screen-space bounds
         if let Some(new_clip_abs) = state.clip {
@@ -488,9 +493,6 @@ impl Context {
         &self.draw_list
     }
 
-    pub(crate) fn draw_list_3d(&self) -> &[DrawCommand3D] {
-        &self.draw_list_3d
-    }
 }
 
 pub fn key_down(context: &Context, key: Key) -> bool {
@@ -627,6 +629,31 @@ pub fn compress_assets() {
     with_graphics(|g| {
         let _ = g.compress_assets();
     });
+}
+
+pub fn load_asset(path: &str) -> anyhow::Result<Vec<u8>> {
+    #[cfg(target_os = "android")]
+    {
+        use std::ffi::CString;
+        if let Some(app) = crate::android::get_app() {
+            let mut normalized_path = path;
+            if normalized_path.starts_with("./") {
+                normalized_path = &normalized_path[2..];
+            }
+            if normalized_path.starts_with("assets/") {
+                normalized_path = &normalized_path[7..];
+            }
+            let asset_path = CString::new(normalized_path)?;
+            let mut asset = app
+                .asset_manager()
+                .open(&asset_path)
+                .ok_or_else(|| anyhow::anyhow!("Failed to open asset: {}", normalized_path))?;
+            return Ok(asset.buffer()?.to_vec());
+        }
+    }
+
+    // Default/Desktop fallback
+    Ok(std::fs::read(path)?)
 }
 
 pub fn set_background_transparent(context: &Context, transparent: bool) {
