@@ -1,7 +1,7 @@
 use crate::platform;
-use crate::{
-    Context, Spot, WindowConfig,
-};
+use crate::scenes::{SceneFactory, ScenePayloadTypeId, Spot, take_scene_switch_request};
+use crate::{Context, WindowConfig};
+use std::rc::Rc;
 use std::time::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -14,54 +14,181 @@ pub(crate) type GraphicsInitState = platform::GraphicsInitState;
 
 #[cfg(target_os = "android")]
 pub mod android;
+#[cfg(all(
+    not(target_os = "android"),
+    not(all(target_arch = "wasm32", target_os = "unknown"))
+))]
+pub mod desktop;
 #[cfg(target_os = "ios")]
 pub mod ios;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 pub mod wasm;
-#[cfg(all(not(target_os = "android"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
-pub mod desktop;
 
 #[cfg(target_os = "android")]
 pub(crate) use self::android::PlatformData;
-#[cfg(all(not(target_os = "android"), not(all(target_arch = "wasm32", target_os = "unknown"))))]
+#[cfg(all(
+    not(target_os = "android"),
+    not(all(target_arch = "wasm32", target_os = "unknown"))
+))]
 pub(crate) use self::desktop::PlatformData;
+
+pub(crate) struct FixedTimestep {
+    previous: Option<Instant>,
+    lag: Duration,
+    step: Duration,
+}
+
+impl FixedTimestep {
+    pub(crate) fn new(step: Duration) -> Self {
+        Self {
+            previous: None,
+            lag: Duration::ZERO,
+            step,
+        }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.previous = Some(Instant::now());
+        self.lag = Duration::ZERO;
+    }
+
+    pub(crate) fn run_updates(&mut self, max_updates: usize, mut update: impl FnMut(Duration)) {
+        let now = Instant::now();
+        if let Some(previous) = self.previous.replace(now) {
+            let elapsed = now.duration_since(previous);
+            self.lag = self.lag.saturating_add(elapsed);
+
+            let mut updates = 0;
+            while self.lag >= self.step && updates < max_updates {
+                update(self.step);
+                self.lag = self.lag.saturating_sub(self.step);
+                updates += 1;
+            }
+
+            if self.lag >= self.step {
+                self.lag = Duration::ZERO;
+            }
+        }
+    }
+}
+
+pub(crate) struct SceneHost {
+    spot: Option<Box<dyn Spot>>,
+    factory: SceneFactory,
+    is_floating_scene: bool,
+}
+
+impl SceneHost {
+    pub(crate) fn new<T: Spot + 'static>() -> Self {
+        Self {
+            spot: None,
+            factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
+            is_floating_scene: false,
+        }
+    }
+
+    pub(crate) fn spot_mut(&mut self) -> Option<&mut Box<dyn Spot>> {
+        self.spot.as_mut()
+    }
+
+    pub(crate) fn has_active_scene(&self) -> bool {
+        self.spot.is_some()
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn needs_initial_scene(&self) -> bool {
+        self.spot.is_none()
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn is_floating_scene(&self) -> bool {
+        self.is_floating_scene
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn mark_floating(&mut self) {
+        self.is_floating_scene = true;
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn clear_floating(&mut self) {
+        self.is_floating_scene = false;
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn set_active_scene(&mut self, spot: Box<dyn Spot>) {
+        self.spot = Some(spot);
+    }
+
+    pub(crate) fn remove_current(&mut self, ctx: &mut Context) {
+        if let Some(mut spot) = self.spot.take() {
+            spot.remove(ctx);
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn restore_root_scene(&mut self, ctx: &mut Context) {
+        self.remove_current(ctx);
+        self.spot = Some((self.factory)(ctx));
+        self.is_floating_scene = false;
+    }
+
+    pub(crate) fn initialize_if_missing(&mut self, ctx: &mut Context) {
+        if self.spot.is_none() {
+            self.spot = Some((self.factory)(ctx));
+        }
+    }
+
+    pub(crate) fn apply_pending_switch(&mut self, ctx: &mut Context) -> bool {
+        let Some(request) = take_scene_switch_request() else {
+            return false;
+        };
+
+        clear_scene_payload(ctx);
+        if let Some(payload) = request.payload {
+            ctx.insert_resource_dyn(payload.type_id, payload.value);
+            ctx.insert_resource(Rc::new(ScenePayloadTypeId(payload.type_id)));
+        }
+
+        self.remove_current(ctx);
+        self.spot = Some((request.factory)(ctx));
+        self.is_floating_scene = false;
+        true
+    }
+}
+
+fn clear_scene_payload(ctx: &mut Context) {
+    if let Some(last) = ctx.take_resource::<ScenePayloadTypeId>() {
+        ctx.take_resource_dyn(last.0);
+    }
+}
 
 pub(crate) struct App {
     pub(crate) platform: PlatformData,
     pub(crate) instance: wgpu::Instance,
     pub(crate) surface: Option<wgpu::Surface<'static>>,
-    pub(crate) context: Context,
-    pub(crate) spot: Option<Box<dyn Spot>>,
-    pub(crate) scene_factory: Box<dyn Fn(&mut Context) -> Box<dyn Spot> + Send + Sync>,
+    pub(crate) ctx: Context,
+    pub(crate) scene: SceneHost,
     pub(crate) window_config: WindowConfig,
     pub(crate) init_state: GraphicsInitState,
     pub(crate) scale_factor: f64,
-    pub(crate) previous: Option<Instant>,
-    pub(crate) lag: Duration,
-    pub(crate) fixed_dt: Duration,
-    pub(crate) is_floating_scene: bool,
+    pub(crate) timing: FixedTimestep,
 }
 
 impl App {
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
         let instance = platform::create_wgpu_instance();
-        let audio = crate::audio::AudioSystem::new().expect("failed to initialize audio system");
-        let _ = platform::set_global_audio(audio);
 
         Self {
             platform: PlatformData::new(),
             instance,
             surface: None,
-            context: Context::new(),
-            spot: None,
-            scene_factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
+            ctx: Context::new(),
+            scene: SceneHost::new::<T>(),
             window_config,
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
-            previous: None,
-            lag: Duration::ZERO,
-            fixed_dt: Duration::from_secs_f64(1.0 / 60.0),
-            is_floating_scene: false,
+            timing: FixedTimestep::new(Duration::from_secs_f64(1.0 / 60.0)),
         }
     }
 
@@ -75,16 +202,102 @@ impl App {
             platform: PlatformData::new_wasm(canvas_id),
             instance,
             surface: None,
-            context: Context::new(),
-            spot: None,
-            scene_factory: Box::new(|ctx| Box::new(T::initialize(ctx))),
+            ctx: Context::new(),
+            scene: SceneHost::new::<T>(),
             window_config,
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
-            previous: None,
-            lag: Duration::ZERO,
-            fixed_dt: Duration::from_nanos(8_333_333),
-            is_floating_scene: false,
+            timing: FixedTimestep::new(Duration::from_nanos(8_333_333)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{switch_scene, switch_scene_with};
+
+    struct RootScene;
+    struct PayloadScene;
+    struct FinalScene;
+
+    impl Spot for RootScene {
+        fn initialize(_ctx: &mut Context) -> Self {
+            Self
+        }
+
+        fn draw(&mut self, _ctx: &mut Context) {}
+
+        fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
+    }
+
+    impl Spot for PayloadScene {
+        fn initialize(_ctx: &mut Context) -> Self {
+            Self
+        }
+
+        fn draw(&mut self, _ctx: &mut Context) {}
+
+        fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
+    }
+
+    impl Spot for FinalScene {
+        fn initialize(_ctx: &mut Context) -> Self {
+            Self
+        }
+
+        fn draw(&mut self, _ctx: &mut Context) {}
+
+        fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct PayloadA(&'static str);
+
+    #[derive(Debug, PartialEq)]
+    struct PayloadB(&'static str);
+
+    #[test]
+    fn scene_switch_replaces_previous_payload() {
+        let _ = take_scene_switch_request();
+
+        let mut ctx = Context::new();
+        let mut host = SceneHost::new::<RootScene>();
+        host.initialize_if_missing(&mut ctx);
+
+        switch_scene_with::<PayloadScene, _>(PayloadA("first"));
+        assert!(host.apply_pending_switch(&mut ctx));
+        assert_eq!(
+            ctx.get_resource::<PayloadA>().as_deref().map(|p| p.0),
+            Some("first")
+        );
+
+        switch_scene_with::<FinalScene, _>(PayloadB("second"));
+        assert!(host.apply_pending_switch(&mut ctx));
+
+        assert!(ctx.get_resource::<PayloadA>().is_none());
+        assert_eq!(
+            ctx.get_resource::<PayloadB>().as_deref().map(|p| p.0),
+            Some("second")
+        );
+    }
+
+    #[test]
+    fn scene_switch_without_payload_clears_previous_payload() {
+        let _ = take_scene_switch_request();
+
+        let mut ctx = Context::new();
+        let mut host = SceneHost::new::<RootScene>();
+        host.initialize_if_missing(&mut ctx);
+
+        switch_scene_with::<PayloadScene, _>(PayloadA("first"));
+        assert!(host.apply_pending_switch(&mut ctx));
+        assert!(ctx.get_resource::<PayloadA>().is_some());
+
+        switch_scene::<FinalScene>();
+        assert!(host.apply_pending_switch(&mut ctx));
+
+        assert!(ctx.get_resource::<PayloadA>().is_none());
+        assert!(ctx.get_resource::<ScenePayloadTypeId>().is_none());
     }
 }

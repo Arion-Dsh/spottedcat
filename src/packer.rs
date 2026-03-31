@@ -21,7 +21,10 @@ struct Node {
 impl Node {
     fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
         Node {
-            x, y, w, h,
+            x,
+            y,
+            w,
+            h,
             left: None,
             right: None,
             filled: false,
@@ -68,6 +71,7 @@ pub struct AtlasPacker {
     root: Node,
 }
 
+#[allow(dead_code)]
 impl AtlasPacker {
     /// 创建一个新的打包器，通常大小为 2048x2048 或 4096x4096
     pub fn new(width: u32, height: u32, padding: u32) -> Self {
@@ -85,12 +89,14 @@ impl AtlasPacker {
         let needed_w = sprite_w + self.padding * 2;
         let needed_h = sprite_h + self.padding * 2;
 
-        self.root.insert(needed_w, needed_h).map(|(x, y)| PackerRect {
-            x,
-            y,
-            w: needed_w,
-            h: needed_h,
-        })
+        self.root
+            .insert(needed_w, needed_h)
+            .map(|(x, y)| PackerRect {
+                x,
+                y,
+                w: needed_w,
+                h: needed_h,
+            })
     }
 
     /// 获取 queue.write_texture 所需的物理参数
@@ -114,12 +120,7 @@ impl AtlasPacker {
     }
 
     /// 工具方法：在 CPU 端对图片进行边缘拉伸填充（解决 Bleeding）
-    pub fn extrude_rgba8(
-        &self, 
-        raw_rgba: &[u8], 
-        w: u32, 
-        h: u32
-    ) -> Vec<u8> {
+    pub fn extrude_rgba8(&self, raw_rgba: &[u8], w: u32, h: u32) -> Vec<u8> {
         let p = self.padding as i32;
         let new_w = w + self.padding * 2;
         let new_h = h + self.padding * 2;

@@ -21,12 +21,14 @@ impl Clone for AudioSystem {
     }
 }
 
+type AudioRegistrationQueue = Arc<Mutex<Vec<(u32, Vec<u8>)>>>;
+
 pub(crate) struct AudioSystemInner {
     #[allow(dead_code)]
     stream: cpal::Stream,
     handler: Arc<Mutex<MixerHandler>>,
     next_sound_id: AtomicU32,
-    registration_queue: Arc<Mutex<Vec<(u32, Vec<u8>)>>>,
+    registration_queue: AudioRegistrationQueue,
 }
 
 // cpal::Stream is safe to send and sync on most platforms.
@@ -178,16 +180,11 @@ impl AudioSystemInner {
                 &config.into(),
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     // Process registrations
-                    if let Ok(mut queue) = registration_queue_clone.try_lock() {
-                        if !queue.is_empty() {
-                            if let Ok(mut h) = handler_clone.try_lock() {
-                                for (id, bytes) in queue.drain(..) {
-                                    if let Ok(sound_data) = decode_sound_from_bytes(bytes) {
-                                        h.sound_registry.insert(id, sound_data);
-                                    }
-                                }
-                            }
-                        }
+                    if let Ok(mut queue) = registration_queue_clone.try_lock()
+                        && !queue.is_empty()
+                        && let Ok(mut h) = handler_clone.try_lock()
+                    {
+                        promote_pending_registrations_locked(&mut h, &mut queue);
                     }
 
                     if let Ok(mut h) = handler_clone.try_lock() {
@@ -256,6 +253,8 @@ impl AudioSystemInner {
         sound_id: u32,
         options: PlayOptions,
     ) -> Option<u64> {
+        self.promote_pending_registrations();
+
         let Ok(mut handler) = self.handler.lock() else {
             return None;
         };
@@ -279,9 +278,26 @@ impl AudioSystemInner {
     }
 
     fn unregister_sound(&self, sound_id: u32) {
+        if let Ok(mut queue) = self.registration_queue.lock() {
+            remove_pending_registration_locked(&mut queue, sound_id);
+        }
         if let Ok(mut handler) = self.handler.lock() {
             handler.unregister_sound(sound_id);
         }
+    }
+
+    fn promote_pending_registrations(&self) {
+        let Ok(mut queue) = self.registration_queue.lock() else {
+            return;
+        };
+        if queue.is_empty() {
+            return;
+        }
+
+        let Ok(mut handler) = self.handler.lock() else {
+            return;
+        };
+        promote_pending_registrations_locked(&mut handler, &mut queue);
     }
 
     fn add_playing_sound_locked(
@@ -462,14 +478,14 @@ impl PlayingSound {
             return 0.0;
         }
 
-        if let Some(fade_out) = &mut self.fade_out_on_end {
-            if !fade_out.started {
-                let start_at = self.total_frames.saturating_sub(fade_out.frames);
-                if self.frames_played >= start_at {
-                    let start_gain = self.fade_gain;
-                    self.fade = Some(FadeState::new(start_gain, 0.0, fade_out.frames, true));
-                    fade_out.started = true;
-                }
+        if let Some(fade_out) = &mut self.fade_out_on_end
+            && !fade_out.started
+        {
+            let start_at = self.total_frames.saturating_sub(fade_out.frames);
+            if self.frames_played >= start_at {
+                let start_gain = self.fade_gain;
+                self.fade = Some(FadeState::new(start_gain, 0.0, fade_out.frames, true));
+                fade_out.started = true;
             }
         }
 
@@ -676,4 +692,86 @@ pub(crate) fn decode_sound_from_bytes(bytes: Vec<u8>) -> Result<SoundData> {
         sample_rate,
         channels,
     })
+}
+
+fn promote_pending_registrations_locked(
+    handler: &mut MixerHandler,
+    queue: &mut Vec<(u32, Vec<u8>)>,
+) {
+    for (id, sound_data) in decode_pending_registrations(std::mem::take(queue)) {
+        handler.sound_registry.insert(id, sound_data);
+    }
+}
+
+fn decode_pending_registrations(pending: Vec<(u32, Vec<u8>)>) -> Vec<(u32, SoundData)> {
+    pending
+        .into_iter()
+        .filter_map(|(id, bytes)| decode_sound_from_bytes(bytes).ok().map(|sound| (id, sound)))
+        .collect()
+}
+
+fn remove_pending_registration_locked(queue: &mut Vec<(u32, Vec<u8>)>, sound_id: u32) {
+    queue.retain(|(id, _)| *id != sound_id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pending_registration_is_available_after_promotion() {
+        let mut handler = MixerHandler {
+            sample_rate: 48_000,
+            channels: 2,
+            next_play_id: 1,
+            sound_registry: HashMap::new(),
+            sounds: Vec::new(),
+        };
+        let mut queue = vec![(7, test_wav_bytes())];
+
+        promote_pending_registrations_locked(&mut handler, &mut queue);
+
+        assert!(queue.is_empty());
+        assert!(handler.sound_registry.contains_key(&7));
+    }
+
+    #[test]
+    fn unregister_removes_pending_registration() {
+        let mut queue = vec![(7, test_wav_bytes()), (8, test_wav_bytes())];
+
+        remove_pending_registration_locked(&mut queue, 7);
+
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].0, 8);
+    }
+
+    fn test_wav_bytes() -> Vec<u8> {
+        let sample_rate = 8_000u32;
+        let bits_per_sample = 16u16;
+        let channels = 1u16;
+        let samples: [i16; 4] = [0, 8_000, -8_000, 0];
+        let data_len = (samples.len() * std::mem::size_of::<i16>()) as u32;
+        let byte_rate = sample_rate * channels as u32 * bits_per_sample as u32 / 8;
+        let block_align = channels * bits_per_sample / 8;
+        let riff_len = 36 + data_len;
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&riff_len.to_le_bytes());
+        bytes.extend_from_slice(b"WAVE");
+        bytes.extend_from_slice(b"fmt ");
+        bytes.extend_from_slice(&16u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&channels.to_le_bytes());
+        bytes.extend_from_slice(&sample_rate.to_le_bytes());
+        bytes.extend_from_slice(&byte_rate.to_le_bytes());
+        bytes.extend_from_slice(&block_align.to_le_bytes());
+        bytes.extend_from_slice(&bits_per_sample.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&data_len.to_le_bytes());
+        for sample in samples {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        bytes
+    }
 }

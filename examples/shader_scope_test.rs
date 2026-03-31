@@ -8,14 +8,14 @@ struct ShaderScopeApp {
 }
 
 impl Spot for ShaderScopeApp {
-    fn initialize(_context: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         // Create a Blue image
         let rgba = vec![0, 0, 255, 255]
             .into_iter()
             .cycle()
             .take(64 * 64 * 4)
             .collect::<Vec<u8>>();
-        let image = Image::new_from_rgba8(64u32.into(), 64u32.into(), &rgba).unwrap();
+        let image = Image::new_from_rgba8(ctx, 64u32.into(), 64u32.into(), &rgba).unwrap();
 
         // Create a Red image
         let child_rgba = vec![255, 0, 0, 255]
@@ -23,7 +23,8 @@ impl Spot for ShaderScopeApp {
             .cycle()
             .take(32 * 32 * 4)
             .collect::<Vec<u8>>();
-        let child_image = Image::new_from_rgba8(32u32.into(), 32u32.into(), &child_rgba).unwrap();
+        let child_image =
+            Image::new_from_rgba8(ctx, 32u32.into(), 32u32.into(), &child_rgba).unwrap();
 
         // A shader that uses screen coordinates to make a visible wave
         // Note: engine uses hooks. global 'user_globals' is available. available vars: in, color.
@@ -44,7 +45,7 @@ impl Spot for ShaderScopeApp {
             }
         "#;
 
-        let shader_id = spottedcat::register_image_shader(shader_src);
+        let shader_id = spottedcat::register_image_shader(ctx, shader_src);
 
         Self {
             image,
@@ -54,7 +55,7 @@ impl Spot for ShaderScopeApp {
         }
     }
 
-    fn draw(&mut self, context: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context) {
         let opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(200.0)])
             .with_scale([2.0, 2.0]);
@@ -64,7 +65,7 @@ impl Spot for ShaderScopeApp {
 
         // Draw parent with shader scope
         self.image
-            .with_shader_scope(context, self.shader_id, shader_opts, |ctx| {
+            .with_shader_scope(ctx, self.shader_id, shader_opts, |ctx| {
                 // Draw the parent itself (it needs to be drawn explicitly if we want it visible)
                 self.image.draw(ctx, opts);
 
@@ -81,14 +82,14 @@ impl Spot for ShaderScopeApp {
         // Draw another instance WITHOUT scope to compare
         let ref_opts =
             opts.with_position([spottedcat::Pt::from(400.0), spottedcat::Pt::from(200.0)]);
-        self.image.draw(context, ref_opts);
+        self.image.draw(ctx, ref_opts);
     }
 
-    fn update(&mut self, _context: &mut Context, dt: std::time::Duration) {
+    fn update(&mut self, _ctx: &mut Context, dt: std::time::Duration) {
         self.time += dt.as_secs_f32();
     }
 
-    fn remove(&self) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

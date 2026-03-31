@@ -10,12 +10,13 @@ use super::core::ResolvedDraw;
 impl Graphics {
     pub(crate) fn layout_and_queue_text(
         &mut self,
+        ctx: &mut crate::Context,
         text: &crate::Text,
         opts: &DrawOption,
         viewport_rect: [f32; 4],
     ) -> anyhow::Result<()> {
-        use ab_glyph::{Font as _, FontArc, PxScale, ScaleFont as _};
         use crate::text::{CachedGlyph, TextLayout};
+        use ab_glyph::{Font as _, FontArc, PxScale, ScaleFont as _};
 
         use std::sync::atomic::Ordering;
 
@@ -25,40 +26,42 @@ impl Graphics {
 
         {
             let cache_lock = text.layout_cache.as_ref().lock().unwrap();
-            if !text.dirty.load(Ordering::SeqCst) {
-                if let Some(layout) = cache_lock.as_ref() {
-                    for glyph in &layout.glyphs {
-                        let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
-                        let final_y = start_pos[1].as_f32() + glyph.instance.pos[1];
+            if !text.dirty.load(Ordering::SeqCst)
+                && let Some(layout) = cache_lock.as_ref()
+            {
+                for glyph in &layout.glyphs {
+                    let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
+                    let final_y = start_pos[1].as_f32() + glyph.instance.pos[1];
 
-                        if final_x + glyph.instance.size[0] >= viewport_rect[0]
-                            && final_x <= viewport_rect[2]
-                            && final_y + glyph.instance.size[1] >= viewport_rect[1]
-                            && final_y <= viewport_rect[3]
-                        {
-                            if let Some(Some(img_entry)) = self.images.get(glyph.image_id as usize) {
-                                let mut glyph_opts = *opts;
-                                glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
+                    if final_x + glyph.instance.size[0] >= viewport_rect[0]
+                        && final_x <= viewport_rect[2]
+                        && final_y + glyph.instance.size[1] >= viewport_rect[1]
+                        && final_y <= viewport_rect[3]
+                        && let Some(Some(img_entry)) =
+                            ctx.registry.images.get(glyph.image_id as usize)
+                    {
+                        let mut glyph_opts = *opts;
+                        glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
 
-                                self.resolved_draws.push(ResolvedDraw {
-                                    img_entry: img_entry.clone(),
-                                    opts: glyph_opts,
-                                    shader_id: self.text_shader_id,
-                                    shader_opts,
-                                    layer: opts.layer(),
-                                });
-                            }
-                        }
+                        self.resolved_draws.push(ResolvedDraw {
+                            img_entry: img_entry.clone(),
+                            opts: glyph_opts,
+                            shader_id: self.text_shader_id,
+                            shader_opts,
+                            layer: opts.layer(),
+                        });
                     }
-                    return Ok(());
                 }
+                return Ok(());
             }
         }
 
         // 2. Cache miss or dirty - Perform layout
         let font_id = text.font_id;
-        let font_data = self
-            .get_font(font_id)
+        let font_data = ctx
+            .registry
+            .fonts
+            .get(&font_id)
             .ok_or_else(|| anyhow::anyhow!("Font ID {} not found", font_id))?;
 
         let font = if let Some(cached_font) = self.get_cached_font(font_id as u64) {
@@ -77,7 +80,7 @@ impl Graphics {
         let lines = if text.max_width.is_some() {
             text.get_wrapped_lines(&scaled)
                 .into_iter()
-                .map(|s| std::borrow::Cow::Owned(s))
+                .map(std::borrow::Cow::Owned)
                 .collect()
         } else {
             vec![std::borrow::Cow::Borrowed(text.content.as_str())]
@@ -127,13 +130,15 @@ impl Graphics {
                 let cache_key = crate::glyph_cache::GlyphCacheKey {
                     font_id,
                     font_size_bits: px_size.to_bits(),
-                    glyph_id: glyph_id.0 as u32,
+                    glyph_id: glyph_id.0.into(),
                 };
 
                 let entry = if let Some(e) = self.glyph_cache.get(&cache_key) {
                     e.clone()
                 } else {
-                    if let Ok(e) = self.render_single_glyph(font_id, px_size, glyph_id.0 as u32) {
+                    if let Ok(e) =
+                        self.render_single_glyph(ctx, font_id, px_size, glyph_id.0.into())
+                    {
                         self.glyph_cache.insert(cache_key, e.clone());
                         e
                     } else {
@@ -142,8 +147,8 @@ impl Graphics {
                     }
                 };
 
-                let img_id = entry.image.id() as u32;
-                let img_entry = if let Some(Some(e)) = self.images.get(img_id as usize) {
+                let img_id = entry.image.id();
+                let img_entry = if let Some(Some(e)) = ctx.registry.images.get(img_id as usize) {
                     e
                 } else {
                     caret_pos[0] += Pt::from(entry.advance);
@@ -180,7 +185,7 @@ impl Graphics {
             glyphs: cached_glyphs,
             bounds: (0.0, 0.0, y_offset), // width/height not fully used here but good to have
         };
-        
+
         // Push TO resolved_draws for the current frame before completing
         for glyph in &new_layout.glyphs {
             let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
@@ -190,26 +195,25 @@ impl Graphics {
                 && final_x <= viewport_rect[2]
                 && final_y + glyph.instance.size[1] >= viewport_rect[1]
                 && final_y <= viewport_rect[3]
+                && let Some(Some(img_entry)) = ctx.registry.images.get(glyph.image_id as usize)
             {
-                if let Some(Some(img_entry)) = self.images.get(glyph.image_id as usize) {
-                    let mut glyph_opts = *opts;
-                    glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
+                let mut glyph_opts = *opts;
+                glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
 
-                    self.resolved_draws.push(ResolvedDraw {
-                        img_entry: img_entry.clone(),
-                        opts: glyph_opts,
-                        shader_id: self.text_shader_id,
-                        shader_opts,
-                        layer: opts.layer(),
-                    });
-                }
+                self.resolved_draws.push(ResolvedDraw {
+                    img_entry: img_entry.clone(),
+                    opts: glyph_opts,
+                    shader_id: self.text_shader_id,
+                    shader_opts,
+                    layer: opts.layer(),
+                });
             }
         }
 
         let mut cache_lock = text.layout_cache.as_ref().lock().unwrap();
         *cache_lock = Some(new_layout);
         text.dirty.store(false, Ordering::SeqCst);
-        
+
         Ok(())
     }
 }

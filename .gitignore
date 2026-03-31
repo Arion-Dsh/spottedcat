@@ -9,6 +9,12 @@
 **/xcuserdata/
 **/*.xcuserstate
 assets/
-examples/android
-examples/ios
-examples/wasm
+
+# Keep cross-platform example sources in version control, but continue
+# ignoring their generated artifacts via nested .gitignore files.
+!examples/android/
+!examples/android/**
+!examples/ios/
+!examples/ios/**
+!examples/wasm/
+!examples/wasm/**

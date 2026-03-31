@@ -2,12 +2,18 @@
 
 This guide is designed to help AI models (like LLMs) generate high-quality Rust code using the `spottedcat` engine. 
 
+> [!WARNING]
+> **ALPHA VERSION**: This library is in an alpha state. The API is subject to frequent breaking changes. Use with caution.
+
 ## 1. Core Architecture: The `Spot` Trait
 
 Every application or "scene" in `spottedcat` must implement the `Spot` trait. This is the heart of the game loop.
 
+> [!IMPORTANT]
+> Always use the `&mut Context` provided in the lifecycle methods. It is synchronized with the engine's internal state.
+
 ```rust
-use spottedcat::{Context, Spot, WindowConfig};
+use spottedcat::{Context, Spot, WindowConfig, Pt};
 use std::time::Duration;
 
 struct MyGame {
@@ -16,30 +22,31 @@ struct MyGame {
 
 impl Spot for MyGame {
     /// Initialized once when the game starts.
-    fn initialize(context: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         // Load assets, initialize state
+        // Use the passed-in ctx for registration
         Self { }
     }
 
     /// Called every frame for logic updates.
-    /// dt: Delta time (time elapsed since last frame).
-    fn update(&mut self, context: &mut Context, dt: Duration) {
+    fn update(&mut self, ctx: &mut Context, dt: Duration) {
         // Handle input, move entities, etc.
     }
 
     /// Called every frame for rendering.
-    fn draw(&mut self, context: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context) {
         // Issue draw commands here
     }
 
     /// Called when the app enters the foreground (e.g., from background).
-    fn resumed(&mut self, context: &mut Context) { }
+    /// Critical for restoring GPU resources on mobile.
+    fn resumed(&mut self, ctx: &mut Context) { }
 
-    /// Called when the app enters the background (e.g., screen locked, app switched).
-    fn suspended(&mut self, context: &mut Context) { }
+    /// Called when the app enters the background.
+    fn suspended(&mut self, ctx: &mut Context) { }
 
-    /// (Optional) Called when the scene is being removed.
-    fn remove(&self) { }
+    /// Called when the scene is being removed.
+    fn remove(&mut self, _ctx: &mut Context) { }
 }
 
 fn main() {
@@ -53,12 +60,14 @@ fn main() {
 ## 2. Drawing 2D (Images & Text)
 
 ### Images
-Images are loaded from RGBA8 buffers or files. Use `DrawOption` for transformations.
+Images are registered via the `Context`. Use `Pt` for logical units.
 ```rust
 use spottedcat::{Image, DrawOption, Pt};
 
-let image = Image::new_from_rgba8(width, height, &rgba_data).unwrap();
-image.draw(context, DrawOption::default()
+// Registering requires the ctx to synchronize with the GPU
+let image = Image::new_from_rgba8(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
+
+image.draw(ctx, DrawOption::default()
     .with_position([Pt(100.0), Pt(100.0)])
     .with_scale([2.0, 2.0])
     .with_rotation(45.0f32.to_radians())
@@ -67,11 +76,16 @@ image.draw(context, DrawOption::default()
 ```
 
 ### Text
+Text requires a registered font ID.
 ```rust
-use spottedcat::{Text, DrawOption};
+use spottedcat::{Text, DrawOption, Pt};
 
-let text = Text::new("Hello World", 24.0); // string, font size
-text.draw(context, DrawOption::default().with_position([Pt(0.0), Pt(0.0)]));
+// 1. Register a font (returns a u32 font_id)
+let font_id = spottedcat::register_font(ctx, font_data_vec);
+
+// 2. Create the Text object with content and font_id
+let text = Text::new("Hello World", font_id).with_font_size(Pt(24.0));
+text.draw(ctx, DrawOption::default().with_position([Pt(50.0), Pt(50.0)]));
 ```
 
 ## 3. Drawing 3D (Models & Instancing)
@@ -81,7 +95,7 @@ text.draw(context, DrawOption::default().with_position([Pt(0.0), Pt(0.0)]));
 use spottedcat::{Model, DrawOption3D};
 
 let cube = Model::cube(1.0).unwrap();
-cube.draw(context, DrawOption3D::default()
+cube.draw(ctx, DrawOption3D::default()
     .with_position([0.0, 0.0, -5.0])
     .with_rotation([0.0, 1.0, 0.0])); // rotation as [x, y, z] axis
 ```
@@ -90,83 +104,77 @@ cube.draw(context, DrawOption3D::default()
 Use this for drawing many copies of the same model efficiently.
 ```rust
 let transforms: Vec<[[f32; 4]; 4]> = vec![...]; // Array of 4x4 matrices
-model.draw_instanced(context, DrawOption3D::default(), &transforms);
+model.draw_instanced(ctx, DrawOption3D::default(), &transforms);
 ```
 
 ## 4. Input Management
 
-Access input via the `context`.
+Access input via helper functions or trait methods using the `ctx`.
 ```rust
 // Keyboard
-if spottedcat::key_down(context, spottedcat::Key::Space) { ... }
+if spottedcat::key_down(ctx, spottedcat::Key::Space) { ... }
 
 // Mouse
-if let Some((x, y)) = spottedcat::cursor_position(context) { ... }
-if spottedcat::mouse_button_pressed(context, spottedcat::MouseButton::Left) { ... }
+if let Some((x, y)) = spottedcat::cursor_position(ctx) { ... }
+if spottedcat::mouse_button_pressed(ctx, spottedcat::MouseButton::Left) { ... }
 
 // Touch (Mobile)
-for touch in spottedcat::touches(context) {
+for touch in spottedcat::touches(ctx) {
     match touch.phase {
         spottedcat::TouchPhase::Started => { ... }
         _ => {}
     }
 }
-
-// Sensors (Mobile) - Requires "sensors" feature
-if let Some(gyro) = spottedcat::gyroscope(context) { ... } // [x, y, z]
 ```
 
-## 5. UI Elements & Positioning
+## 5. Viewport & Scaling
 
 Use `Pt` for resolution-independent units.
-- `context.vw(100.0)` -> 100% of window width.
-- `context.vh(100.0)` -> 100% of window height.
+- `spottedcat::window_size(ctx)` -> Returns `(Pt(width), Pt(height))`.
+- `ctx.vw(100.0)` -> 100% of window width in `Pt`.
+- `ctx.vh(100.0)` -> 100% of window height in `Pt`.
 
+## 6. Audio System
+
+Access audio via helper functions using the `ctx`.
 ```rust
-let center_x = context.vw(50.0);
-let center_y = context.vh(50.0);
+// 1. Register a sound (returns a u32 sound_id)
+let sound_id = spottedcat::register_sound(ctx, sound_data_vec);
+
+// 2. Play a sound
+spottedcat::play_sound(ctx, sound_id, spottedcat::SoundOptions::default());
+
+// 3. Simple sine wave
+spottedcat::play_sine(ctx, 440.0, 0.5);
 ```
 
-## 6. Resources & Asset Loading
-
-### Loading Files (Cross-platform)
-```rust
-let data = spottedcat::load_asset("assets/texture.png").expect("Failed to load");
-```
+## 7. Resources & Persistence
 
 ### Resource Storage
-Store shared objects in the `Context`.
+Store shared objects in the `Context`. The `Context` is persistent across app pauses/resumes.
 ```rust
-context.insert_resource(Rc::new(my_resource));
-if let Some(res) = context.get_resource::<MyResourceType>() { ... }
+ctx.insert_resource(Rc::new(my_resource));
+if let Some(res) = ctx.get_resource::<MyResourceType>() { ... }
 ```
 
-## 7. Scene Switching
+### Asset Registration Persistence
+Shaders, fonts, and images registered in the `Context` are persistent. When the GPU device is lost (Android lifecycle), the engine automatically restores these registration-based assets using high-level metadata stored in the `Context`.
+
+## 7. Custom Shaders
+
+Inject custom WGSL hooks into the rendering pipeline.
 ```rust
-spottedcat::switch_scene::<OtherScene>(); // Transitions to a new "Spot" implementation
+// 2D Shader
+ctx.register_image_shader(shader_source_str);
+
+// 3D Shader
+ctx.register_model_shader(shader_source_str);
 ```
 
-## 8. Lifecycle & Platform Events
+## 8. Development Tips
 
-### Lifecycle
-On mobile (iOS/Android), handle app background/foreground transitions:
-- `resumed`: App is active. Restore timers, audio, or network state.
-- `suspended`: App is in background. Pause expensive logic, save state, or mute audio.
-
-### Native Platform Events
-Listen for events from native iOS/Android code (e.g., JNI callbacks):
-```rust
-for event in spottedcat::poll_platform_events(context) {
-    match event {
-        spottedcat::PlatformEvent::Event(name, data) => {
-            println!("Received event: {} with data: {}", name, data);
-        }
-    }
-}
-```
-
-## 9. Development Tips
-- **Coordinate System**: 2D origin (0,0) is TOP-LEFT. 3D uses standard RHS (X: right, Y: up, Z: back).
+- **The Context Rule**: **ALWAYS** use the passed-in `Context` (usually named `ctx`). 
+- **Coordinate System**: 2D origin (0,0) is **TOP-LEFT**. 3D uses RHS (X: right, Y: up, Z: back).
 - **Transparency**: Set `WindowConfig.transparent = true` for background transparency (Android/Desktop).
-- **Debugging**: Run with `SPOT_PROFILE_RENDER=1` to see performance statistics.
-- **Delta Time**: Always multiply movement by `dt.as_secs_f32()` in `update`.
+- **Delta Time**: Always multiply movement/animations by `dt.as_secs_f32()` in `update`.
+- **Pt Construction**: Use `Pt::from(f32)` or the `Pt(f32)` tuple struct constructor. Positions in `DrawOption` are `[Pt; 2]`.

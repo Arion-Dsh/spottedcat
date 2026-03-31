@@ -50,16 +50,15 @@ pub(crate) fn parse_present_mode_from_env() -> Option<wgpu::PresentMode> {
 }
 
 pub(crate) fn pick_present_mode(surface_caps: &wgpu::SurfaceCapabilities) -> wgpu::PresentMode {
-    if let Some(requested) = parse_present_mode_from_env() {
-        if surface_caps.present_modes.iter().any(|m| *m == requested) {
-            return requested;
-        }
+    if let Some(requested) = parse_present_mode_from_env()
+        && surface_caps.present_modes.contains(&requested)
+    {
+        return requested;
     }
 
     if surface_caps
         .present_modes
-        .iter()
-        .any(|m| *m == wgpu::PresentMode::Immediate)
+        .contains(&wgpu::PresentMode::Immediate)
     {
         wgpu::PresentMode::Immediate
     } else {

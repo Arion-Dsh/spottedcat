@@ -8,9 +8,9 @@ struct InstancingTest {
 }
 
 impl Spot for InstancingTest {
-    fn initialize(_context: &mut Context) -> Self {
-        let cube = Model::cube(0.5).unwrap();
-        
+    fn initialize(ctx: &mut Context) -> Self {
+        let cube = Model::cube(ctx, 0.5).unwrap();
+
         let mut transforms = Vec::with_capacity(10000);
         for x in -50..50 {
             for y in -50..50 {
@@ -35,17 +35,17 @@ impl Spot for InstancingTest {
         }
     }
 
-    fn update(&mut self, _context: &mut Context, dt: Duration) {
+    fn update(&mut self, _ctx: &mut Context, dt: Duration) {
         let dt_secs = dt.as_secs_f32();
         self.time += dt_secs;
-        
+
         // Dynamically update 10,000 matrices on CPU as an extreme test
         let mut idx = 0;
         for x in -50..50 {
             for y in -50..50 {
                 let px = x as f32 * 1.5;
                 let py = y as f32 * 1.5;
-                let dist = (px*px + py*py).sqrt();
+                let dist = (px * px + py * py).sqrt();
                 let pz = (dist - self.time * 5.0).sin() * 2.0;
 
                 // Rotation
@@ -64,18 +64,24 @@ impl Spot for InstancingTest {
         }
     }
 
-    fn draw(&mut self, context: &mut Context) {
-        // Draw 10000 cubes in 1 call! 
-        self.cube.draw_instanced(context, DrawOption3D::default()
-            .with_position([0.0, -10.0, -80.0])
-            .with_rotation([1.0, self.time * 0.1, 0.0]), &self.transforms);
+    fn draw(&mut self, ctx: &mut Context) {
+        // Draw 10000 cubes in 1 call!
+        self.cube.draw_instanced(
+            ctx,
+            DrawOption3D::default()
+                .with_position([0.0, -10.0, -80.0])
+                .with_rotation([1.0, self.time * 0.1, 0.0]),
+            &self.transforms,
+        );
     }
 
-    fn remove(&self) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
-    unsafe { std::env::set_var("SPOT_PROFILE_RENDER", "1"); } // Print render stats
+    unsafe {
+        std::env::set_var("SPOT_PROFILE_RENDER", "1");
+    } // Print render stats
     spottedcat::run::<InstancingTest>(WindowConfig {
         title: "Instancing Test (10000 Cubes)".to_string(),
         width: spottedcat::Pt::from(1280.0),

@@ -63,7 +63,6 @@ impl Pt {
         let v = v.round();
         Pt(v as f32)
     }
-
 }
 
 impl From<u32> for Pt {

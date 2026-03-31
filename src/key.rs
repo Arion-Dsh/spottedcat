@@ -116,7 +116,7 @@ pub enum Key {
 
 impl Key {
     pub const COUNT: usize = (Key::NumpadDecimal as usize) + 1;
-    pub const WORDS: usize = (Self::COUNT + 63) / 64;
+    pub const WORDS: usize = Self::COUNT.div_ceil(64);
 
     pub const fn as_index(self) -> usize {
         self as usize

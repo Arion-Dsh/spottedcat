@@ -45,8 +45,8 @@ impl ShaderOpts {
             .chunks_exact(16)
             .map(|chunk| {
                 let mut array = [0.0f32; 4];
-                for i in 0..4 {
-                    array[i] = f32::from_le_bytes([
+                for (i, item) in array.iter_mut().enumerate() {
+                    *item = f32::from_le_bytes([
                         chunk[i * 4],
                         chunk[i * 4 + 1],
                         chunk[i * 4 + 2],
@@ -61,8 +61,8 @@ impl ShaderOpts {
     pub fn set_vec4(&mut self, index: usize, value: [f32; 4]) {
         if index < 16 {
             let start = index * 16;
-            for i in 0..4 {
-                let bytes = value[i].to_le_bytes();
+            for (i, &v) in value.iter().enumerate() {
+                let bytes = v.to_le_bytes();
                 self.bytes[start + i * 4..start + i * 4 + 4].copy_from_slice(&bytes);
             }
         }

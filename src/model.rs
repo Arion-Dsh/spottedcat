@@ -1,5 +1,3 @@
-use crate::with_graphics;
-
 /// Handle to a 3D model resource.
 ///
 /// Models are collection of meshes and materials that can be rendered in 3D space.
@@ -52,10 +50,18 @@ impl Model {
     }
 
     /// Creates a new model from vertex and index data.
-    pub fn new(vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<Self> {
-        let mesh_id = with_graphics(|g| g.create_mesh(vertices, indices))
-            .ok_or_else(|| anyhow::anyhow!("Graphics not initialized"))??;
-        Ok(Self { parts: vec![ModelPart { id: mesh_id, material: Material::default() }] })
+    pub fn new(
+        ctx: &mut crate::Context,
+        vertices: &[Vertex],
+        indices: &[u32],
+    ) -> anyhow::Result<Self> {
+        let mesh_id = ctx.register_mesh(vertices, indices);
+        Ok(Self {
+            parts: vec![ModelPart {
+                id: mesh_id,
+                material: Material::default(),
+            }],
+        })
     }
 
     /// Sets the albedo material (texture) for this model.
@@ -109,82 +115,292 @@ impl Model {
     }
 
     /// Appends a new sub-mesh part to the model.
-    pub fn add_part(&mut self, vertices: &[Vertex], indices: &[u32], material: Material) -> anyhow::Result<&mut Self> {
-        let mesh_id = with_graphics(|g| g.create_mesh(vertices, indices))
-            .ok_or_else(|| anyhow::anyhow!("Graphics not initialized"))??;
-        self.parts.push(ModelPart { id: mesh_id, material });
+    pub fn add_part(
+        &mut self,
+        ctx: &mut crate::Context,
+        vertices: &[Vertex],
+        indices: &[u32],
+        material: Material,
+    ) -> anyhow::Result<&mut Self> {
+        let mesh_id = ctx.register_mesh(vertices, indices);
+        self.parts.push(ModelPart {
+            id: mesh_id,
+            material,
+        });
         Ok(self)
     }
 
     /// Chaining version of add_part.
-    pub fn with_part(mut self, vertices: &[Vertex], indices: &[u32], material: Material) -> anyhow::Result<Self> {
-        self.add_part(vertices, indices, material)?;
+    pub fn with_part(
+        mut self,
+        ctx: &mut crate::Context,
+        vertices: &[Vertex],
+        indices: &[u32],
+        material: Material,
+    ) -> anyhow::Result<Self> {
+        self.add_part(ctx, vertices, indices, material)?;
         Ok(self)
     }
 
     /// Creates a simple cube model with the specified size.
-    pub fn cube(size: f32) -> anyhow::Result<Self> {
+    pub fn cube(ctx: &mut crate::Context, size: f32) -> anyhow::Result<Self> {
         let s = size / 2.0;
         let vertices = vec![
             // Front face
-            Vertex { pos: [-s, -s,  s], uv: [0.0, 1.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s, -s,  s], uv: [1.0, 1.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s,  s,  s], uv: [1.0, 0.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s,  s,  s], uv: [0.0, 0.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s, -s, -s], uv: [1.0, 1.0], normal: [0.0, 0.0, -1.0], tangent: [-1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s,  s, -s], uv: [1.0, 0.0], normal: [0.0, 0.0, -1.0], tangent: [-1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s,  s, -s], uv: [0.0, 0.0], normal: [0.0, 0.0, -1.0], tangent: [-1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s, -s, -s], uv: [0.0, 1.0], normal: [0.0, 0.0, -1.0], tangent: [-1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s,  s, -s], uv: [0.0, 0.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s,  s,  s], uv: [0.0, 1.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s,  s,  s], uv: [1.0, 1.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s,  s, -s], uv: [1.0, 0.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s, -s, -s], uv: [1.0, 1.0], normal: [0.0, -1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s, -s, -s], uv: [0.0, 1.0], normal: [0.0, -1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s, -s,  s], uv: [0.0, 0.0], normal: [0.0, -1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s, -s,  s], uv: [1.0, 0.0], normal: [0.0, -1.0, 0.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s, -s, -s], uv: [1.0, 1.0], normal: [1.0, 0.0, 0.0], tangent: [0.0, 0.0, -1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s,  s, -s], uv: [1.0, 0.0], normal: [1.0, 0.0, 0.0], tangent: [0.0, 0.0, -1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s,  s,  s], uv: [0.0, 0.0], normal: [1.0, 0.0, 0.0], tangent: [0.0, 0.0, -1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ s, -s,  s], uv: [0.0, 1.0], normal: [1.0, 0.0, 0.0], tangent: [0.0, 0.0, -1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s, -s, -s], uv: [0.0, 1.0], normal: [-1.0, 0.0, 0.0], tangent: [0.0, 0.0, 1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s, -s,  s], uv: [1.0, 1.0], normal: [-1.0, 0.0, 0.0], tangent: [0.0, 0.0, 1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s,  s,  s], uv: [1.0, 0.0], normal: [-1.0, 0.0, 0.0], tangent: [0.0, 0.0, 1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-s,  s, -s], uv: [0.0, 0.0], normal: [-1.0, 0.0, 0.0], tangent: [0.0, 0.0, 1.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
+            Vertex {
+                pos: [-s, -s, s],
+                uv: [0.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, -s, s],
+                uv: [1.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, s, s],
+                uv: [1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, s, s],
+                uv: [0.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, -s, -s],
+                uv: [1.0, 1.0],
+                normal: [0.0, 0.0, -1.0],
+                tangent: [-1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, s, -s],
+                uv: [1.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+                tangent: [-1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, s, -s],
+                uv: [0.0, 0.0],
+                normal: [0.0, 0.0, -1.0],
+                tangent: [-1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, -s, -s],
+                uv: [0.0, 1.0],
+                normal: [0.0, 0.0, -1.0],
+                tangent: [-1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, s, -s],
+                uv: [0.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, s, s],
+                uv: [0.0, 1.0],
+                normal: [0.0, 1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, s, s],
+                uv: [1.0, 1.0],
+                normal: [0.0, 1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, s, -s],
+                uv: [1.0, 0.0],
+                normal: [0.0, 1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, -s, -s],
+                uv: [1.0, 1.0],
+                normal: [0.0, -1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, -s, -s],
+                uv: [0.0, 1.0],
+                normal: [0.0, -1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, -s, s],
+                uv: [0.0, 0.0],
+                normal: [0.0, -1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, -s, s],
+                uv: [1.0, 0.0],
+                normal: [0.0, -1.0, 0.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, -s, -s],
+                uv: [1.0, 1.0],
+                normal: [1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, -1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, s, -s],
+                uv: [1.0, 0.0],
+                normal: [1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, -1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, s, s],
+                uv: [0.0, 0.0],
+                normal: [1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, -1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [s, -s, s],
+                uv: [0.0, 1.0],
+                normal: [1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, -1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, -s, -s],
+                uv: [0.0, 1.0],
+                normal: [-1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, 1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, -s, s],
+                uv: [1.0, 1.0],
+                normal: [-1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, 1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, s, s],
+                uv: [1.0, 0.0],
+                normal: [-1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, 1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-s, s, -s],
+                uv: [0.0, 0.0],
+                normal: [-1.0, 0.0, 0.0],
+                tangent: [0.0, 0.0, 1.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
         ];
 
         let indices = vec![
-            0, 1, 2,  0, 2, 3,    // Front
-            4, 5, 6,  4, 6, 7,    // Back
-            8, 9, 10, 8, 10, 11,  // Top
+            0, 1, 2, 0, 2, 3, // Front
+            4, 5, 6, 4, 6, 7, // Back
+            8, 9, 10, 8, 10, 11, // Top
             12, 13, 14, 12, 14, 15, // Bottom
             16, 17, 18, 16, 18, 19, // Right
             20, 21, 22, 20, 22, 23, // Left
         ];
 
-        Self::new(&vertices, &indices)
+        Self::new(ctx, &vertices, &indices)
     }
 
     /// Creates a 2D plane model in 3D space, facing +Z. Good for billboards or ground planes.
-    pub fn plane(width: f32, height: f32) -> anyhow::Result<Self> {
+    pub fn plane(ctx: &mut crate::Context, width: f32, height: f32) -> anyhow::Result<Self> {
         let hw = width / 2.0;
         let hh = height / 2.0;
-        
+
         // Vertices face +Z direction
         let vertices = vec![
-            Vertex { pos: [-hw, -hh, 0.0], uv: [0.0, 1.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ hw, -hh, 0.0], uv: [1.0, 1.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [ hw,  hh, 0.0], uv: [1.0, 0.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
-            Vertex { pos: [-hw,  hh, 0.0], uv: [0.0, 0.0], normal: [0.0, 0.0, 1.0], tangent: [1.0, 0.0, 0.0], joint_indices: [0; 4], joint_weights: [0.0; 4] },
+            Vertex {
+                pos: [-hw, -hh, 0.0],
+                uv: [0.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [hw, -hh, 0.0],
+                uv: [1.0, 1.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [hw, hh, 0.0],
+                uv: [1.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
+            Vertex {
+                pos: [-hw, hh, 0.0],
+                uv: [0.0, 0.0],
+                normal: [0.0, 0.0, 1.0],
+                tangent: [1.0, 0.0, 0.0],
+                joint_indices: [0; 4],
+                joint_weights: [0.0; 4],
+            },
         ];
 
         let indices = vec![0, 1, 2, 0, 2, 3];
 
-        Self::new(&vertices, &indices)
+        Self::new(ctx, &vertices, &indices)
     }
 
     /// Creates a UV sphere model with the specified radius.
-    pub fn sphere(radius: f32) -> anyhow::Result<Self> {
+    pub fn sphere(ctx: &mut crate::Context, radius: f32) -> anyhow::Result<Self> {
         let segments = 32;
         let rings = 16;
         let mut vertices = Vec::new();
@@ -234,11 +450,11 @@ impl Model {
             }
         }
 
-        Self::new(&vertices, &indices)
+        Self::new(ctx, &vertices, &indices)
     }
 
-    pub fn draw(&self, context: &mut crate::Context, options: crate::DrawOption3D) {
-        context.push_3d(crate::drawable::DrawCommand3D::Model(
+    pub fn draw(&self, ctx: &mut crate::Context, options: crate::DrawOption3D) {
+        ctx.push_3d(crate::drawable::DrawCommand3D::Model(
             self.clone(),
             options,
             0,
@@ -249,11 +465,11 @@ impl Model {
 
     pub fn draw_skinned(
         &self,
-        context: &mut crate::Context,
+        ctx: &mut crate::Context,
         options: crate::DrawOption3D,
         skin_id: u32,
     ) {
-        context.push_3d(crate::drawable::DrawCommand3D::Model(
+        ctx.push_3d(crate::drawable::DrawCommand3D::Model(
             self.clone(),
             options,
             0,
@@ -264,13 +480,13 @@ impl Model {
 
     pub fn draw_with_shader(
         &self,
-        context: &mut crate::Context,
+        ctx: &mut crate::Context,
         shader_id: u32,
         options: crate::DrawOption3D,
         shader_opts: crate::ShaderOpts,
         skin_id: Option<u32>,
     ) {
-        context.push_3d(crate::drawable::DrawCommand3D::Model(
+        ctx.push_3d(crate::drawable::DrawCommand3D::Model(
             self.clone(),
             options,
             shader_id,
@@ -280,29 +496,57 @@ impl Model {
     }
 
     /// Renders thousands of instances of this model with a single draw call.
-    /// 
+    ///
     /// `transforms` should be an array of 4x4 matrices representing the View/Model transformations
     /// for each instance. This achieves massive performance improvements for identical meshes.
     pub fn draw_instanced(
         &self,
-        context: &mut crate::Context,
+        ctx: &mut crate::Context,
         options: crate::DrawOption3D,
         transforms: &[[[f32; 4]; 4]],
     ) {
-        if transforms.is_empty() { return; }
-        context.push_3d(crate::drawable::DrawCommand3D::ModelInstanced(
+        if transforms.is_empty() {
+            return;
+        }
+        self.draw_instanced_shared(ctx, options, std::sync::Arc::from(transforms));
+    }
+
+    /// Renders instances using a caller-owned transform buffer without making an extra copy.
+    pub fn draw_instanced_owned(
+        &self,
+        ctx: &mut crate::Context,
+        options: crate::DrawOption3D,
+        transforms: Vec<[[f32; 4]; 4]>,
+    ) {
+        if transforms.is_empty() {
+            return;
+        }
+        self.draw_instanced_shared(ctx, options, std::sync::Arc::from(transforms));
+    }
+
+    /// Renders instances backed by shared transform data.
+    pub fn draw_instanced_shared(
+        &self,
+        ctx: &mut crate::Context,
+        options: crate::DrawOption3D,
+        transforms: std::sync::Arc<[[[f32; 4]; 4]]>,
+    ) {
+        if transforms.is_empty() {
+            return;
+        }
+        ctx.push_3d(crate::drawable::DrawCommand3D::ModelInstanced(
             self.clone(),
             options,
             0,
             crate::ShaderOpts::default(),
             None,
-            transforms.to_vec(),
+            transforms,
         ));
     }
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, PartialEq)]
 pub struct Vertex {
     pub pos: [f32; 3],
     pub uv: [f32; 2],
@@ -351,4 +595,10 @@ impl Vertex {
             ],
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeshDataPersistent {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
 }

@@ -6,35 +6,24 @@ use ab_glyph::FontArc;
 
 use super::Graphics;
 
+// Font management is now handled by the Context for persistence.
+// Graphics only caches the parsed FontArc for performance.
+
 impl Graphics {
-    pub(crate) fn register_font(&mut self, font_data: Vec<u8>) -> u32 {
-        let font_id = self.next_font_id;
-        self.next_font_id += 1;
-        self.font_registry.insert(font_id, font_data);
-        font_id
-    }
-
-    pub(crate) fn get_font(&self, font_id: u32) -> Option<&Vec<u8>> {
-        self.font_registry.get(&font_id)
-    }
-
-    pub(crate) fn unregister_font(&mut self, font_id: u32) {
-        self.font_registry.remove(&font_id);
-        self.font_cache.remove(&(font_id as u64));
-        self.dirty_assets = true;
-    }
-
     /// Render a single glyph to the atlas and cache it
     pub(super) fn render_single_glyph(
         &mut self,
+        ctx: &mut crate::Context,
         font_id: u32,
         font_size: f32,
         glyph_id: u32,
     ) -> anyhow::Result<GlyphEntry> {
         use ab_glyph::{Font as _, FontArc, Glyph, PxScale, ScaleFont as _};
 
-        let font_data = self
-            .get_font(font_id)
+        let font_data = ctx
+            .registry
+            .fonts
+            .get(&font_id)
             .ok_or_else(|| anyhow::anyhow!("Font ID {} not found", font_id))?;
 
         let font = if let Some(cached_font) = self.get_cached_font(font_id as u64) {
@@ -79,11 +68,11 @@ impl Graphics {
             }
         });
 
-        let image = self.create_image(
+        let image = ctx.register_image(
             Pt::from(glyph_width as f32),
             Pt::from(glyph_height as f32),
             &rgba_data,
-        )?;
+        );
 
         Ok(GlyphEntry {
             image,

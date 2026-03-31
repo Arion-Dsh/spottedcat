@@ -7,10 +7,10 @@ struct CenteredTextTestSpot {
 }
 
 impl Spot for CenteredTextTestSpot {
-    fn initialize(_context: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(FONT.to_vec());
+        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
         // Create a larger outer image (400x150)
         let outer_width = 400.0;
@@ -24,9 +24,13 @@ impl Spot for CenteredTextTestSpot {
             outer_rgba[i * 4 + 3] = 255; // A
         }
 
-        let outer_image =
-            Image::new_from_rgba8(Pt::from(outer_width), Pt::from(outer_height), &outer_rgba)
-                .unwrap();
+        let outer_image = Image::new_from_rgba8(
+            ctx,
+            Pt::from(outer_width),
+            Pt::from(outer_height),
+            &outer_rgba,
+        )
+        .unwrap();
 
         // Create inner image (300x50)
         let width = 300.0;
@@ -40,7 +44,8 @@ impl Spot for CenteredTextTestSpot {
             rgba[i * 4 + 3] = 255; // A
         }
 
-        let inner_image = Image::new_from_rgba8(Pt::from(width), Pt::from(height), &rgba).unwrap();
+        let inner_image =
+            Image::new_from_rgba8(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
 
         Self {
             font_id,
@@ -49,48 +54,46 @@ impl Spot for CenteredTextTestSpot {
         }
     }
 
-    fn draw(&mut self, context: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context) {
         let width = 300.0;
         let height = 50.0;
 
         // Draw outer image at position (50, 50)
         let outer_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]);
 
-        self.outer_image
-            .with_clip_scope(context, outer_opts, |ctx1| {
-                // Draw inner image at (10, 10) position within outer image
-                let inner_opts =
-                    DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
+        self.outer_image.with_clip_scope(ctx, outer_opts, |ctx1| {
+            // Draw inner image at (10, 10) position within outer image
+            let inner_opts = DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
 
-                self.inner_image.with_clip_scope(ctx1, inner_opts, |ctx2| {
-                    // Calculate centered position for text
-                    let text_content = "Centered Text";
-                    let font_size = Pt::from(20.0);
+            self.inner_image.with_clip_scope(ctx1, inner_opts, |ctx2| {
+                // Calculate centered position for text
+                let text_content = "Centered Text";
+                let font_size = Pt::from(20.0);
 
-                    // Create text to measure its dimensions including baseline offset
-                    let text = spottedcat::Text::new(text_content, self.font_id)
-                        .with_font_size(font_size)
-                        .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
+                // Create text to measure its dimensions including baseline offset
+                let text = spottedcat::Text::new(text_content, self.font_id)
+                    .with_font_size(font_size)
+                    .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
 
-                    // Get text dimensions and baseline offset
-                    let (text_width, text_height, _) = text.measure_with_y_offset();
+                // Get text dimensions and baseline offset
+                let (text_width, text_height, _) = text.measure_with_y_offset(ctx2);
 
-                    // Calculate centered position within the inner image
-                    let centered_x = (width - text_width) / 2.0;
-                    let centered_y = (height - text_height) / 2.0;
+                // Calculate centered position within the inner image
+                let centered_x = (width - text_width) / 2.0;
+                let centered_y = (height - text_height) / 2.0;
 
-                    // Draw text at geometric centered position
-                    let text_opts = DrawOption::default()
-                        .with_position([Pt::from(centered_x), Pt::from(centered_y)]);
+                // Draw text at geometric centered position
+                let text_opts = DrawOption::default()
+                    .with_position([Pt::from(centered_x), Pt::from(centered_y)]);
 
-                    text.draw(ctx2, text_opts);
-                });
+                text.draw(ctx2, text_opts);
             });
+        });
     }
 
-    fn update(&mut self, _context: &mut Context, _dt: std::time::Duration) {}
+    fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
 
-    fn remove(&self) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

@@ -98,12 +98,12 @@ impl ImageRenderer {
         let globals_stride = {
             let align = device.limits().min_uniform_buffer_offset_alignment;
             let size = Self::GLOBALS_SIZE_BYTES as u32;
-            ((size + align - 1) / align) * align
+            size.div_ceil(align) * align
         };
         let engine_globals_stride = {
             let align = device.limits().min_uniform_buffer_offset_alignment;
             let size = Self::ENGINE_GLOBALS_SIZE_BYTES as u32;
-            ((size + align - 1) / align) * align
+            size.div_ceil(align) * align
         };
         let max_user_globals = 4096u32;
         let max_engine_globals = 4096u32;
@@ -275,7 +275,7 @@ impl ImageRenderer {
         self.next_user_globals = self.next_user_globals.saturating_add(1);
         let offset = slot as wgpu::BufferAddress * self.globals_stride as wgpu::BufferAddress;
         queue.write_buffer(&self.user_globals_buffer, offset, bytes);
-        Ok((slot * self.globals_stride) as u32)
+        Ok(slot * self.globals_stride)
     }
 
     pub fn upload_engine_globals_bytes(
@@ -378,10 +378,8 @@ impl ImageRenderer {
             return;
         }
         pass.set_pipeline(pipeline);
-        let start = instance_range.start as wgpu::BufferAddress
-            * self.instance_stride as wgpu::BufferAddress;
-        let end =
-            instance_range.end as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
+        let start = instance_range.start as u64 * self.instance_stride as u64;
+        let end = instance_range.end as u64 * self.instance_stride as u64;
         pass.set_vertex_buffer(0, self.instance_buffer.slice(start..end));
         pass.set_bind_group(0, texture_bind_group, &[]);
         pass.set_bind_group(1, &self.user_globals_bind_group, &[user_globals_offset]);

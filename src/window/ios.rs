@@ -1,9 +1,7 @@
 #[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2::{msg_send, rc::Retained};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
-use objc2_core_motion::{
-    CMMotionManager, CMPedometer, CMPedometerData,
-};
+use objc2_core_motion::{CMMotionManager, CMPedometer, CMPedometerData};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2_foundation::MainThreadMarker;
 #[cfg(all(target_os = "ios", feature = "sensors"))]
@@ -22,7 +20,7 @@ impl IosSensorState {
     pub fn new() -> Self {
         let _mtm =
             MainThreadMarker::new().expect("must be on main thread to initialize CMMotionManager");
-        
+
         let manager = unsafe { CMMotionManager::new() };
 
         // Settings intervals (50Hz)
@@ -65,16 +63,20 @@ impl IosSensorState {
             let pedo_avail: bool = msg_send![objc2::class!(CMPedometer), isStepCountingAvailable];
             if pedo_avail {
                 let latest_steps = self.latest_steps.clone();
-                let calendar: Retained<objc2_foundation::NSCalendar> = msg_send![objc2::class!(NSCalendar), currentCalendar];
-                let now: Retained<objc2_foundation::NSDate> = msg_send![objc2::class!(NSDate), date];
-                let start_of_day: Retained<objc2_foundation::NSDate> = msg_send![&calendar, startOfDayForDate: &*now];
+                let calendar: Retained<objc2_foundation::NSCalendar> =
+                    msg_send![objc2::class!(NSCalendar), currentCalendar];
+                let now: Retained<objc2_foundation::NSDate> =
+                    msg_send![objc2::class!(NSDate), date];
+                let start_of_day: Retained<objc2_foundation::NSDate> =
+                    msg_send![&calendar, startOfDayForDate: &*now];
 
                 let handler = block2::RcBlock::new(
                     move |data: *mut CMPedometerData, _error: *mut objc2::runtime::AnyObject| {
                         if !data.is_null() {
                             let data = &*data;
                             // Get steps via msg_send! to avoid needing NSNumber feature
-                            let steps_obj: *mut objc2::runtime::AnyObject = msg_send![data, numberOfSteps];
+                            let steps_obj: *mut objc2::runtime::AnyObject =
+                                msg_send![data, numberOfSteps];
                             if !steps_obj.is_null() {
                                 let steps: i32 = msg_send![steps_obj, intValue];
                                 let count = steps as f32;

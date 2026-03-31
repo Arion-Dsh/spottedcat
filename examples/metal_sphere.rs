@@ -1,4 +1,4 @@
-use spottedcat::{Context, Spot, Model, DrawOption3D, ShaderOpts, WindowConfig};
+use spottedcat::{Context, DrawOption3D, Model, ShaderOpts, Spot, WindowConfig};
 use std::time::Duration;
 
 struct MetalSphere {
@@ -8,9 +8,9 @@ struct MetalSphere {
 }
 
 impl Spot for MetalSphere {
-    fn initialize(_context: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         // 1. Create a smooth sphere
-        let sphere = Model::sphere(1.0).unwrap();
+        let sphere = Model::sphere(ctx, 1.0).unwrap();
 
         // 2. Register a custom "metallic" shader
         // It uses the normal to calculate specular reflection
@@ -29,7 +29,7 @@ impl Spot for MetalSphere {
                 final_color = vec4<f32>(final_rgb, final_color.a);
             }
         "#;
-        let shader_id = spottedcat::register_model_shader(shader_src);
+        let shader_id = spottedcat::register_model_shader(ctx, shader_src);
 
         Self {
             sphere,
@@ -38,20 +38,21 @@ impl Spot for MetalSphere {
         }
     }
 
-    fn update(&mut self, _context: &mut Context, dt: Duration) {
+    fn update(&mut self, _ctx: &mut Context, dt: Duration) {
         self.rotation += dt.as_secs_f32() * 0.5;
     }
 
-    fn draw(&mut self, context: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context) {
         let opts = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0])
             .with_rotation([0.0, self.rotation, 0.0]);
-        
+
         // Draw with our metallic shader
-        self.sphere.draw_with_shader(context, self.shader_id, opts, ShaderOpts::default(), None);
+        self.sphere
+            .draw_with_shader(ctx, self.shader_id, opts, ShaderOpts::default(), None);
     }
 
-    fn remove(&self) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

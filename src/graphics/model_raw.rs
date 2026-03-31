@@ -1,12 +1,18 @@
-use bytemuck::{Pod, Zeroable};
 use crate::model::Vertex;
+use bytemuck::{Pod, Zeroable};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct MaterialBindGroupKey {
+    pub atlas_indices: [u32; 5],
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Default)]
 pub struct ModelGlobals {
     pub mvp: [[f32; 4]; 4],
     pub model: [[f32; 4]; 4],
-    pub extra: [f32; 4],   // [opacity, 0, 0, 0]
+    pub extra: [f32; 4], // [opacity, 0, 0, 0]
     pub albedo_uv: [f32; 4],
     pub pbr_uv: [f32; 4],
     pub normal_uv: [f32; 4],
@@ -31,10 +37,10 @@ pub struct SceneGlobals {
 }
 
 pub struct ModelRenderer {
-    pub(crate) globals_bind_group_layout: wgpu::BindGroupLayout,     // Group 0: [Model, Scene, UserOpts]
-    pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,     // Group 1: Material textures
+    pub(crate) globals_bind_group_layout: wgpu::BindGroupLayout, // Group 0: [Model, Scene, UserOpts]
+    pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout, // Group 1: Material textures
     pub(crate) bone_matrices_bind_group_layout: wgpu::BindGroupLayout, // Group 2: Skinning
-    pub(crate) environment_bind_group_layout: wgpu::BindGroupLayout,   // Group 3: Shadow + IBL
+    pub(crate) environment_bind_group_layout: wgpu::BindGroupLayout, // Group 3: Shadow + IBL
 
     pub(crate) model_globals_buffer: wgpu::Buffer,
     pub(crate) user_shader_opts_buffer: wgpu::Buffer,
@@ -56,6 +62,11 @@ pub struct ModelRenderer {
     pub(crate) next_bone_batch: u32,
     pub(crate) max_model_globals: u32,
     pub(crate) max_instances: u32,
+
+    pub(crate) meshes: HashMap<u32, MeshData>,
+    pub(crate) skins: HashMap<u32, crate::graphics::core::SkinData>,
+    pub(crate) texture_bind_groups: HashMap<MaterialBindGroupKey, wgpu::BindGroup>,
+    pub(crate) skin_bone_offsets: HashMap<u32, u32>,
 }
 
 impl ModelRenderer {
@@ -64,8 +75,8 @@ impl ModelRenderer {
 
     pub fn new(device: &wgpu::Device) -> Self {
         let align = device.limits().min_uniform_buffer_offset_alignment;
-        let model_globals_stride = ((Self::GLOBALS_SIZE_BYTES as u32 + align - 1) / align) * align;
-        let user_opts_stride = ((Self::USER_SHADER_OPTS_SIZE as u32 + align - 1) / align) * align;
+        let model_globals_stride = (Self::GLOBALS_SIZE_BYTES as u32).div_ceil(align) * align;
+        let user_opts_stride = (Self::USER_SHADER_OPTS_SIZE as u32).div_ceil(align) * align;
         let max_model_globals = 4096u32;
         let max_instances = 65536u32;
 
@@ -98,41 +109,53 @@ impl ModelRenderer {
         });
 
         // Group 0 Layout
-        let globals_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_globals_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry { // 0: Model Globals (Dynamic)
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: std::num::NonZeroU64::new(Self::GLOBALS_SIZE_BYTES as u64),
+        let globals_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("model_globals_bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        // 0: Model Globals (Dynamic)
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: std::num::NonZeroU64::new(
+                                Self::GLOBALS_SIZE_BYTES as u64,
+                            ),
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 1: Scene Globals (Static)
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: std::num::NonZeroU64::new(std::mem::size_of::<SceneGlobals>() as u64),
+                    wgpu::BindGroupLayoutEntry {
+                        // 1: Scene Globals (Static)
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: std::num::NonZeroU64::new(std::mem::size_of::<
+                                SceneGlobals,
+                            >(
+                            )
+                                as u64),
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 2: User Ops (Dynamic)
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: true,
-                        min_binding_size: std::num::NonZeroU64::new(Self::USER_SHADER_OPTS_SIZE as u64),
+                    wgpu::BindGroupLayoutEntry {
+                        // 2: User Ops (Dynamic)
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: true,
+                            min_binding_size: std::num::NonZeroU64::new(
+                                Self::USER_SHADER_OPTS_SIZE as u64,
+                            ),
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                ],
+            });
 
         let globals_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("model_globals_bg"),
@@ -165,82 +188,90 @@ impl ModelRenderer {
             ],
         });
 
-        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_texture_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry { // 0: Albedo
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("model_texture_bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        // 0: Albedo
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 1: Sampler
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 2: PBR
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        // 1: Sampler
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 3: Normal
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        // 2: PBR
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 4: AO
-                    binding: 4,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        // 3: Normal
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 5: Emissive
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    wgpu::BindGroupLayoutEntry {
+                        // 4: AO
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        // 5: Emissive
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
         let bone_matrices_stride = 256 * 64;
-        let bone_matrices_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_bone_matrices_bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: std::num::NonZeroU64::new(bone_matrices_stride as u64),
-                },
-                count: None,
-            }],
-        });
+        let bone_matrices_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("model_bone_matrices_bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: std::num::NonZeroU64::new(bone_matrices_stride as u64),
+                    },
+                    count: None,
+                }],
+            });
 
         let bone_matrices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("model_bone_matrices_uniform"),
@@ -262,63 +293,70 @@ impl ModelRenderer {
             }],
         });
 
-        let environment_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("model_env_bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry { // 0: Shadow Map
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Depth,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+        let environment_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("model_env_bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        // 0: Shadow Map
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Depth,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 1: Shadow Sampler
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 2: Irradiance
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::Cube,
-                        multisampled: false,
+                    wgpu::BindGroupLayoutEntry {
+                        // 1: Shadow Sampler
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 3: Prefiltered
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::Cube,
-                        multisampled: false,
+                    wgpu::BindGroupLayoutEntry {
+                        // 2: Irradiance
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::Cube,
+                            multisampled: false,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 4: BRDF LUT
-                    binding: 4,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+                    wgpu::BindGroupLayoutEntry {
+                        // 3: Prefiltered
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::Cube,
+                            multisampled: false,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry { // 5: IBL Sampler
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        // 4: BRDF LUT
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        // 5: IBL Sampler
+                        binding: 5,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("model_sampler"),
@@ -358,7 +396,6 @@ impl ModelRenderer {
             instance_buffer,
             scene_globals_buffer,
 
-
             globals_bind_group,
             bone_matrices_bind_group,
             sampler,
@@ -371,6 +408,10 @@ impl ModelRenderer {
             next_bone_batch: 0,
             max_model_globals,
             max_instances,
+            meshes: HashMap::new(),
+            skins: HashMap::new(),
+            texture_bind_groups: HashMap::new(),
+            skin_bone_offsets: HashMap::new(),
         }
     }
 
@@ -455,18 +496,64 @@ impl ModelRenderer {
         })
     }
 
+    pub fn texture_bind_group_for_atlases(
+        &mut self,
+        device: &wgpu::Device,
+        key: MaterialBindGroupKey,
+        views: [&wgpu::TextureView; 5],
+    ) -> &wgpu::BindGroup {
+        if !self.texture_bind_groups.contains_key(&key) {
+            let bind_group = self.create_texture_bind_group(
+                device, views[0], views[1], views[2], views[3], views[4],
+            );
+            self.texture_bind_groups.insert(key, bind_group);
+        }
+
+        self.texture_bind_groups
+            .get(&key)
+            .expect("texture bind group should be cached")
+    }
+
+    pub fn clear_texture_bind_group_cache(&mut self) {
+        self.texture_bind_groups.clear();
+    }
+
     pub fn begin_frame(&mut self) {
         self.next_model_globals = 0;
         self.next_bone_batch = 0;
+        self.skin_bone_offsets.clear();
     }
 
-    pub fn upload_globals(&mut self, queue: &wgpu::Queue, globals: &ModelGlobals) -> anyhow::Result<u32> {
+    pub fn bone_offset_for_skin(
+        &mut self,
+        queue: &wgpu::Queue,
+        skin_id: u32,
+        matrices: &[[[f32; 4]; 4]],
+    ) -> anyhow::Result<u32> {
+        if let Some(offset) = self.skin_bone_offsets.get(&skin_id) {
+            return Ok(*offset);
+        }
+
+        let offset = self.upload_bone_matrices(queue, matrices)?;
+        self.skin_bone_offsets.insert(skin_id, offset);
+        Ok(offset)
+    }
+
+    pub fn upload_globals(
+        &mut self,
+        queue: &wgpu::Queue,
+        globals: &ModelGlobals,
+    ) -> anyhow::Result<u32> {
         if self.next_model_globals >= self.max_model_globals {
             return Err(anyhow::anyhow!("max model globals exceeded"));
         }
         let offset = self.next_model_globals * self.model_globals_stride;
-        queue.write_buffer(&self.model_globals_buffer, offset as wgpu::BufferAddress, bytemuck::bytes_of(globals));
-        
+        queue.write_buffer(
+            &self.model_globals_buffer,
+            offset as wgpu::BufferAddress,
+            bytemuck::bytes_of(globals),
+        );
+
         let dyn_offset = offset;
         self.next_model_globals += 1;
         Ok(dyn_offset)
@@ -483,7 +570,7 @@ impl ModelRenderer {
                 Self::USER_SHADER_OPTS_SIZE
             ));
         }
-        let slot = self.next_model_globals - 1; 
+        let slot = self.next_model_globals - 1;
         let offset = slot as wgpu::BufferAddress * self.user_opts_stride as wgpu::BufferAddress;
         queue.write_buffer(&self.user_shader_opts_buffer, offset, bytes);
         Ok(offset as u32)
@@ -495,7 +582,7 @@ impl ModelRenderer {
         matrices: &[[[f32; 4]; 4]],
     ) -> anyhow::Result<u32> {
         if matrices.is_empty() {
-             return Ok(0);
+            return Ok(0);
         }
         if self.next_bone_batch >= self.max_model_globals {
             return Err(anyhow::anyhow!("max model bone batches exceeded"));
@@ -503,12 +590,12 @@ impl ModelRenderer {
         let slot = self.next_bone_batch;
         self.next_bone_batch += 1;
         let offset = slot as wgpu::BufferAddress * self.bone_matrices_stride as wgpu::BufferAddress;
-        
+
         let bytes = bytemuck::cast_slice(matrices);
         if bytes.len() > self.bone_matrices_stride as usize {
-             return Err(anyhow::anyhow!("too many bones! max is 256"));
+            return Err(anyhow::anyhow!("too many bones! max is 256"));
         }
-        
+
         queue.write_buffer(&self.bone_matrices_buffer, offset, bytes);
         Ok(offset as u32)
     }
@@ -517,9 +604,16 @@ impl ModelRenderer {
         queue.write_buffer(&self.scene_globals_buffer, 0, bytemuck::bytes_of(scene));
     }
 
-    pub fn upload_instances(&self, queue: &wgpu::Queue, instances: &[[[f32; 4]; 4]]) -> anyhow::Result<()> {
+    pub fn upload_instances(
+        &self,
+        queue: &wgpu::Queue,
+        instances: &[[[f32; 4]; 4]],
+    ) -> anyhow::Result<()> {
         if instances.len() > self.max_instances as usize {
-            return Err(anyhow::anyhow!("too many instances! max is {}", self.max_instances));
+            return Err(anyhow::anyhow!(
+                "too many instances! max is {}",
+                self.max_instances
+            ));
         }
         queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(instances));
         Ok(())
@@ -536,14 +630,14 @@ impl MeshData {
     pub fn new(device: &wgpu::Device, vertices: &[Vertex], indices: &[u32]) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("mesh_vertex_buffer"),
-            size: (vertices.len() * std::mem::size_of::<Vertex>()) as u64,
+            size: std::mem::size_of_val(vertices) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         let index_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("mesh_index_buffer"),
-            size: (indices.len() * std::mem::size_of::<u32>()) as u64,
+            size: std::mem::size_of_val(indices) as u64,
             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -620,12 +714,94 @@ pub fn create_rotation(rot: [f32; 3]) -> [[f32; 4]; 4] {
 
 pub fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     let mut result = [[0.0; 4]; 4];
-    for i in 0..4 { // column
-        for j in 0..4 { // row
-            for k in 0..4 { // mid
+    for i in 0..4 {
+        // column
+        for j in 0..4 {
+            // row
+            for k in 0..4 {
+                // mid
                 result[i][j] += a[k][j] * b[i][k];
             }
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project_point(matrix: [[f32; 4]; 4], point: [f32; 3]) -> [f32; 4] {
+        let v = [point[0], point[1], point[2], 1.0];
+        let mut out = [0.0; 4];
+        for j in 0..4 {
+            for i in 0..4 {
+                out[j] += matrix[i][j] * v[i];
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_projection_aspect_ratio() {
+        let aspect = 2.0;
+        let fovy = std::f32::consts::PI / 2.0; // 90 deg
+        let proj = create_perspective(aspect, fovy, 0.1, 100.0);
+
+        // f = 1 / tan(45 deg) = 1.0
+        // x_scale = f / aspect = 0.5
+        // y_scale = f = 1.0
+
+        assert!((proj[0][0] - 0.5).abs() < 1e-6);
+        assert!((proj[1][1] - 1.0).abs() < 1e-6);
+
+        // Test mapping of a symmetric point e.g. [1, 1, -10]
+        // Projected X should be half of Projected Y in NDC because aspect is 2.0 (wider)
+        let v = [1.0, 1.0, -10.0, 1.0];
+        let mut res = [0.0; 4];
+        for j in 0..4 {
+            for i in 0..4 {
+                res[j] += proj[i][j] * v[i];
+            }
+        }
+        let ndc_x = res[0] / res[3];
+        let ndc_y = res[1] / res[3];
+
+        assert!((ndc_x * 2.0 - ndc_y).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_square_stays_square_on_wide_viewport() {
+        let width = 800.0;
+        let height = 600.0;
+        let proj = create_perspective(width / height, std::f32::consts::PI / 4.0, 0.1, 1000.0);
+
+        let corners = [
+            [-1.0, -1.0, -5.0],
+            [1.0, -1.0, -5.0],
+            [1.0, 1.0, -5.0],
+            [-1.0, 1.0, -5.0],
+        ];
+
+        let mut screen = [[0.0; 2]; 4];
+        for (index, corner) in corners.iter().enumerate() {
+            let projected = project_point(proj, *corner);
+            let ndc_x = projected[0] / projected[3];
+            let ndc_y = projected[1] / projected[3];
+            screen[index] = [
+                (ndc_x * 0.5 + 0.5) * width,
+                (1.0 - (ndc_y * 0.5 + 0.5)) * height,
+            ];
+        }
+
+        let screen_width = screen[1][0] - screen[0][0];
+        let screen_height = screen[0][1] - screen[3][1];
+
+        assert!(
+            (screen_width - screen_height).abs() < 1e-4,
+            "expected projected square to stay square, got width={} height={}",
+            screen_width,
+            screen_height
+        );
+    }
 }

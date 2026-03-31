@@ -2,6 +2,16 @@
 
 A simple, clean 2D/3D graphics library for drawing images and 3D models using Rust and wgpu.
 
+> [!WARNING]
+> **ALPHA VERSION**: This library is currently in an alpha state. The API is subject to frequent breaking changes and significant refactoring. Use with caution in production environments.
+
+## Stability
+
+- Stable-ish core direction: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run` are the primary surfaces the crate is trying to converge around.
+- Still volatile: scene payload internals, shader extension points, platform-specific behavior, audio internals, and lower-level rendering details may change between minor releases.
+- Release expectation: until `1.0`, minor versions may include breaking API changes, behavior fixes, and platform-specific adjustments.
+- Production guidance: pin an exact crate version if you ship with `spottedcat` today, and review changelogs before upgrading.
+
 ## Why spottedcat?
 
 The library is named after the **Rusty-spotted cat** (*Prionailurus rubiginosus*), the world's smallest wild cat. Just like its namesake, this library aims to be tiny, agile, and remarkably efficient.
@@ -29,7 +39,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.3.9"
+spottedcat = "0.6.0"
 ```
 
 ### Basic Example
@@ -43,29 +53,29 @@ struct MyApp {
 }
 
 impl Spot for MyApp {
-    fn initialize(context: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         // Create an image from raw RGBA8 data (or use the 'image' crate to load pixels)
         let rgba = vec![255u8; 64 * 64 * 4]; // Red square
-        let image = Image::new_from_rgba8(Pt::from(64.0), Pt::from(64.0), &rgba)
+        let image = Image::new_from_rgba8(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
             .expect("Failed to create image");
         Self { image }
     }
 
-    fn update(&mut self, _context: &mut Context, _dt: Duration) {
+    fn update(&mut self, _ctx: &mut Context, _dt: Duration) {
         // Handle logic here
     }
 
-    fn draw(&mut self, context: &mut Context) {
-        let (w, h) = spottedcat::window_size(context);
+    fn draw(&mut self, ctx: &mut Context) {
+        let (w, h) = spottedcat::window_size(ctx);
         
         // Draw image at center
         let opts = DrawOption::default()
             .with_position([w / 2.0, h / 2.0])
             .with_scale([2.0, 2.0]);
-        self.image.draw(context, opts);
+        self.image.draw(ctx, opts);
     }
 
-    fn remove(&self) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
@@ -75,6 +85,10 @@ fn main() {
     });
 }
 ```
+
+## AI Assistant Guide
+
+For comprehensive guidance on generating games and working with the `spottedcat` engine, please refer to the dedicated [AI Game Generation Guide](AI_GAME_GENERATION_GUIDE.md).
 
 ## API Overview
 
@@ -90,10 +104,10 @@ fn main() {
 
 ### Key Systems
 
-- **Input**: Check keys with `key_down`, mouse with `mouse_button_pressed`, or get `touches`.
-- **Audio**: Load and play sounds with `play_sound`, or generate tones with `play_sine`.
+- **Input**: Check keys with `key_down(ctx, ...)`, mouse with `mouse_button_pressed(ctx, ...)`, or get `touches(ctx)`.
+- **Audio**: Load and play sounds with `play_sound(ctx, ...)`, or generate tones with `play_sine(ctx, ...)`.
 - **Scenes**: Transition between states using `switch_scene::<NewScene>()`.
-- **Resources**: Share data between systems via `context.get_resource::<T>()`.
+- **Resources**: Share data between systems via `ctx.get_resource::<T>()`.
 
 ## Custom Shaders
 
@@ -119,9 +133,19 @@ final_color = vec4<f32>(final_color.rgb * pulse, final_color.a);
 
 ## Platform Support
 
+Declared support:
+
 - **Desktop**: Windows, macOS, Linux.
 - **Web**: Compile to WASM with `wasm-pack`. See `canvas_id` in `WindowConfig`.
 - **Android**: Integrated with `winit`'s android-activity.
+- **iOS**: Support for UIKit and native sensor access.
+
+
+- **WASM example**: [`examples/wasm/web`](examples/wasm/web) and [`examples/wasm/wasm_demo`](examples/wasm/wasm_demo)
+- **Android example**: [`examples/android/GameActivityExample`](examples/android/GameActivityExample) and [`examples/android/spottedcat_android_wrapper`](examples/android/spottedcat_android_wrapper)
+- **iOS example**: [`examples/ios/SpottedcatIosSimulatorExample`](examples/ios/SpottedcatIosSimulatorExample) and [`examples/ios/spottedcat_ios_wrapper`](examples/ios/spottedcat_ios_wrapper)
+
+Generated outputs for these examples such as `target/`, `.gradle/`, `pkg/`, `.xcframework/`, and IDE caches are intentionally excluded from version control.
 
 ## License
 
@@ -131,4 +155,3 @@ This project is licensed under either of:
 - MIT license
 
 at your option.
-

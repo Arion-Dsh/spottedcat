@@ -3,15 +3,39 @@ use crate::ShaderOpts;
 use crate::Text;
 
 #[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ImageCommand {
+    pub id: u32,
+    pub opts: DrawOption,
+    pub shader_id: u32,
+    pub shader_opts: ShaderOpts,
+    pub size: [Pt; 2],
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand {
-    Image(u32, DrawOption, u32, ShaderOpts, [Pt; 2]), // Added original [width, height]
+    Image(Box<ImageCommand>),
     Text(Box<Text>, DrawOption),
+    ClearImage(u32, [f32; 4]),
+    CopyImage(u32, u32),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand3D {
-    Model(crate::model::Model, DrawOption3D, u32, crate::ShaderOpts, Option<u32>),
-    ModelInstanced(crate::model::Model, DrawOption3D, u32, crate::ShaderOpts, Option<u32>, Vec<[[f32; 4]; 4]>),
+    Model(
+        crate::model::Model,
+        DrawOption3D,
+        u32,
+        crate::ShaderOpts,
+        Option<u32>,
+    ),
+    ModelInstanced(
+        crate::model::Model,
+        DrawOption3D,
+        u32,
+        crate::ShaderOpts,
+        Option<u32>,
+        std::sync::Arc<[[[f32; 4]; 4]]>,
+    ),
 }
 
 /// Unified options for drawing 3D models.

@@ -1,6 +1,4 @@
-use spottedcat::{
-    Context, DrawOption, Image, Pt, ShaderOpts, Spot, Text, WindowConfig, register_image_shader,
-};
+use spottedcat::{Context, DrawOption, Image, Pt, ShaderOpts, Spot, Text, WindowConfig};
 
 struct FlipTest {
     image: Image,
@@ -11,10 +9,11 @@ struct FlipTest {
 }
 
 impl Spot for FlipTest {
-    fn initialize(_context: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         let image_data = include_bytes!("../assets/happy-tree.png");
         let img_raw = image::load_from_memory(image_data).unwrap().to_rgba8();
         let image = Image::new_from_rgba8(
+            ctx,
             Pt::from(img_raw.width()),
             Pt::from(img_raw.height()),
             &img_raw,
@@ -22,7 +21,7 @@ impl Spot for FlipTest {
         .unwrap();
 
         let font_data = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(font_data.to_vec());
+        let font_id = spottedcat::register_font(ctx, font_data.to_vec());
         let text_obj = Text::new("Flipped!", font_id)
             .with_font_size(Pt::from(16.0))
             .with_color([1.0, 1.0, 1.0, 1.0]);
@@ -33,7 +32,7 @@ impl Spot for FlipTest {
                 color = vec4<f32>(fill_color.rgb, color.a * fill_color.a);
             }
         "#;
-        let yellow_shader_id = register_image_shader(fill_shader_src);
+        let yellow_shader_id = spottedcat::register_image_shader(ctx, fill_shader_src);
 
         Self {
             image,
@@ -44,12 +43,12 @@ impl Spot for FlipTest {
         }
     }
 
-    fn update(&mut self, _context: &mut Context, dt: std::time::Duration) {
+    fn update(&mut self, _ctx: &mut Context, dt: std::time::Duration) {
         self.time += dt.as_secs_f32();
     }
 
-    fn draw(&mut self, context: &mut Context) {
-        let (sw, sh) = context.window_logical_size();
+    fn draw(&mut self, ctx: &mut Context) {
+        let (sw, sh) = ctx.window_logical_size();
         let fsw = sw.as_f32();
         let fsh = sh.as_f32();
 
@@ -57,7 +56,7 @@ impl Spot for FlipTest {
         let mut t_instr = self.text_obj.clone().with_font_size(Pt::from(20.0));
         t_instr.set_content("Check: 4 Trees (Red 100%, Green 80%, Blue 60%, Yellow 40%)");
         t_instr.draw(
-            context,
+            ctx,
             DrawOption::default().with_position([Pt::from(10.0), Pt::from(20.0)]),
         );
 
@@ -94,7 +93,7 @@ impl Spot for FlipTest {
         // Extreme spacing: corners and center
         // 1. Red - Normal - Top Left
         draw_item(
-            context,
+            ctx,
             100.0,
             100.0,
             1.0,
@@ -108,7 +107,7 @@ impl Spot for FlipTest {
         // 2. Green - Flip H - Top Right
         // 0.8 * 0.5 = 0.4
         draw_item(
-            context,
+            ctx,
             fsw - 100.0,
             100.0,
             -1.0,
@@ -122,7 +121,7 @@ impl Spot for FlipTest {
         // 3. Blue - Flip V - Bottom Left
         // 0.5 * 1.0 = 0.5
         draw_item(
-            context,
+            ctx,
             100.0,
             fsh - 100.0,
             1.0,
@@ -146,12 +145,12 @@ impl Spot for FlipTest {
             self.image
                 .draw_with_shader(ctx, self.yellow_shader_id, opts, yellow_opts);
         };
-        yellow_draw(context, fsw - 100.0, fsh - 100.0);
+        yellow_draw(ctx, fsw - 100.0, fsh - 100.0);
 
         let mut t_y = self.text_obj.clone();
         t_y.set_content("4.Solid Yellow (User Hook)");
         t_y.draw(
-            context,
+            ctx,
             DrawOption::default().with_position([Pt::from(fsw - 140.0), Pt::from(fsh - 90.0)]),
         );
 
@@ -161,7 +160,7 @@ impl Spot for FlipTest {
         fill_opts.set_vec4(0, [1.0, 0.5, 0.0, 1.0]); // Orange Fill
 
         self.image.draw_with_shader(
-            context,
+            ctx,
             self.yellow_shader_id, // User-registered Fill Shader
             DrawOption::default()
                 .with_position([Pt::from(fsw * 0.5), Pt::from(move_y)])
@@ -172,21 +171,23 @@ impl Spot for FlipTest {
         let mut t_c = self.text_obj.clone();
         t_c.set_content("5.Solid Fill (Orange)");
         t_c.draw(
-            context,
+            ctx,
             DrawOption::default()
                 .with_position([Pt::from(fsw * 0.5 - 20.0), Pt::from(move_y + 10.0)]),
         );
     }
 
-    fn remove(&self) {
-        spottedcat::unregister_font(self.font_id);
+    fn remove(&mut self, ctx: &mut Context) {
+        spottedcat::unregister_font(ctx, self.font_id);
     }
 }
 
 fn main() {
-    let mut config = WindowConfig::default();
-    config.title = "Flip Test (Final Diagnose)".to_string();
-    config.width = Pt::from(1000.0);
-    config.height = Pt::from(800.0);
+    let config = WindowConfig {
+        title: "Flip Test (Final Diagnose)".to_string(),
+        width: Pt::from(1000.0),
+        height: Pt::from(800.0),
+        ..Default::default()
+    };
     spottedcat::run::<FlipTest>(config);
 }

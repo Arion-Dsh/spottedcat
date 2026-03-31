@@ -1,5 +1,5 @@
 use super::App;
-use crate::{Pt, with_graphics, platform};
+use crate::{Pt, platform};
 use wasm_bindgen::JsCast;
 
 pub(crate) struct PlatformData {
@@ -7,7 +7,6 @@ pub(crate) struct PlatformData {
     pub(crate) window_id: Option<winit::window::WindowId>,
     pub(crate) canvas_id: Option<String>,
     pub(crate) last_physical_size: Option<(u32, u32)>,
-    pub(crate) audio_initialized: bool,
 }
 
 impl PlatformData {
@@ -27,7 +26,6 @@ impl PlatformData {
             window_id: None,
             canvas_id,
             last_physical_size: None,
-            audio_initialized: false,
         }
     }
 }
@@ -36,13 +34,12 @@ impl App {
     /// Lazily initialise the audio system on the first user gesture so that
     /// the browser's autoplay policy is satisfied.
     pub(crate) fn init_audio_on_gesture(&mut self) {
-        if self.platform.audio_initialized {
+        if self.ctx.runtime.audio.is_some() {
             return;
         }
-        self.platform.audio_initialized = true;
         match crate::audio::AudioSystem::new() {
             Ok(audio) => {
-                let _ = platform::set_global_audio(audio);
+                self.ctx.runtime.audio = Some(audio);
             }
             Err(e) => {
                 web_sys::console::warn_1(&format!("[spot][wasm] Audio unavailable: {e:?}").into());
@@ -88,9 +85,11 @@ impl App {
         canvas.set_width(w);
         canvas.set_height(h);
 
-        with_graphics(|g| g.resize(surface, w, h));
+        if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+            g.resize(surface, w, h);
+        }
 
-        self.context.set_window_logical_size(
+        self.ctx.set_window_logical_size(
             Pt::from_physical_px(w as f64, self.scale_factor),
             Pt::from_physical_px(h as f64, self.scale_factor),
         );

@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.5.8"
+version = "0.6.0"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -23,6 +23,8 @@ anyhow = "1"
 ab_glyph = "0.2"
 cpal = { version = "0.17.3", features = ["wasm-bindgen"] }
 symphonia = { version = "0.5", features = ["all"] }
+image = "0.25"
+gltf = "1.4.1"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = { version = "0.30" }

@@ -245,6 +245,7 @@ impl InputManager {
 
             self.text_input.clear();
             self.ime_preedit = None;
+            self.touches.clear();
         }
     }
 
@@ -430,5 +431,22 @@ impl InputManager {
     #[allow(dead_code)]
     pub(crate) fn handle_step_detector(&mut self) {
         self.step_detected = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn losing_focus_clears_active_touches() {
+        let mut input = InputManager::new();
+        input.handle_touch_raw(7, (Pt::from(12.0), Pt::from(24.0)), TouchPhase::Started);
+
+        assert_eq!(input.touches().len(), 1);
+
+        input.handle_focus(false);
+
+        assert!(input.touches().is_empty());
     }
 }

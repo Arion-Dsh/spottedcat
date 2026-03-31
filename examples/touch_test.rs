@@ -4,12 +4,12 @@ use std::time::Duration;
 struct TouchTest {}
 
 impl Spot for TouchTest {
-    fn initialize(_context: &mut Context) -> Self {
+    fn initialize(_ctx: &mut Context) -> Self {
         Self {}
     }
 
-    fn draw(&mut self, context: &mut Context) {
-        let touches = spottedcat::touches(context);
+    fn draw(&mut self, ctx: &mut Context) {
+        let touches = spottedcat::touches(ctx);
         for touch in touches {
             let _color = match touch.phase {
                 TouchPhase::Started => [1.0, 0.0, 0.0, 1.0],
@@ -27,8 +27,8 @@ impl Spot for TouchTest {
         }
     }
 
-    fn update(&mut self, _context: &mut Context, _dt: Duration) {}
-    fn remove(&self) {}
+    fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

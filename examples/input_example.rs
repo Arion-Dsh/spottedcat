@@ -8,9 +8,9 @@ struct InputExample {
 }
 
 impl Spot for InputExample {
-    fn initialize(_: &mut Context) -> Self {
+    fn initialize(ctx: &mut Context) -> Self {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(FONT.to_vec());
+        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
         Self {
             x: 200.0,
@@ -42,13 +42,13 @@ impl Spot for InputExample {
         }
     }
 
-    fn draw(&mut self, context: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context) {
         let title_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
         Text::new("Input Example (Use WASD or Arrow keys)", self.font_id)
             .with_font_size(spottedcat::Pt::from(24.0))
             .with_color([1.0, 1.0, 1.0, 1.0])
-            .draw(context, title_opts);
+            .draw(ctx, title_opts);
 
         let keys_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
@@ -58,7 +58,7 @@ impl Spot for InputExample {
         )
         .with_font_size(spottedcat::Pt::from(20.0))
         .with_color([0.7, 0.9, 1.0, 1.0])
-        .draw(context, keys_opts);
+        .draw(ctx, keys_opts);
 
         let mouse_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(160.0)]);
@@ -68,10 +68,10 @@ impl Spot for InputExample {
         )
         .with_font_size(spottedcat::Pt::from(18.0))
         .with_color([0.9, 0.9, 0.9, 1.0])
-        .draw(context, mouse_opts);
+        .draw(ctx, mouse_opts);
     }
 
-    fn remove(&self) {}
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

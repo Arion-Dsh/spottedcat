@@ -1,21 +1,252 @@
 //! Batch rendering and draw operations.
 
-
 use crate::Context;
-use crate::drawable::{DrawCommand, DrawCommand3D};
 use crate::ShaderOpts;
+use crate::drawable::{DrawCommand, DrawCommand3D};
+use crate::graphics::model_raw::MaterialBindGroupKey;
 use crate::image_raw::InstanceData;
 use crate::pt::Pt;
 use std::collections::HashMap;
 
+use super::core::{AtlasSlot, Graphics, ResolvedDraw, SkinData};
+use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
 use crate::image_raw::ImageRenderer;
-use crate::graphics::model_raw::{ModelRenderer, MeshData};
-use super::core::{Graphics, ResolvedDraw, AtlasSlot, SkinData};
+
+pub(crate) struct RenderConfig<'a> {
+    pub screen_size_data: [f32; 4],
+    pub width: u32,
+    pub height: u32,
+    pub sf: f64,
+    pub atlases: &'a [AtlasSlot],
+    pub image_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
+    pub default_pipeline: &'a wgpu::RenderPipeline,
+}
+
+pub(crate) struct Render3DConfig<'a> {
+    pub model_pipeline: &'a wgpu::RenderPipeline,
+    pub instanced_model_pipeline: &'a wgpu::RenderPipeline,
+    pub shadow_pipeline: &'a wgpu::RenderPipeline,
+    pub instanced_shadow_pipeline: &'a wgpu::RenderPipeline,
+    pub model_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
+    pub instanced_model_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
+    pub white_image_id: u32,
+    pub black_image_id: u32,
+    pub normal_image_id: u32,
+    pub environment_bind_group: &'a wgpu::BindGroup,
+    pub width: u32,
+    pub height: u32,
+}
+
+type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
+type MaterialTextureSet<'a> = (
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+);
+
+fn resolve_material_texture<'a>(
+    images: &[Option<ImageEntry>],
+    atlases: &'a [AtlasSlot],
+    img_id: Option<u32>,
+    fallback_id: u32,
+) -> Option<(u32, [f32; 4], &'a wgpu::TextureView)> {
+    let id = img_id
+        .filter(|&id| images.get(id as usize).and_then(|v| v.as_ref()).is_some())
+        .unwrap_or(fallback_id);
+    let entry = images.get(id as usize).and_then(|v| v.as_ref())?;
+    let atlas_index = entry.atlas_index?;
+    let view = &atlases.get(atlas_index as usize)?.texture.0.view;
+    let uv_rect = entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+    Some((atlas_index, uv_rect, view))
+}
+
+fn expect_image_pipeline<'a>(
+    image_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
+    default_pipeline: &'a wgpu::RenderPipeline,
+    shader_id: u32,
+) -> &'a wgpu::RenderPipeline {
+    if shader_id == 0 {
+        default_pipeline
+    } else {
+        image_pipelines.get(&shader_id).unwrap_or_else(|| {
+            panic!(
+                "[spot][render] missing image pipeline for shader_id {}",
+                shader_id
+            )
+        })
+    }
+}
+
+fn expect_atlas_bind_group(atlases: &[AtlasSlot], atlas_index: Option<u32>) -> &wgpu::BindGroup {
+    let atlas_index =
+        atlas_index.unwrap_or_else(|| panic!("[spot][render] missing atlas index for image batch"));
+    &atlases
+        .get(atlas_index as usize)
+        .unwrap_or_else(|| panic!("[spot][render] missing atlas {}", atlas_index))
+        .bind_group
+}
+
+fn expect_default_material_texture<'a>(
+    images: &[Option<ImageEntry>],
+    atlases: &'a [AtlasSlot],
+    image_id: u32,
+    label: &str,
+) -> MaterialTextureBinding<'a> {
+    resolve_material_texture(images, atlases, Some(image_id), image_id).unwrap_or_else(|| {
+        panic!(
+            "[spot][render] default {} texture {} is unavailable",
+            label, image_id
+        )
+    })
+}
+
+fn resolve_material_textures<'a>(
+    images: &[Option<ImageEntry>],
+    atlases: &'a [AtlasSlot],
+    part: &crate::model::ModelPart,
+    white_image_id: u32,
+    black_image_id: u32,
+    normal_image_id: u32,
+) -> MaterialTextureSet<'a> {
+    let white = expect_default_material_texture(images, atlases, white_image_id, "white");
+    let black = expect_default_material_texture(images, atlases, black_image_id, "black");
+    let normal_default =
+        expect_default_material_texture(images, atlases, normal_image_id, "normal");
+
+    let albedo = resolve_material_texture(images, atlases, part.material.albedo, white_image_id)
+        .unwrap_or(white);
+    let pbr = resolve_material_texture(images, atlases, part.material.pbr, black_image_id)
+        .unwrap_or(black);
+    let normal = resolve_material_texture(images, atlases, part.material.normal, normal_image_id)
+        .unwrap_or(normal_default);
+    let ao = resolve_material_texture(images, atlases, part.material.occlusion, white_image_id)
+        .unwrap_or(white);
+    let emissive =
+        resolve_material_texture(images, atlases, part.material.emissive, black_image_id)
+            .unwrap_or(black);
+
+    (albedo, pbr, normal, ao, emissive)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct DrawCommand3DSortKey {
+    instanced: bool,
+    shader_id: u32,
+    skin_id: u32,
+    mesh_id: u32,
+    albedo_id: u32,
+    pbr_id: u32,
+    normal_id: u32,
+    ao_id: u32,
+    emissive_id: u32,
+}
+
+fn draw_command_3d_is_transparent(command: &DrawCommand3D) -> bool {
+    match command {
+        DrawCommand3D::Model(_, opts, ..) | DrawCommand3D::ModelInstanced(_, opts, ..) => {
+            opts.opacity < 1.0
+        }
+    }
+}
+
+fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
+    match command {
+        DrawCommand3D::Model(model, _, shader_id, _, skin_id) => DrawCommand3DSortKey {
+            instanced: false,
+            shader_id: *shader_id,
+            skin_id: skin_id.unwrap_or(0),
+            mesh_id: model.first_id(),
+            albedo_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.albedo)
+                .unwrap_or(0),
+            pbr_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.pbr)
+                .unwrap_or(0),
+            normal_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.normal)
+                .unwrap_or(0),
+            ao_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.occlusion)
+                .unwrap_or(0),
+            emissive_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.emissive)
+                .unwrap_or(0),
+        },
+        DrawCommand3D::ModelInstanced(model, _, shader_id, _, skin_id, _) => DrawCommand3DSortKey {
+            instanced: true,
+            shader_id: *shader_id,
+            skin_id: skin_id.unwrap_or(0),
+            mesh_id: model.first_id(),
+            albedo_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.albedo)
+                .unwrap_or(0),
+            pbr_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.pbr)
+                .unwrap_or(0),
+            normal_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.normal)
+                .unwrap_or(0),
+            ao_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.occlusion)
+                .unwrap_or(0),
+            emissive_id: model
+                .parts
+                .first()
+                .and_then(|part| part.material.emissive)
+                .unwrap_or(0),
+        },
+    }
+}
 
 impl Graphics {
-    pub(super) fn resolve_drawables(
+    fn process_image_commands(&mut self, ctx: &mut Context, drawables: &[DrawCommand]) {
+        for command in drawables {
+            match command {
+                DrawCommand::ClearImage(target_id, color) => {
+                    if let Err(e) = self.clear_image(ctx, *target_id, *color) {
+                        eprintln!(
+                            "[spot][graphics] clear_image failed for {}: {:?}",
+                            target_id, e
+                        );
+                    }
+                }
+                DrawCommand::CopyImage(dst_id, src_id) => {
+                    if let Err(e) = self.copy_image(ctx, *dst_id, *src_id) {
+                        eprintln!(
+                            "[spot][graphics] copy_image failed from {} to {}: {:?}",
+                            src_id, dst_id, e
+                        );
+                    }
+                }
+                DrawCommand::Image(_) | DrawCommand::Text(_, _) => {}
+            }
+        }
+    }
+
+    pub(crate) fn resolve_drawables(
         &mut self,
+        ctx: &mut Context,
         drawables: &[DrawCommand],
         logical_w: u32,
         logical_h: u32,
@@ -25,47 +256,43 @@ impl Graphics {
 
         for drawable in drawables {
             match drawable {
-                DrawCommand::Image(id, opts, shader_id, shader_opts, _) => {
-                    if let Some(Some(entry)) = self.images.get(*id as usize) {
+                DrawCommand::Image(cmd) => {
+                    if let Some(Some(entry)) = ctx.registry.images.get(cmd.id as usize) {
                         if !entry.visible || !entry.is_ready() {
                             continue;
                         }
 
                         self.resolved_draws.push(ResolvedDraw {
                             img_entry: entry.clone(),
-                            opts: *opts,
-                            shader_id: *shader_id,
-                            shader_opts: *shader_opts,
-                            layer: opts.layer(),
+                            opts: cmd.opts,
+                            shader_id: cmd.shader_id,
+                            shader_opts: cmd.shader_opts,
+                            layer: cmd.opts.layer(),
                         });
                     }
                 }
                 DrawCommand::Text(text, opts) => {
-                    if let Err(e) = self.layout_and_queue_text(text, opts, viewport_rect) {
+                    if let Err(e) = self.layout_and_queue_text(ctx, text, opts, viewport_rect) {
                         eprintln!("[spot] Text layout error: {:?}", e);
                     }
                 }
+                DrawCommand::ClearImage(_, _) | DrawCommand::CopyImage(_, _) => {}
             }
         }
     }
 
-    pub(super) fn render_batches_internal<'a>(
+    pub(crate) fn render_batches_internal<'a>(
         image_renderer: &mut ImageRenderer,
         queue: &wgpu::Queue,
-        atlases: &[AtlasSlot],
-        image_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
-        default_pipeline: &'a wgpu::RenderPipeline,
         batch: &mut Vec<InstanceData>,
-        resolved_draws: &mut Vec<ResolvedDraw>,
+        resolved_draws: &mut [ResolvedDraw],
         rpass: &mut wgpu::RenderPass<'a>,
-        screen_size_data: [f32; 4],
-        config_width: u32,
-        config_height: u32,
-        sf: f64,
+        config: RenderConfig<'a>,
     ) {
         // Sort by layer first, then atlas and shader to maximize batching
         resolved_draws.sort_by(|a, b| {
-            a.layer.cmp(&b.layer)
+            a.layer
+                .cmp(&b.layer)
                 .then(a.img_entry.atlas_index.cmp(&b.img_entry.atlas_index))
                 .then(a.shader_id.cmp(&b.shader_id))
         });
@@ -74,7 +301,7 @@ impl Graphics {
 
         // Upload initial engine globals
         let engine_globals = crate::image_raw::EngineGlobals {
-            screen: screen_size_data,
+            screen: config.screen_size_data,
             opacity: current_opacity,
             shader_opacity: 1.0,
             _padding: [0.0; 2],
@@ -94,7 +321,7 @@ impl Graphics {
         let mut current_user_globals = ShaderOpts::default();
         let mut current_clip: Option<[Pt; 4]> = None;
 
-        rpass.set_scissor_rect(0, 0, config_width.max(1), config_height.max(1));
+        rpass.set_scissor_rect(0, 0, config.width.max(1), config.height.max(1));
         let mut last_set_scissor: Option<(u32, u32, u32, u32)> = None;
 
         for resolved in resolved_draws.iter() {
@@ -118,17 +345,13 @@ impl Graphics {
                 || current_opacity != draw_opacity;
 
             if state_changed && !batch.is_empty() {
-                let ai = current_atlas_index
-                    .expect("current_atlas_index should be Some if batch is not empty");
-                let atlas_bg = &atlases.get(ai as usize).expect("atlas").bind_group;
-
-                if let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice())
-                {
-                    let pipeline = if current_shader_id == 0 {
-                        default_pipeline
-                    } else {
-                        image_pipelines.get(&current_shader_id).unwrap()
-                    };
+                if let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice()) {
+                    let pipeline = expect_image_pipeline(
+                        config.image_pipelines,
+                        config.default_pipeline,
+                        current_shader_id,
+                    );
+                    let atlas_bg = expect_atlas_bind_group(config.atlases, current_atlas_index);
                     image_renderer.draw_batch(
                         rpass,
                         pipeline,
@@ -146,7 +369,7 @@ impl Graphics {
             {
                 current_opacity = draw_opacity;
                 let eg = crate::image_raw::EngineGlobals {
-                    screen: screen_size_data,
+                    screen: config.screen_size_data,
                     opacity: current_opacity,
                     shader_opacity: resolved.shader_opts.opacity,
                     _padding: [0.0; 2],
@@ -168,12 +391,12 @@ impl Graphics {
             if current_clip != opts.get_clip() {
                 current_clip = opts.get_clip();
                 let (sx, sy, sw, sh) = if let Some(clip) = current_clip {
-                    let x0 = (clip[0].as_f32() * sf as f32).clamp(0.0, config_width as f32);
-                    let y0 = (clip[1].as_f32() * sf as f32).clamp(0.0, config_height as f32);
-                    let x1 = ((clip[0].as_f32() + clip[2].as_f32()) * sf as f32)
-                        .clamp(0.0, config_width as f32);
-                    let y1 = ((clip[1].as_f32() + clip[3].as_f32()) * sf as f32)
-                        .clamp(0.0, config_height as f32);
+                    let x0 = (clip[0].as_f32() * config.sf as f32).clamp(0.0, config.width as f32);
+                    let y0 = (clip[1].as_f32() * config.sf as f32).clamp(0.0, config.height as f32);
+                    let x1 = ((clip[0].as_f32() + clip[2].as_f32()) * config.sf as f32)
+                        .clamp(0.0, config.width as f32);
+                    let y1 = ((clip[1].as_f32() + clip[3].as_f32()) * config.sf as f32)
+                        .clamp(0.0, config.height as f32);
                     let fw = (x1 - x0).max(0.0) as u32;
                     let fh = (y1 - y0).max(0.0) as u32;
                     if fw > 0 && fh > 0 {
@@ -182,7 +405,7 @@ impl Graphics {
                         (0, 0, 1, 1)
                     }
                 } else {
-                    (0, 0, config_width, config_height)
+                    (0, 0, config.width, config.height)
                 };
 
                 if last_set_scissor != Some((sx, sy, sw, sh)) {
@@ -205,30 +428,26 @@ impl Graphics {
             });
         }
 
-        if !batch.is_empty() {
-            let ai = current_atlas_index
-                .expect("current_atlas_index should be Some if batch is not empty");
-            let atlas_bg = &atlases.get(ai as usize).expect("atlas").bind_group;
-            if let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice())
-            {
-                let pipeline = if current_shader_id == 0 {
-                    default_pipeline
-                } else {
-                    image_pipelines.get(&current_shader_id).unwrap()
-                };
-                image_renderer.draw_batch(
-                    rpass,
-                    pipeline,
-                    atlas_bg,
-                    range,
-                    current_user_globals_offset,
-                    current_engine_globals_offset,
-                );
-            }
-            batch.clear();
+        // Final Batch
+        if !batch.is_empty()
+            && let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice())
+        {
+            let pipeline = expect_image_pipeline(
+                config.image_pipelines,
+                config.default_pipeline,
+                current_shader_id,
+            );
+            let atlas_bg = expect_atlas_bind_group(config.atlases, current_atlas_index);
+            image_renderer.draw_batch(
+                rpass,
+                pipeline,
+                atlas_bg,
+                range,
+                current_user_globals_offset,
+                current_engine_globals_offset,
+            );
         }
     }
-
 
     #[allow(clippy::too_many_arguments)]
     pub(super) fn render_3d_internal<'a>(
@@ -240,28 +459,17 @@ impl Graphics {
         skins: &[Option<SkinData>],
         images: &[Option<ImageEntry>],
         atlases: &[AtlasSlot],
-        model_pipeline: &wgpu::RenderPipeline,
-        instanced_model_pipeline: &wgpu::RenderPipeline,
-        shadow_pipeline: &wgpu::RenderPipeline,
-        instanced_shadow_pipeline: &wgpu::RenderPipeline,
-        model_pipelines: &HashMap<u32, wgpu::RenderPipeline>,
-        white_image_id: u32,
-        black_image_id: u32,
-        normal_image_id: u32,
-        shadow_view: &wgpu::TextureView,
-        irradiance_view: &wgpu::TextureView,
-        prefiltered_view: &wgpu::TextureView,
-        brdf_lut_view: &wgpu::TextureView,
+        config: Render3DConfig,
         rpass: &mut wgpu::RenderPass<'a>,
-        context: &Context,
+        ctx: &Context,
         is_shadow_pass: bool,
-        config_width: u32,
-        config_height: u32,
     ) {
-        let aspect = config_width as f32 / config_height as f32;
-        let proj = crate::graphics::model_raw::create_perspective(aspect, std::f32::consts::PI / 4.0, 0.1, 1000.0);
-        
-        let view_mat = crate::graphics::model_raw::create_translation([0.0, 0.0, -5.0]); // Fallback view
+        let mut camera = ctx.runtime.camera;
+        camera.aspect = config.width as f32 / config.height as f32;
+        let proj = camera.projection_matrix();
+        let view_mat = camera.view_matrix();
+
+        scene_globals.camera_pos = [camera.eye[0], camera.eye[1], camera.eye[2], 1.0];
 
         scene_globals.light_view_proj = [
             [0.1, 0.0, 0.0, 0.0],
@@ -275,19 +483,50 @@ impl Graphics {
         }
 
         let lvp = scene_globals.light_view_proj;
+        let mut current_pipeline: Option<*const wgpu::RenderPipeline> = None;
+        let mut current_mesh_binding: Option<(u32, bool)> = None;
+        let mut current_material_key: Option<MaterialBindGroupKey> = None;
+        let mut current_bone_offset: Option<u32> = None;
+        let mut environment_bound = false;
 
-        for command in &context.draw_list_3d {
+        let mut opaque_commands = Vec::with_capacity(ctx.runtime.draw_list_3d.len());
+        let mut transparent_commands = Vec::new();
+        for command in &ctx.runtime.draw_list_3d {
+            if draw_command_3d_is_transparent(command) {
+                transparent_commands.push(command);
+            } else {
+                opaque_commands.push(command);
+            }
+        }
+        opaque_commands.sort_by_key(|command| draw_command_3d_sort_key(command));
+
+        for command in opaque_commands
+            .into_iter()
+            .chain(transparent_commands.into_iter())
+        {
             match command {
-                crate::drawable::DrawCommand3D::Model(model, opts, shader_id, shader_opts, skin_id_cmd) => {
+                crate::drawable::DrawCommand3D::Model(
+                    model,
+                    opts,
+                    shader_id,
+                    shader_opts,
+                    skin_id_cmd,
+                ) => {
                     let model_mat = crate::graphics::model_raw::create_translation(opts.position);
                     let rot_mat = crate::graphics::model_raw::create_rotation(opts.rotation);
                     let scale_mat = crate::graphics::model_raw::create_scale(opts.scale);
-                    let model_mat_all = crate::graphics::model_raw::multiply(model_mat, crate::graphics::model_raw::multiply(rot_mat, scale_mat));
-                    
+                    let model_mat_all = crate::graphics::model_raw::multiply(
+                        model_mat,
+                        crate::graphics::model_raw::multiply(rot_mat, scale_mat),
+                    );
+
                     let mvp = if is_shadow_pass {
                         crate::graphics::model_raw::multiply(lvp, model_mat_all)
                     } else {
-                        crate::graphics::model_raw::multiply(proj, crate::graphics::model_raw::multiply(view_mat, model_mat_all))
+                        crate::graphics::model_raw::multiply(
+                            proj,
+                            crate::graphics::model_raw::multiply(view_mat, model_mat_all),
+                        )
                     };
 
                     let base_globals = crate::graphics::model_raw::ModelGlobals {
@@ -300,76 +539,122 @@ impl Graphics {
                     for part in &model.parts {
                         if let Some(Some(mesh)) = models.get(part.id as usize) {
                             let mut globals = base_globals;
+                            let mut material_texture_data = None;
                             if !is_shadow_pass {
-                                let get_tex_info = |img_id: Option<u32>, fallback_id: u32| -> [f32; 4] {
-                                    let id = img_id.filter(|&id| images.get(id as usize).map(|v: &Option<ImageEntry>| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
-                                    let entry = images[id as usize].as_ref().unwrap();
-                                    entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0])
-                                };
-                                globals.albedo_uv = get_tex_info(part.material.albedo, white_image_id);
-                                globals.pbr_uv = get_tex_info(part.material.pbr, black_image_id);
-                                globals.normal_uv = get_tex_info(part.material.normal, normal_image_id);
-                                globals.ao_uv = get_tex_info(part.material.occlusion, white_image_id);
-                                globals.emissive_uv = get_tex_info(part.material.emissive, black_image_id);
+                                let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
+                                    images,
+                                    atlases,
+                                    part,
+                                    config.white_image_id,
+                                    config.black_image_id,
+                                    config.normal_image_id,
+                                );
+
+                                globals.albedo_uv = albedo.1;
+                                globals.pbr_uv = pbr.1;
+                                globals.normal_uv = normal.1;
+                                globals.ao_uv = ao.1;
+                                globals.emissive_uv = emissive.1;
+                                material_texture_data = Some((albedo, pbr, normal, ao, emissive));
                             }
 
                             if let Ok(offset) = model_renderer.upload_globals(queue, &globals) {
                                 let pipeline = if is_shadow_pass {
-                                    shadow_pipeline
+                                    config.shadow_pipeline
                                 } else if *shader_id == 0 {
-                                    model_pipeline
+                                    config.model_pipeline
                                 } else {
-                                    model_pipelines.get(shader_id).unwrap_or(model_pipeline)
+                                    config
+                                        .model_pipelines
+                                        .get(shader_id)
+                                        .unwrap_or(config.model_pipeline)
                                 };
 
-                                rpass.set_pipeline(pipeline);
-                                rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                                rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                                let pipeline_ptr = pipeline as *const wgpu::RenderPipeline;
+                                if current_pipeline != Some(pipeline_ptr) {
+                                    rpass.set_pipeline(pipeline);
+                                    current_pipeline = Some(pipeline_ptr);
+                                }
+                                if current_mesh_binding != Some((part.id, false)) {
+                                    rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                                    rpass.set_index_buffer(
+                                        mesh.index_buffer.slice(..),
+                                        wgpu::IndexFormat::Uint32,
+                                    );
+                                    current_mesh_binding = Some((part.id, false));
+                                }
 
                                 let mut bone_offset = 0;
-                                if let Some(skin_id) = skin_id_cmd {
-                                    if let Some(Some(skin)) = skins.get(*skin_id as usize) {
-                                        if let Ok(off) = model_renderer.upload_bone_matrices(queue, &skin.bone_matrices) {
-                                            bone_offset = off;
-                                        }
-                                    }
+                                if let Some(skin_id) = skin_id_cmd
+                                    && let Some(Some(skin)) = skins.get(*skin_id as usize)
+                                    && let Ok(off) = model_renderer.bone_offset_for_skin(
+                                        queue,
+                                        *skin_id,
+                                        &skin.bone_matrices,
+                                    )
+                                {
+                                    bone_offset = off;
                                 }
 
                                 if is_shadow_pass {
-                                    rpass.set_bind_group(0, &model_renderer.globals_bind_group, &[offset, 0]);
-                                    rpass.set_bind_group(1, &model_renderer.bone_matrices_bind_group, &[bone_offset]);
+                                    rpass.set_bind_group(
+                                        0,
+                                        &model_renderer.globals_bind_group,
+                                        &[offset, 0],
+                                    );
+                                    if current_bone_offset != Some(bone_offset) {
+                                        rpass.set_bind_group(
+                                            1,
+                                            &model_renderer.bone_matrices_bind_group,
+                                            &[bone_offset],
+                                        );
+                                        current_bone_offset = Some(bone_offset);
+                                    }
                                 } else {
-                                    if let Ok(opts_offset) = model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes()) {
-                                        rpass.set_bind_group(0, &model_renderer.globals_bind_group, &[offset, opts_offset]);
+                                    if let Ok(opts_offset) = model_renderer
+                                        .upload_shader_opts_bytes(queue, shader_opts.as_bytes())
+                                    {
+                                        rpass.set_bind_group(
+                                            0,
+                                            &model_renderer.globals_bind_group,
+                                            &[offset, opts_offset],
+                                        );
                                     }
 
-                                    let get_view = |img_id: Option<u32>, fallback_id: u32| -> &wgpu::TextureView {
-                                        let id = img_id.filter(|&id| images.get(id as usize).map(|v: &Option<ImageEntry>| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
-                                        let entry = images[id as usize].as_ref().unwrap();
-                                        let ai = entry.atlas_index.unwrap_or(0);
-                                        &atlases[ai as usize].texture.0.view
+                                    let (albedo, pbr, normal, ao, emissive) = material_texture_data
+                                        .unwrap_or_else(|| {
+                                            panic!(
+                                                "[spot][render] material textures missing after resolution for mesh {}",
+                                                part.id
+                                            )
+                                        });
+                                    let material_key = MaterialBindGroupKey {
+                                        atlas_indices: [
+                                            albedo.0, pbr.0, normal.0, ao.0, emissive.0,
+                                        ],
                                     };
-
-                                    let tex_bg = model_renderer.create_texture_bind_group(
-                                        device, 
-                                        get_view(part.material.albedo, white_image_id),
-                                        get_view(part.material.pbr, black_image_id),
-                                        get_view(part.material.normal, normal_image_id),
-                                        get_view(part.material.occlusion, white_image_id),
-                                        get_view(part.material.emissive, black_image_id)
-                                    );
-                                    rpass.set_bind_group(1, &tex_bg, &[]);
-
-                                    rpass.set_bind_group(2, &model_renderer.bone_matrices_bind_group, &[bone_offset]);
-
-                                    let env_bg = model_renderer.create_environment_bind_group(
+                                    let tex_bg = model_renderer.texture_bind_group_for_atlases(
                                         device,
-                                        shadow_view,
-                                        irradiance_view,
-                                        prefiltered_view,
-                                        brdf_lut_view,
+                                        material_key,
+                                        [albedo.2, pbr.2, normal.2, ao.2, emissive.2],
                                     );
-                                    rpass.set_bind_group(3, &env_bg, &[]);
+                                    if current_material_key != Some(material_key) {
+                                        rpass.set_bind_group(1, tex_bg, &[]);
+                                        current_material_key = Some(material_key);
+                                    }
+
+                                    if current_bone_offset != Some(bone_offset) {
+                                        rpass.set_bind_group(
+                                            2,
+                                            &model_renderer.bone_matrices_bind_group,
+                                            &[bone_offset],
+                                        );
+                                        current_bone_offset = Some(bone_offset);
+                                    }
+                                    if !environment_bound {
+                                        rpass.set_bind_group(3, config.environment_bind_group, &[]);
+                                        environment_bound = true;
+                                    }
                                 }
 
                                 rpass.draw_indexed(0..mesh.index_count, 0, 0..1);
@@ -377,16 +662,29 @@ impl Graphics {
                         }
                     }
                 }
-                DrawCommand3D::ModelInstanced(model, opts, shader_id, shader_opts, skin_id_cmd, transforms) => {
+                DrawCommand3D::ModelInstanced(
+                    model,
+                    opts,
+                    shader_id,
+                    shader_opts,
+                    skin_id_cmd,
+                    transforms,
+                ) => {
                     let model_mat = crate::graphics::model_raw::create_translation(opts.position);
                     let rot_mat = crate::graphics::model_raw::create_rotation(opts.rotation);
                     let scale_mat = crate::graphics::model_raw::create_scale(opts.scale);
-                    let model_mat_all = crate::graphics::model_raw::multiply(model_mat, crate::graphics::model_raw::multiply(rot_mat, scale_mat));
-                    
+                    let model_mat_all = crate::graphics::model_raw::multiply(
+                        model_mat,
+                        crate::graphics::model_raw::multiply(rot_mat, scale_mat),
+                    );
+
                     let mvp = if is_shadow_pass {
                         crate::graphics::model_raw::multiply(lvp, model_mat_all)
                     } else {
-                        crate::graphics::model_raw::multiply(proj, crate::graphics::model_raw::multiply(view_mat, model_mat_all))
+                        crate::graphics::model_raw::multiply(
+                            proj,
+                            crate::graphics::model_raw::multiply(view_mat, model_mat_all),
+                        )
                     };
 
                     let base_globals = crate::graphics::model_raw::ModelGlobals {
@@ -397,7 +695,7 @@ impl Graphics {
                     };
 
                     // Upload instance data
-                    if let Err(e) = model_renderer.upload_instances(queue, transforms) {
+                    if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {
                         eprintln!("[spot][render] Failed to upload instances: {}", e);
                         continue;
                     }
@@ -405,83 +703,133 @@ impl Graphics {
                     for part in &model.parts {
                         if let Some(Some(mesh)) = models.get(part.id as usize) {
                             let mut globals = base_globals;
+                            let mut material_texture_data = None;
                             if !is_shadow_pass {
-                                let get_tex_info = |img_id: Option<u32>, fallback_id: u32| -> [f32; 4] {
-                                    let id = img_id.filter(|&id| images.get(id as usize).map(|v: &Option<ImageEntry>| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
-                                    let entry = images[id as usize].as_ref().unwrap();
-                                    entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0])
-                                };
-                                globals.albedo_uv = get_tex_info(part.material.albedo, white_image_id);
-                                globals.pbr_uv = get_tex_info(part.material.pbr, black_image_id);
-                                globals.normal_uv = get_tex_info(part.material.normal, normal_image_id);
-                                globals.ao_uv = get_tex_info(part.material.occlusion, white_image_id);
-                                globals.emissive_uv = get_tex_info(part.material.emissive, black_image_id);
+                                let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
+                                    images,
+                                    atlases,
+                                    part,
+                                    config.white_image_id,
+                                    config.black_image_id,
+                                    config.normal_image_id,
+                                );
+
+                                globals.albedo_uv = albedo.1;
+                                globals.pbr_uv = pbr.1;
+                                globals.normal_uv = normal.1;
+                                globals.ao_uv = ao.1;
+                                globals.emissive_uv = emissive.1;
+                                material_texture_data = Some((albedo, pbr, normal, ao, emissive));
                             }
 
                             if let Ok(offset) = model_renderer.upload_globals(queue, &globals) {
                                 let pipeline = if is_shadow_pass {
-                                    instanced_shadow_pipeline
+                                    config.instanced_shadow_pipeline
                                 } else if *shader_id == 0 {
-                                    instanced_model_pipeline
+                                    config.instanced_model_pipeline
                                 } else {
-                                    // Custom shaders currently don't support instancing in this logic 
-                                    // unless we also register an instanced variant of them.
-                                    // For now, fallback to default instanced pipeline.
-                                    instanced_model_pipeline
+                                    config
+                                        .instanced_model_pipelines
+                                        .get(shader_id)
+                                        .unwrap_or(config.instanced_model_pipeline)
                                 };
 
-                                rpass.set_pipeline(pipeline);
-                                rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                                rpass.set_vertex_buffer(1, model_renderer.instance_buffer.slice(..));
-                                rpass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                                let pipeline_ptr = pipeline as *const wgpu::RenderPipeline;
+                                if current_pipeline != Some(pipeline_ptr) {
+                                    rpass.set_pipeline(pipeline);
+                                    current_pipeline = Some(pipeline_ptr);
+                                }
+                                if current_mesh_binding != Some((part.id, true)) {
+                                    rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                                    rpass.set_vertex_buffer(
+                                        1,
+                                        model_renderer.instance_buffer.slice(..),
+                                    );
+                                    rpass.set_index_buffer(
+                                        mesh.index_buffer.slice(..),
+                                        wgpu::IndexFormat::Uint32,
+                                    );
+                                    current_mesh_binding = Some((part.id, true));
+                                }
 
                                 let mut bone_offset = 0;
-                                if let Some(skin_id) = skin_id_cmd {
-                                    if let Some(Some(skin)) = skins.get(*skin_id as usize) {
-                                        if let Ok(off) = model_renderer.upload_bone_matrices(queue, &skin.bone_matrices) {
-                                            bone_offset = off;
-                                        }
-                                    }
+                                if let Some(skin_id) = skin_id_cmd
+                                    && let Some(Some(skin)) = skins.get(*skin_id as usize)
+                                    && let Ok(off) = model_renderer.bone_offset_for_skin(
+                                        queue,
+                                        *skin_id,
+                                        &skin.bone_matrices,
+                                    )
+                                {
+                                    bone_offset = off;
                                 }
 
                                 if is_shadow_pass {
-                                    rpass.set_bind_group(0, &model_renderer.globals_bind_group, &[offset, 0]);
-                                    rpass.set_bind_group(1, &model_renderer.bone_matrices_bind_group, &[bone_offset]);
+                                    rpass.set_bind_group(
+                                        0,
+                                        &model_renderer.globals_bind_group,
+                                        &[offset, 0],
+                                    );
+                                    if current_bone_offset != Some(bone_offset) {
+                                        rpass.set_bind_group(
+                                            1,
+                                            &model_renderer.bone_matrices_bind_group,
+                                            &[bone_offset],
+                                        );
+                                        current_bone_offset = Some(bone_offset);
+                                    }
                                 } else {
-                                    if let Ok(opts_offset) = model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes()) {
-                                        rpass.set_bind_group(0, &model_renderer.globals_bind_group, &[offset, opts_offset]);
+                                    if let Ok(opts_offset) = model_renderer
+                                        .upload_shader_opts_bytes(queue, shader_opts.as_bytes())
+                                    {
+                                        rpass.set_bind_group(
+                                            0,
+                                            &model_renderer.globals_bind_group,
+                                            &[offset, opts_offset],
+                                        );
                                     }
 
-                                    let get_view = |img_id: Option<u32>, fallback_id: u32| -> &wgpu::TextureView {
-                                        let id = img_id.filter(|&id| images.get(id as usize).map(|v: &Option<ImageEntry>| v.is_some()).unwrap_or(false)).unwrap_or(fallback_id);
-                                        let entry = images[id as usize].as_ref().unwrap();
-                                        let ai = entry.atlas_index.unwrap_or(0);
-                                        &atlases[ai as usize].texture.0.view
+                                    let (albedo, pbr, normal, ao, emissive) = material_texture_data
+                                        .unwrap_or_else(|| {
+                                            panic!(
+                                                "[spot][render] material textures missing after resolution for instanced mesh {}",
+                                                part.id
+                                            )
+                                        });
+                                    let material_key = MaterialBindGroupKey {
+                                        atlas_indices: [
+                                            albedo.0, pbr.0, normal.0, ao.0, emissive.0,
+                                        ],
                                     };
-
-                                    let tex_bg = model_renderer.create_texture_bind_group(
-                                        device, 
-                                        get_view(part.material.albedo, white_image_id),
-                                        get_view(part.material.pbr, black_image_id),
-                                        get_view(part.material.normal, normal_image_id),
-                                        get_view(part.material.occlusion, white_image_id),
-                                        get_view(part.material.emissive, black_image_id)
-                                    );
-                                    rpass.set_bind_group(1, &tex_bg, &[]);
-
-                                    rpass.set_bind_group(2, &model_renderer.bone_matrices_bind_group, &[bone_offset]);
-
-                                    let env_bg = model_renderer.create_environment_bind_group(
+                                    let tex_bg = model_renderer.texture_bind_group_for_atlases(
                                         device,
-                                        shadow_view,
-                                        irradiance_view,
-                                        prefiltered_view,
-                                        brdf_lut_view,
+                                        material_key,
+                                        [albedo.2, pbr.2, normal.2, ao.2, emissive.2],
                                     );
-                                    rpass.set_bind_group(3, &env_bg, &[]);
+                                    if current_material_key != Some(material_key) {
+                                        rpass.set_bind_group(1, tex_bg, &[]);
+                                        current_material_key = Some(material_key);
+                                    }
+
+                                    if current_bone_offset != Some(bone_offset) {
+                                        rpass.set_bind_group(
+                                            2,
+                                            &model_renderer.bone_matrices_bind_group,
+                                            &[bone_offset],
+                                        );
+                                        current_bone_offset = Some(bone_offset);
+                                    }
+                                    if !environment_bound {
+                                        rpass.set_bind_group(3, config.environment_bind_group, &[]);
+                                        environment_bound = true;
+                                    }
                                 }
 
-                                rpass.draw_indexed(0..mesh.index_count, 0, 0..transforms.len() as u32);
+                                rpass.draw_indexed(
+                                    0..mesh.index_count,
+                                    0,
+                                    0..transforms.len() as u32,
+                                );
                             }
                         }
                     }
@@ -493,15 +841,17 @@ impl Graphics {
     pub fn draw_context(
         &mut self,
         surface: &wgpu::Surface<'_>,
-        context: &Context,
+        ctx: &mut Context,
     ) -> Result<(), wgpu::SurfaceError> {
-        let _ = self.process_registrations();
-        self.draw_drawables_with_context(
-            surface,
-            context.draw_list(),
-            context.scale_factor(),
-            context,
-        )
+        self.sync_assets(ctx).map_err(|e| {
+            eprintln!("[spot][graphics] sync_assets failed: {:?}", e);
+            wgpu::SurfaceError::Lost
+        })?;
+        let _ = self.process_registrations(ctx);
+        let draws = ctx.draw_list().to_vec();
+        self.process_image_commands(ctx, &draws);
+        let sf = ctx.scale_factor();
+        self.draw_drawables_with_context(surface, &draws, sf, ctx)
     }
 
     fn draw_drawables_with_context(
@@ -509,24 +859,24 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         drawables: &[DrawCommand],
         scale_factor: f64,
-        context: &Context,
+        ctx: &mut Context,
     ) -> Result<(), wgpu::SurfaceError> {
-        let (_lw, _lh) = context.window_logical_size();
+        let (_lw, _lh) = ctx.window_logical_size();
         let sf = if scale_factor.is_finite() && scale_factor > 0.0 {
             scale_factor
         } else {
             1.0
         };
         // No need to resize here anymore, we'll do it in draw_drawables_internal after getting the texture
-        self.draw_drawables_internal(surface, drawables, sf, Some(context))
+        self.draw_drawables_internal(surface, drawables, sf, Some(ctx))
     }
 
-    fn draw_drawables_internal(
+    pub(crate) fn draw_drawables_internal(
         &mut self,
         surface: &wgpu::Surface<'_>,
         drawables: &[DrawCommand],
         scale_factor: f64,
-        context: Option<&Context>,
+        mut ctx: Option<&mut Context>,
     ) -> Result<(), wgpu::SurfaceError> {
         let frame = match surface.get_current_texture() {
             Ok(f) => f,
@@ -535,80 +885,84 @@ impl Graphics {
                 return Err(e);
             }
         };
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("command_encoder"),
-        });
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("command_encoder"),
+            });
 
         self.model_renderer.begin_frame();
         self.image_renderer.begin_frame();
-
 
         let width = self.config.width;
         let height = self.config.height;
 
         // 1. Shadow Pass (3D)
-        if let Some(ctx) = context {
-            if !ctx.draw_list_3d.is_empty() {
-                let mut shadow_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("shadow_encoder"),
-                });
-                {
-                    let mut rpass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("shadow_pass"),
-                        color_attachments: &[],
-                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &self.shadow_view,
-                            depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(1.0),
-                                store: wgpu::StoreOp::Store,
-                            }),
-                            stencil_ops: None,
-                        }),
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                        multiview_mask: None,
+        if let Some(ref mut ctx) = ctx
+            && !ctx.runtime.draw_list_3d.is_empty()
+        {
+            let mut shadow_encoder =
+                self.device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("shadow_encoder"),
                     });
-                    
-                    Self::render_3d_internal(
-                        &mut self.model_renderer,
-                        &self.queue,
-                        &self.device,
-                        &mut self.scene_globals,
-                        &self.models,
-                        &self.skins,
-                        &self.images,
-                        &self.atlases,
-                        &self.model_pipeline,
-                        &self.instanced_model_pipeline,
-                        &self.shadow_pipeline,
-                        &self.instanced_shadow_pipeline,
-                        &self.model_pipelines,
-                        self.white_image_id,
-                        self.black_image_id,
-                        self.normal_image_id,
-                        &self.shadow_view,
-                        &self.irradiance_view,
-                        &self.prefiltered_view,
-                        &self.brdf_lut_view,
-                        &mut rpass,
-                        ctx,
-                        true,
+            {
+                let mut rpass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("shadow_pass"),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.shadow_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+
+                Self::render_3d_internal(
+                    &mut self.model_renderer,
+                    &self.queue,
+                    &self.device,
+                    &mut self.scene_globals,
+                    &self.gpu_models,
+                    &self.gpu_skins,
+                    &ctx.registry.images,
+                    &self.atlases,
+                    Render3DConfig {
+                        model_pipeline: &self.model_pipeline,
+                        instanced_model_pipeline: &self.instanced_model_pipeline,
+                        shadow_pipeline: &self.shadow_pipeline,
+                        instanced_shadow_pipeline: &self.instanced_shadow_pipeline,
+                        model_pipelines: &self.model_pipelines,
+                        instanced_model_pipelines: &self.instanced_model_pipelines,
+                        white_image_id: self.white_image_id,
+                        black_image_id: self.black_image_id,
+                        normal_image_id: self.normal_image_id,
+                        environment_bind_group: &self.environment_bind_group,
                         width,
                         height,
-                    );
-                }
-                self.queue.submit(std::iter::once(shadow_encoder.finish()));
+                    },
+                    &mut rpass,
+                    ctx,
+                    true,
+                );
             }
+            self.queue.submit(std::iter::once(shadow_encoder.finish()));
         }
-
-        let width = self.config.width;
-        let height = self.config.height;
 
         // 2. Main Color Pass
         {
-            self.resolve_drawables(drawables, width, height);
-            
+            if let Some(ref mut ctx) = ctx {
+                self.resolve_drawables(ctx, drawables, width, height);
+            }
+
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -621,7 +975,6 @@ impl Graphics {
                             g: 0.0,
                             b: 0.0,
                             a: if self.transparent { 0.0 } else { 1.0 },
-
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -640,59 +993,56 @@ impl Graphics {
             });
 
             // Draw 3D
-            if let Some(ctx) = context {
+            if let Some(ref mut ctx) = ctx {
                 Self::render_3d_internal(
                     &mut self.model_renderer,
                     &self.queue,
                     &self.device,
                     &mut self.scene_globals,
-                    &self.models,
-                    &self.skins,
-                    &self.images,
+                    &self.gpu_models,
+                    &self.gpu_skins,
+                    &ctx.registry.images,
                     &self.atlases,
-                    &self.model_pipeline,
-                    &self.instanced_model_pipeline,
-                    &self.shadow_pipeline,
-                    &self.instanced_shadow_pipeline,
-                    &self.model_pipelines,
-                    self.white_image_id,
-                    self.black_image_id,
-                    self.normal_image_id,
-                    &self.shadow_view,
-                    &self.irradiance_view,
-                    &self.prefiltered_view,
-                    &self.brdf_lut_view,
+                    Render3DConfig {
+                        model_pipeline: &self.model_pipeline,
+                        instanced_model_pipeline: &self.instanced_model_pipeline,
+                        shadow_pipeline: &self.shadow_pipeline,
+                        instanced_shadow_pipeline: &self.instanced_shadow_pipeline,
+                        model_pipelines: &self.model_pipelines,
+                        instanced_model_pipelines: &self.instanced_model_pipelines,
+                        white_image_id: self.white_image_id,
+                        black_image_id: self.black_image_id,
+                        normal_image_id: self.normal_image_id,
+                        environment_bind_group: &self.environment_bind_group,
+                        width,
+                        height,
+                    },
                     &mut rpass,
                     ctx,
                     false,
-                    width,
-                    height,
                 );
             }
 
             // Draw 2D
             let lw = width as f32 / scale_factor as f32;
             let lh = height as f32 / scale_factor as f32;
-            let screen_size_data = [
-                2.0 / lw,
-                2.0 / lh,
-                1.0 / lw,
-                1.0 / lh,
-            ];
+            let screen_size_data = [2.0 / lw, 2.0 / lh, 1.0 / lw, 1.0 / lh];
 
             Self::render_batches_internal(
                 &mut self.image_renderer,
                 &self.queue,
-                &self.atlases,
-                &self.image_pipelines,
-                &self.default_pipeline,
                 &mut self.batch,
                 &mut self.resolved_draws,
                 &mut rpass,
-                screen_size_data,
-                width,
-                height,
-                scale_factor,
+                RenderConfig {
+                    screen_size_data,
+                    width,
+                    height,
+                    sf: scale_factor,
+                    atlases: &self.atlases,
+                    image_pipelines: &self.image_pipelines,
+                    default_pipeline: &self.default_pipeline,
+                },
             );
         }
 

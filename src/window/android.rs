@@ -1,13 +1,9 @@
-use android_activity::{AndroidApp, MainEvent, PollEvent};
-use crate::{
-    Pt, take_quit_request,
-    take_scene_switch_request, with_graphics,
-    ScenePayloadTypeId,
-};
-use std::rc::Rc;
-use std::time::{Duration, Instant};
 use super::App;
 use crate::platform;
+use crate::scenes::take_quit_request;
+use crate::Pt;
+use android_activity::{AndroidApp, MainEvent, PollEvent};
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "sensors")]
 pub(crate) struct AndroidSensorState {
@@ -27,11 +23,7 @@ pub(crate) struct AndroidSensorState {
 }
 
 #[cfg(feature = "sensors")]
-unsafe extern "C" fn sensor_callback(
-    _fd: i32,
-    _events: i32,
-    data: *mut std::ffi::c_void,
-) -> i32 {
+unsafe extern "C" fn sensor_callback(_fd: i32, _events: i32, data: *mut std::ffi::c_void) -> i32 {
     let state = unsafe { &*(data as *const AndroidSensorState) };
     let mut buffer = state.event_buffer.lock().unwrap();
     unsafe {
@@ -66,70 +58,98 @@ impl PlatformData {
 impl App {
     fn setup_native_window_surface(&mut self, window: &ndk::native_window::NativeWindow) {
         let size = (window.width() as u32, window.height() as u32);
-        
+        if size.0 == 0 || size.1 == 0 {
+            return;
+        }
+
+        eprintln!(
+            "[spot][android] Setting up surface for window: {}x{}",
+            size.0, size.1
+        );
+
         // Force RGBA_8888 for better transparency support
         unsafe {
             ndk_sys::ANativeWindow_setBuffersGeometry(window.ptr().as_ptr() as *mut _, 0, 0, 1);
         }
 
-        match unsafe {
-            self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: rwh_06::RawDisplayHandle::Android(rwh_06::AndroidDisplayHandle::new()),
-                raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
-                    let handle = rwh_06::AndroidNdkWindowHandle::new(std::ptr::NonNull::new(window.ptr().as_mut() as *mut _ as *mut _).unwrap());
-                    handle
-                }),
-            })
-        } {
-            Ok(s) => {
-                let surface = unsafe {
-                    std::mem::transmute::<
-                        wgpu::Surface<'_>,
-                        wgpu::Surface<'static>,
-                    >(s)
-                };
-                self.surface = Some(surface);
+        let surface = unsafe {
+            self.instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: rwh_06::RawDisplayHandle::Android(
+                        rwh_06::AndroidDisplayHandle::new(),
+                    ),
+                    raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
+                        let handle = rwh_06::AndroidNdkWindowHandle::new(
+                            std::ptr::NonNull::new(window.ptr().as_mut() as *mut _ as *mut _)
+                                .unwrap(),
+                        );
+                        handle
+                    }),
+                })
+                .expect("failed to create surface")
+        };
 
-                if let Some(surface) = self.surface.as_ref() {
-                    with_graphics(|g| g.resize(surface, size.0, size.1));
-                }
-                
-                self.context.set_window_logical_size(
+        let surface =
+            unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(surface) };
+        self.surface = Some(surface);
+
+        if let Some(surface) = self.surface.as_ref() {
+            // Check if we can reuse an existing graphics device
+            if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                // Increment GPU generation to force asset sync after re-init/resume
+                self.ctx.registry.gpu_generation += 1;
+
+                g.resize(surface, size.0, size.1);
+                eprintln!("[spot][android] Reusing existing graphics device for new surface.");
+                // Graphics already initialized and reconfigured, no need for heavy init
+                self.init_state = platform::GraphicsInitState::Ready(Box::new(None));
+
+                self.ctx.set_window_logical_size(
                     Pt::from_physical_px(size.0 as f64, self.scale_factor),
                     Pt::from_physical_px(size.1 as f64, self.scale_factor),
                 );
-                
-                // Initialize graphics if not started
-                if let platform::GraphicsInitState::NotStarted = self.init_state {
-                    platform::begin_graphics_init(
-                        &mut self.init_state,
-                        &self.instance,
-                        self.surface.as_ref().unwrap(),
-                        size.0,
-                        size.1,
-                        true, // Force transparency capability for Android
-                    );
-                }
-                eprintln!("[spot][android] Surface setup successfully: {}x{}", size.0, size.1);
-            }
-            Err(e) => {
-                eprintln!("[spot][android] Failed to create surface: {:?}", e);
+                return;
             }
         }
+
+        // Increment GPU generation to force asset sync after re-init
+        self.ctx.registry.gpu_generation += 1;
+
+        // If we get here, we don't have a global device yet, so start fresh init
+        self.init_state = platform::GraphicsInitState::NotStarted;
+        platform::begin_graphics_init(
+            &mut self.init_state,
+            &self.instance,
+            self.surface.as_ref().unwrap(),
+            size.0,
+            size.1,
+            self.window_config.transparent,
+        );
+
+        self.ctx.set_window_logical_size(
+            Pt::from_physical_px(size.0 as f64, self.scale_factor),
+            Pt::from_physical_px(size.1 as f64, self.scale_factor),
+        );
+
+        eprintln!("[spot][android] Graphics initialization started for new surface.");
     }
 
     pub(crate) fn run(&mut self, app: AndroidApp) {
         // Initialize Android-specific features (JVM, Activity, floating window service registration)
         crate::android::init(app.clone());
-        
+
         // Initialize scale factor based on screen density (160 dpi is baseline 1.0)
         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
-        self.context.set_scale_factor(self.scale_factor);
+        self.ctx.set_scale_factor(self.scale_factor);
         self.platform.internal_data_path = app.internal_data_path();
-        
-        eprintln!("[spot][android] entering run loop. scale_factor: {}", self.scale_factor);
-        
-        self.previous = Some(Instant::now());
+
+        eprintln!(
+            "[spot][android] entering run loop. scale_factor: {}",
+            self.scale_factor
+        );
+
+        self.timing.reset();
+        let mut frame_count = 0u64;
 
         loop {
             // Check for new floating surface from JNI
@@ -137,39 +157,71 @@ impl App {
                 let jvm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _) }.unwrap();
                 let env = jvm.attach_current_thread().unwrap();
                 let surface_ptr = unsafe {
-                    ndk_sys::ANativeWindow_fromSurface(env.get_native_interface(), surface_obj.as_obj().as_raw())
+                    ndk_sys::ANativeWindow_fromSurface(
+                        env.get_native_interface(),
+                        surface_obj.as_obj().as_raw(),
+                    )
                 };
                 if !surface_ptr.is_null() {
-                    let native_window = unsafe { ndk::native_window::NativeWindow::from_ptr(std::ptr::NonNull::new(surface_ptr).unwrap()) };
+                    let native_window = unsafe {
+                        ndk::native_window::NativeWindow::from_ptr(
+                            std::ptr::NonNull::new(surface_ptr).unwrap(),
+                        )
+                    };
                     let size = (native_window.width() as u32, native_window.height() as u32);
-                    
+
                     // Force RGBA_8888 for floating window transparency
                     unsafe {
                         ndk_sys::ANativeWindow_setBuffersGeometry(surface_ptr, 0, 0, 1);
                     }
 
                     match unsafe {
-                        self.instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                            raw_display_handle: rwh_06::RawDisplayHandle::Android(rwh_06::AndroidDisplayHandle::new()),
-                            raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
-                                rwh_06::AndroidNdkWindowHandle::new(std::ptr::NonNull::new(surface_ptr as *mut _).unwrap())
-                            }),
-                        })
+                        self.instance
+                            .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                                raw_display_handle: rwh_06::RawDisplayHandle::Android(
+                                    rwh_06::AndroidDisplayHandle::new(),
+                                ),
+                                raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
+                                    rwh_06::AndroidNdkWindowHandle::new(
+                                        std::ptr::NonNull::new(surface_ptr as *mut _).unwrap(),
+                                    )
+                                }),
+                            })
                     } {
                         Ok(s) => {
                             eprintln!("[spot][android][floating] surface created successfully");
-                            let surface = unsafe { std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s) };
+                            let surface = unsafe {
+                                std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
+                            };
                             self.platform.floating_surface = Some(surface);
                             if let Some(surface) = self.platform.floating_surface.as_ref() {
-                                with_graphics(|g| g.resize(surface, size.0, size.1));
+                                if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                                    g.resize(surface, size.0, size.1);
+                                }
                             }
                             // Also update context size to match floating window for now
-                            self.context.set_window_logical_size(
+                            self.ctx.set_window_logical_size(
                                 Pt::from_physical_px(size.0 as f64, self.scale_factor),
                                 Pt::from_physical_px(size.1 as f64, self.scale_factor),
                             );
                         }
-                        Err(e) => eprintln!("[spot][android][floating] surface creation failed: {:?}", e),
+                        Err(e) => {
+                            eprintln!("[spot][android][floating] surface creation failed: {:?}", e)
+                        }
+                    }
+                }
+            }
+
+            if self.surface.is_none() {
+                if let Some(window) = app.native_window() {
+                    let size = (window.width() as u32, window.height() as u32);
+                    if size.0 > 0 && size.1 > 0 {
+                        eprintln!(
+                            "[spot][android] Recovering missing surface from current native window: {}x{}",
+                            size.0, size.1
+                        );
+                        self.platform.native_window = Some(window.clone());
+                        self.setup_native_window_surface(&window);
                     }
                 }
             }
@@ -194,8 +246,10 @@ impl App {
                             let size = (window.width() as u32, window.height() as u32);
                             eprintln!("[spot][android] WindowResized: {}x{}", size.0, size.1);
                             if size.0 > 0 && size.1 > 0 {
-                                with_graphics(|g| g.resize(surface, size.0, size.1));
-                                self.context.set_window_logical_size(
+                                if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                                    g.resize(surface, size.0, size.1);
+                                }
+                                self.ctx.set_window_logical_size(
                                     Pt::from_physical_px(size.0 as f64, self.scale_factor),
                                     Pt::from_physical_px(size.1 as f64, self.scale_factor),
                                 );
@@ -205,43 +259,38 @@ impl App {
                     PollEvent::Main(MainEvent::Resume { .. }) => {
                         eprintln!("[spot][android] Resume");
                         self.platform.floating_surface = None;
-                        
-                        // Force surface reconfiguration on resume if we have one
-                        if let (Some(surface), Some(window)) = (self.surface.as_ref(), self.platform.native_window.clone()) {
-                             let size = (window.width() as u32, window.height() as u32);
-                             eprintln!("[spot][android] Resuming with surface: {}x{}", size.0, size.1);
-                             if size.0 > 0 && size.1 > 0 {
-                                 with_graphics(|g| g.resize(surface, size.0, size.1));
 
-                                 // CRITICAL: Update context logical size so components like UiManager
-                                 // have the correct dimensions immediately on resume.
-                                 self.context.set_window_logical_size(
-                                    Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                                    Pt::from_physical_px(size.1 as f64, self.scale_factor),
-                                 );
-                             }
-                        } else {
-                             eprintln!("[spot][android] Resume: No surface or window available yet");
-                        }
-
-                        // Switch back to original scene only if we were in a floating scene or need first-time init.
-                        // This prevents resetting the game state (and leaking resources) on every sleep/wake cycle.
-                        if with_graphics(|_| ()).is_some() {
-                            if self.is_floating_scene || self.spot.is_none() {
-                                eprintln!("[spot][android] Re-initializing main scene (was_floating: {})", self.is_floating_scene);
-                                if let Some(spot) = self.spot.take() {
-                                    spot.remove();
-                                }
-                                self.spot = Some((self.scene_factory)(&mut self.context));
-                                self.is_floating_scene = false;
+                        // IMPORTANT: On Android, the native window might be same pointer but its 
+                        // buffers could be reset or it might need format re-setting after wake up.
+                        if let Some(window) = self.platform.native_window.clone() {
+                            unsafe {
+                                ndk_sys::ANativeWindow_setBuffersGeometry(window.ptr().as_ptr() as *mut _, 0, 0, 1);
                             }
+
+                            // Recreate the surface to ensure it's fresh and matched to the resumed window state.
+                            // This addresses the "occasional blank screen" issue after a few frames.
+                            eprintln!("[spot][android] Re-creating surface on resume to ensure stability");
+                            self.setup_native_window_surface(&window);
+
+                            // Reset previous time to avoid huge dt jump after sleep
+                            self.timing.reset();
+                        } else {
+                            eprintln!("[spot][android] Resume: No native window available. Waiting for InitWindow.");
                         }
 
                         if let Some(service_class) = crate::android::floating_window_service_class() {
                             crate::android::stop_service(service_class);
                         }
-                        if let Some(spot) = self.spot.as_mut() {
-                            spot.resumed(&mut self.context);
+
+                        if self.ctx.runtime.audio.is_none() {
+                            match crate::audio::AudioSystem::new() {
+                                Ok(audio) => self.ctx.runtime.audio = Some(audio),
+                                Err(e) => eprintln!("[spot][android][audio] initialization failed: {:?}", e),
+                            }
+                        }
+
+                        if let Some(spot) = self.scene.spot_mut() {
+                            spot.resumed(&mut self.ctx);
                         }
                         #[cfg(feature = "sensors")]
                         self.init_sensors();
@@ -250,28 +299,26 @@ impl App {
                         eprintln!("[spot][android] Pause");
 
                         // Switch to floating scene if registered and graphics are ready
-                        if with_graphics(|_| ()).is_some() {
+                        if self.ctx.runtime.graphics.is_some() {
                             if let Some(factory) = crate::android::get_floating_scene_factory() {
-                                if let Some(spot) = self.spot.take() {
-                                    spot.remove();
-                                }
-                                self.spot = Some(factory(&mut self.context));
-                                self.is_floating_scene = true;
+                                self.scene.remove_current(&mut self.ctx);
+                                self.scene.set_active_scene(factory(&mut self.ctx));
+                                self.scene.mark_floating();
                             }
                         }
 
                         if let Some(service_class) = crate::android::floating_window_service_class() {
                             crate::android::start_service(service_class);
                         }
-                        if let Some(spot) = self.spot.as_mut() {
-                            spot.suspended(&mut self.context);
+                        if let Some(spot) = self.scene.spot_mut() {
+                            spot.suspended(&mut self.ctx);
                         }
                         #[cfg(feature = "sensors")]
                         self.disable_sensors();
                     }
                     PollEvent::Main(MainEvent::ConfigChanged { .. }) => {
                         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
-                        self.context.set_scale_factor(self.scale_factor);
+                        self.ctx.set_scale_factor(self.scale_factor);
                         eprintln!("[spot][android] ConfigChanged scale_factor: {}", self.scale_factor);
                     }
                     PollEvent::Main(MainEvent::Destroy) => {
@@ -299,8 +346,8 @@ impl App {
                                             let id = pointer.pointer_id() as u64;
                                             let x = Pt::from_physical_px(pointer.x() as f64, self.scale_factor);
                                             let y = Pt::from_physical_px(pointer.y() as f64, self.scale_factor);
-                                            
-                                            self.context.input_mut().handle_touch_raw(id, (x, y), phase);
+
+                                            self.ctx.input_mut().handle_touch_raw(id, (x, y), phase);
                                             android_activity::InputStatus::Handled
                                         }
                                         _ => android_activity::InputStatus::Unhandled,
@@ -314,11 +361,33 @@ impl App {
                 }
             });
 
-            // If we have a surface and graphics is not initialized yet, try to finalize it
-            if self.surface.is_some() && self.spot.is_none() {
-                if platform::finalize_graphics(&mut self.init_state) {
-                    let spot = (self.scene_factory)(&mut self.context);
-                    self.spot = Some(spot);
+            // Smart Scene Restoration
+            // We recreate the spot IF:
+            // a) New graphics device was just created (must reload assets).
+            // b) We were using a floating scene (must restore main scene).
+            // c) The spot is missing.
+            if self.surface.is_some() {
+                let graphics_opt = platform::finalize_graphics(&mut self.init_state);
+                let graphics_finalized = graphics_opt.is_some();
+                let was_floating_scene = self.scene.is_floating_scene();
+                if let Some(g) = graphics_opt {
+                    self.ctx.runtime.graphics = Some(g);
+                }
+                if graphics_finalized || was_floating_scene || self.scene.needs_initial_scene() {
+                    if self.ctx.runtime.graphics.is_some() {
+                        self.scene.restore_root_scene(&mut self.ctx);
+
+                        if graphics_finalized {
+                            eprintln!("[spot][android] Scene recreated for new graphics device.");
+                        } else if was_floating_scene {
+                            eprintln!("[spot][android] Main scene restored from floating state.");
+                        } else {
+                            eprintln!("[spot][android] Scene initialized.");
+                        }
+
+                        self.scene.clear_floating();
+                        self.timing.reset();
+                    }
                 }
             }
 
@@ -332,56 +401,141 @@ impl App {
                     };
                     for event in events {
                         match event.type_ {
-                            1 => { // ASENSOR_TYPE_ACCELEROMETER
-                                let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
-                                let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
-                                let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
-                                self.context.input_mut().handle_accelerometer(x, y, z);
+                            1 => {
+                                // ASENSOR_TYPE_ACCELEROMETER
+                                let x = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .x;
+                                let y = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .y;
+                                let z = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .z;
+                                self.ctx.input_mut().handle_accelerometer(x, y, z);
                             }
-                            2 => { // ASENSOR_TYPE_MAGNETIC_FIELD
-                                let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
-                                let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
-                                let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
-                                self.context.input_mut().handle_magnetometer(x, y, z);
+                            2 => {
+                                // ASENSOR_TYPE_MAGNETIC_FIELD
+                                let x = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .x;
+                                let y = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .y;
+                                let z = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .z;
+                                self.ctx.input_mut().handle_magnetometer(x, y, z);
                             }
-                            4 => { // ASENSOR_TYPE_GYROSCOPE
-                                let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
-                                let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
-                                let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
-                                self.context.input_mut().handle_gyroscope(x, y, z);
+                            4 => {
+                                // ASENSOR_TYPE_GYROSCOPE
+                                let x = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .x;
+                                let y = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .y;
+                                let z = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .z;
+                                self.ctx.input_mut().handle_gyroscope(x, y, z);
                             }
-                            11 => { // ASENSOR_TYPE_ROTATION_VECTOR
-                                let x = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.x;
-                                let y = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.y;
-                                let z = event.__bindgen_anon_1.__bindgen_anon_1.vector.__bindgen_anon_1.__bindgen_anon_1.z;
-                                let w = event.__bindgen_anon_1.__bindgen_anon_1.data[3]; 
-                                self.context.input_mut().handle_rotation(x, y, z, w);
+                            11 => {
+                                // ASENSOR_TYPE_ROTATION_VECTOR
+                                let x = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .x;
+                                let y = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .y;
+                                let z = event
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .vector
+                                    .__bindgen_anon_1
+                                    .__bindgen_anon_1
+                                    .z;
+                                let w = event.__bindgen_anon_1.__bindgen_anon_1.data[3];
+                                self.ctx.input_mut().handle_rotation(x, y, z, w);
                             }
-                            17 => { // ASENSOR_TYPE_STEP_DETECTOR
-                                self.context.input_mut().handle_step_detector();
+                            17 => {
+                                // ASENSOR_TYPE_STEP_DETECTOR
+                                self.ctx.input_mut().handle_step_detector();
                             }
-                            18 => { // ASENSOR_TYPE_STEP_COUNTER
+                            18 => {
+                                // ASENSOR_TYPE_STEP_COUNTER
                                 let count = event.__bindgen_anon_1.__bindgen_anon_1.data[0];
-                                
+                                eprintln!("[spot][android] Step counter event: count={}", count);
+
                                 let state = self.platform.sensor_state.as_mut().unwrap();
                                 let current_day = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
                                     .map(|d| d.as_secs() / 86400)
                                     .unwrap_or(0);
-                                
-                                if state.initial_hardware_count < 0.0 || current_day > state.last_system_day || count < state.last_hardware_count {
+
+                                if state.initial_hardware_count < 0.0
+                                    || current_day > state.last_system_day
+                                    || count < state.last_hardware_count
+                                {
                                     state.initial_hardware_count = count;
                                     state.last_system_day = current_day;
-                                    
+
                                     // Save immediately on reset for robustness
                                     let steps_file = state.internal_data_path.join("steps.txt");
-                                    let content = format!("{} {} {}", state.initial_hardware_count, state.last_system_day, count);
+                                    let content = format!(
+                                        "{} {} {}",
+                                        state.initial_hardware_count, state.last_system_day, count
+                                    );
                                     let _ = std::fs::write(steps_file, content);
                                 }
                                 state.last_hardware_count = count;
-                                
+
                                 let steps_today = count - state.initial_hardware_count;
-                                self.context.input_mut().handle_step_counter(steps_today);
+                                self.ctx.input_mut().handle_step_counter(steps_today);
                             }
                             _ => {}
                         }
@@ -390,73 +544,61 @@ impl App {
             }
 
             // Fixed update loop
-            let now = Instant::now();
-            if let Some(previous) = self.previous.replace(now) {
-                let elapsed = now.duration_since(previous);
-                self.lag = self.lag.saturating_add(elapsed);
-
-                let mut updates = 0;
-                while self.lag >= self.fixed_dt && updates < 4 {
-                    if let Some(spot) = self.spot.as_mut() {
-                        spot.update(&mut self.context, self.fixed_dt);
-                    }
-                    self.context.input_mut().end_frame();
-                    self.lag = self.lag.saturating_sub(self.fixed_dt);
-                    updates += 1;
+            let frame_start = Instant::now();
+            self.timing.run_updates(4, |dt| {
+                if let Some(spot) = self.scene.spot_mut() {
+                    spot.update(&mut self.ctx, dt);
                 }
-                if self.lag >= self.fixed_dt {
-                    // Spiral of death prevention
-                    self.lag = std::time::Duration::from_millis(0);
-                }
-            }
+                self.ctx.input_mut().end_frame();
+            });
 
             // Draw
-            if self.spot.is_some() {
+            if self.scene.has_active_scene() {
                 // Initialize frame context
-                self.context.begin_frame();
-                if let Some(spot) = self.spot.as_mut() {
-                    spot.draw(&mut self.context);
+                self.ctx.begin_frame();
+                if let Some(spot) = self.scene.spot_mut() {
+                    spot.draw(&mut self.ctx);
                 }
 
                 // Handle scene switch
-                if let Some(request) = take_scene_switch_request() {
-                    if let Some(payload) = request.payload {
-                        self.context.insert_resource_dyn(payload.type_id, payload.value);
-                        self.context.insert_resource(Rc::new(ScenePayloadTypeId(payload.type_id)));
-                    } else if let Some(last) = self.context.remove_resource::<ScenePayloadTypeId>() {
-                        if let Ok(last) = std::rc::Rc::try_unwrap(last) {
-                            self.context.remove_resource_dyn(last.0);
-                        }
-                    }
-                    if let Some(old_spot) = self.spot.take() {
-                        old_spot.remove();
-                    }
-                    self.spot = Some((request.factory)(&mut self.context));
-                    
-                    // Re-draw with the new spot immediately if possible
-                    if let Some(spot) = self.spot.as_mut() {
-                        self.context.begin_frame();
-                        spot.draw(&mut self.context);
+                if self.scene.apply_pending_switch(&mut self.ctx) {
+                    if let Some(spot) = self.scene.spot_mut() {
+                        self.ctx.begin_frame();
+                        spot.draw(&mut self.ctx);
                     }
                 }
 
                 // Render to ACTIVE surface
                 // If floating surface exists, we are in floating mode, prioritize it.
+                let mut graphics = self.ctx.runtime.graphics.take();
                 let draw_result = if let Some(surface) = self.platform.floating_surface.as_ref() {
-                    with_graphics(|g| g.draw_context(surface, &self.context))
+                    graphics
+                        .as_mut()
+                        .map(|g| g.draw_context(surface, &mut self.ctx))
                 } else if let Some(surface) = self.surface.as_ref() {
-                    with_graphics(|g| g.draw_context(surface, &self.context))
+                    graphics
+                        .as_mut()
+                        .map(|g| g.draw_context(surface, &mut self.ctx))
                 } else {
                     None
                 };
+                self.ctx.runtime.graphics = graphics;
 
                 if let Some(Err(e)) = draw_result {
                     match e {
                         wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
-                            eprintln!("[spot][android] Surface error: {:?}. Attempting recovery.", e);
+                            eprintln!(
+                                "[spot][android] Surface error: {:?}. Attempting recovery by re-creating surface.",
+                                e
+                            );
                             if let Some(window) = self.platform.native_window.clone() {
                                 self.setup_native_window_surface(&window);
                             }
+                        }
+                        wgpu::SurfaceError::Timeout => {
+                            eprintln!(
+                                "[spot][android] Surface acquisition timeout. Frame skipped."
+                            );
                         }
                         wgpu::SurfaceError::OutOfMemory => {
                             eprintln!("[spot][android] Out of memory error. Surface dropped.");
@@ -471,13 +613,21 @@ impl App {
                 // Force Android driver to reclaim memory by polling with Wait.
                 // This addresses the memory leak (~0.8MB/10s at 60FPS) observed on Android
                 // even with minimal rendering.
-                with_graphics(|g| g.poll_device(true));
+                if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                    g.poll_device(true);
+                }
 
                 // Throttle to 60 FPS to prevent driver-level memory growth due to high-frequency acquire calls
                 let frame_time = Duration::from_micros(16666);
-                let elapsed = now.elapsed();
+                let elapsed = frame_start.elapsed();
                 if elapsed < frame_time {
                     std::thread::sleep(frame_time - elapsed);
+                }
+
+                // Periodic health check log every 300 frames (~5 seconds)
+                frame_count += 1;
+                if frame_count % 300 == 0 {
+                    eprintln!("[spot][android] Loop alive. Frame: {}", frame_count);
                 }
             }
 
@@ -503,9 +653,13 @@ impl App {
                 let step_detector = ndk_sys::ASensorManager_getDefaultSensor(manager, 17);
                 let step_counter = ndk_sys::ASensorManager_getDefaultSensor(manager, 18);
 
-                let data_path = self.platform.internal_data_path.clone().unwrap_or_else(|| std::path::PathBuf::from("/sdcard"));
+                let data_path = self
+                    .platform
+                    .internal_data_path
+                    .clone()
+                    .unwrap_or_else(|| std::path::PathBuf::from("/sdcard"));
                 let steps_file = data_path.join("steps.txt");
-                
+
                 let mut initial_hardware_count = -1.0f32;
                 let mut last_system_day = 0u64;
                 let mut last_hardware_count = 0.0f32;
@@ -528,7 +682,9 @@ impl App {
                     rot,
                     step_counter,
                     step_detector,
-                    event_buffer: std::sync::Arc::new(std::sync::Mutex::new(Vec::with_capacity(32))),
+                    event_buffer: std::sync::Arc::new(std::sync::Mutex::new(Vec::with_capacity(
+                        32,
+                    ))),
                     initial_hardware_count,
                     last_system_day,
                     last_hardware_count,
@@ -541,9 +697,9 @@ impl App {
                 }
 
                 // We need a stable pointer. Since sensor_state is in an Option in self.platform,
-                // and App (self) is pinned in the run loop's stack, it's mostly safe, 
-                // but let's be careful. Actually, ASensorManager_createEventQueue 
-                // requires a callback and data. 
+                // and App (self) is pinned in the run loop's stack, it's mostly safe,
+                // but let's be careful. Actually, ASensorManager_createEventQueue
+                // requires a callback and data.
                 // We'll store the state first.
                 self.platform.sensor_state = Some(sensor_state);
                 let state_ref = self.platform.sensor_state.as_mut().unwrap();
@@ -594,16 +750,31 @@ impl App {
     pub(crate) fn disable_sensors(&mut self) {
         unsafe {
             if let Some(state) = self.platform.sensor_state.as_ref() {
-                if !state.accel.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.accel); }
-                if !state.mag.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.mag); }
-                if !state.gyro.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.gyro); }
-                if !state.rot.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.rot); }
-                if !state.step_counter.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_counter); }
-                if !state.step_detector.is_null() { ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_detector); }
+                if !state.accel.is_null() {
+                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.accel);
+                }
+                if !state.mag.is_null() {
+                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.mag);
+                }
+                if !state.gyro.is_null() {
+                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.gyro);
+                }
+                if !state.rot.is_null() {
+                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.rot);
+                }
+                if !state.step_counter.is_null() {
+                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_counter);
+                }
+                if !state.step_detector.is_null() {
+                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_detector);
+                }
 
                 // Persist step data
                 let steps_file = state.internal_data_path.join("steps.txt");
-                let content = format!("{} {} {}", state.initial_hardware_count, state.last_system_day, state.last_hardware_count);
+                let content = format!(
+                    "{} {} {}",
+                    state.initial_hardware_count, state.last_system_day, state.last_hardware_count
+                );
                 let _ = std::fs::write(steps_file, content);
             }
         }

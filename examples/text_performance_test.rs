@@ -1,22 +1,20 @@
 fn main() {
-    use spottedcat::{
-        Context, DrawOption, Pt, Spot, Text, WindowConfig, run,
-    };
+    use spottedcat::{Context, DrawOption, Pt, Spot, Text, WindowConfig, run};
 
     struct TextPerformanceSpot {
         texts: Vec<Text>,
     }
 
     impl Spot for TextPerformanceSpot {
-        fn initialize(_context: &mut Context) -> Self {
+        fn initialize(ctx: &mut Context) -> Self {
             const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-            let font_id = spottedcat::register_font(FONT.to_vec());
+            let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
             let mut texts = Vec::new();
 
             // Create multiple texts with different sizes and colors
             for i in 0..10 {
-                let text = Text::new(&format!("Text Line {}", i), font_id)
+                let text = Text::new(format!("Text Line {}", i), font_id)
                     .with_font_size(Pt::from(16.0 + i as f32 * 2.0))
                     .with_color([1.0, 1.0 - i as f32 * 0.1, 0.5, 1.0]);
                 texts.push(text);
@@ -31,17 +29,17 @@ fn main() {
             Self { texts }
         }
 
-        fn draw(&mut self, context: &mut Context) {
+        fn draw(&mut self, ctx: &mut Context) {
             for (i, text) in self.texts.iter().enumerate() {
                 let opts = DrawOption::default()
                     .with_position([Pt::from(50.0), Pt::from(50.0 + i as f32 * 40.0)]);
-                text.draw(context, opts);
+                text.draw(ctx, opts);
             }
         }
 
-        fn update(&mut self, _context: &mut Context, _dt: std::time::Duration) {}
+        fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
 
-        fn remove(&self) {}
+        fn remove(&mut self, _ctx: &mut Context) {}
     }
 
     run::<TextPerformanceSpot>(WindowConfig::default());

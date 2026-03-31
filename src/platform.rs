@@ -2,14 +2,10 @@ use crate::graphics::Graphics;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use std::cell::RefCell;
-#[cfg(not(target_arch = "wasm32"))]
-use std::sync::Mutex;
-use std::sync::OnceLock;
 
 #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
 #[allow(dead_code)]
-pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] =
-    &[wgpu::Backends::PRIMARY];
+pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] = &[wgpu::Backends::PRIMARY];
 
 #[cfg(not(all(not(target_arch = "wasm32"), target_os = "android")))]
 #[allow(dead_code)]
@@ -29,25 +25,17 @@ pub(crate) enum GraphicsInitState {
     NotStarted,
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     Pending,
-    Ready(Option<Graphics>),
+    Ready(Box<Option<Graphics>>),
     Failed,
 }
 
-pub(crate) fn finalize_graphics(init_state: &mut GraphicsInitState) -> bool {
+pub(crate) fn finalize_graphics(init_state: &mut GraphicsInitState) -> Option<Graphics> {
     let GraphicsInitState::Ready(slot) = init_state else {
-        return false;
+        return None;
     };
-    let Some(graphics) = slot.take() else {
-        return false;
-    };
-    if crate::with_graphics(|_| ()).is_some() {
-        return true; // Already initialized
-    }
-    if set_global_graphics(graphics).is_err() {
-        // If it failed but with_graphics is still None, something is very wrong, but let's not panic here if possible
-        return false;
-    }
-    true
+    let graphics = slot.take()?;
+    eprintln!("[spot][platform] Finalizing graphics...");
+    Some(graphics)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -66,7 +54,7 @@ pub(crate) fn begin_graphics_init(
 
     let graphics_r = block_on(Graphics::new(instance, surface, width, height, transparent));
     match graphics_r {
-        Ok(graphics) => *init_state = GraphicsInitState::Ready(Some(graphics)),
+        Ok(graphics) => *init_state = GraphicsInitState::Ready(Box::new(Some(graphics))),
         Err(e) => {
             eprintln!("[spot][init] Graphics::new failed: {:?}", e);
             *init_state = GraphicsInitState::Failed;
@@ -122,22 +110,22 @@ pub(crate) fn block_on<F: Future>(mut future: F) -> F::Output {
 pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
     #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
     {
-        return wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::GL,
             ..Default::default()
-        });
+        })
     }
     #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
     {
-        return wgpu::Instance::default();
+        wgpu::Instance::default()
     }
 
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
-        return wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
-        });
+        })
     }
 }
 
@@ -157,107 +145,11 @@ pub(crate) fn spawn_graphics_init(
     });
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-static GLOBAL_GRAPHICS: OnceLock<Mutex<Graphics>> = OnceLock::new();
-
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-thread_local! {
-    static GLOBAL_GRAPHICS: RefCell<Option<Graphics>> = RefCell::new(None);
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-static GLOBAL_AUDIO: OnceLock<crate::audio::AudioSystem> = OnceLock::new();
-
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-thread_local! {
-    static GLOBAL_AUDIO: RefCell<Option<crate::audio::AudioSystem>> = RefCell::new(None);
-}
-
-pub(crate) fn set_global_graphics(graphics: Graphics) -> Result<(), Graphics> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        return GLOBAL_GRAPHICS
-            .set(Mutex::new(graphics))
-            .map_err(|m| m.into_inner().unwrap_or_else(|e| e.into_inner()));
+pub(crate) fn try_resume_audio(ctx: &mut crate::Context) {
+    if let Some(a) = ctx.runtime.audio.as_mut() {
+        a.try_resume();
     }
-
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    {
-        return GLOBAL_GRAPHICS.with(|cell| {
-            let mut slot = cell.borrow_mut();
-            if slot.is_some() {
-                Err(graphics)
-            } else {
-                *slot = Some(graphics);
-                Ok(())
-            }
-        });
-    }
-}
-
-pub(crate) fn set_global_audio(
-    audio: crate::audio::AudioSystem,
-) -> Result<(), crate::audio::AudioSystem> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        return GLOBAL_AUDIO.set(audio);
-    }
-
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    {
-        return GLOBAL_AUDIO.with(|cell| {
-            let mut slot = cell.borrow_mut();
-            if slot.is_some() {
-                Err(audio)
-            } else {
-                *slot = Some(audio);
-                Ok(())
-            }
-        });
-    }
-}
-
-pub(crate) fn with_graphics<R>(f: impl FnOnce(&mut Graphics) -> R) -> Option<R> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let mutex = GLOBAL_GRAPHICS.get()?;
-        let mut g = mutex.lock().ok()?;
-        return Some(f(&mut g));
-    }
-
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    {
-        return GLOBAL_GRAPHICS.with(|cell| {
-            let mut slot = cell.borrow_mut();
-            let g = slot.as_mut()?;
-            Some(f(g))
-        });
-    }
-}
-
-pub(crate) fn with_audio<R>(f: impl FnOnce(&mut crate::audio::AudioSystem) -> R) -> Option<R> {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let a = GLOBAL_AUDIO.get()?;
-        let mut a_clone = a.clone();
-        return Some(f(&mut a_clone));
-    }
-
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    {
-        return GLOBAL_AUDIO.with(|cell| {
-            let mut slot = cell.borrow_mut();
-            let a = slot.as_mut()?;
-            Some(f(a))
-        });
-    }
-}
-
-/// Attempt to resume the audio stream. Called on user interaction events
-/// to satisfy browser autoplay policy on WASM.
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-pub(crate) fn try_resume_audio() {
-    with_audio(|a| a.try_resume());
 }
 
 pub(crate) fn align_write_texture_bytes(
@@ -268,7 +160,7 @@ pub(crate) fn align_write_texture_bytes(
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
         let align = 256u32;
-        let padded = ((bytes_per_row + align - 1) / align) * align;
+        let padded = bytes_per_row.div_ceil(align) * align;
         if padded == bytes_per_row {
             return (data, bytes_per_row);
         }
@@ -280,13 +172,13 @@ pub(crate) fn align_write_texture_bytes(
             out[dst_off..dst_off + bytes_per_row as usize]
                 .copy_from_slice(&data[src_off..src_off + bytes_per_row as usize]);
         }
-        return (out, padded);
+        (out, padded)
     }
 
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     {
         let _ = height;
-        return (data, bytes_per_row);
+        (data, bytes_per_row)
     }
 }
 
@@ -294,7 +186,7 @@ pub(crate) fn surface_usage(surface_caps: &wgpu::SurfaceCapabilities) -> wgpu::T
     #[cfg(target_os = "android")]
     {
         let _ = surface_caps;
-        return wgpu::TextureUsages::RENDER_ATTACHMENT;
+        wgpu::TextureUsages::RENDER_ATTACHMENT
     }
 
     #[cfg(not(target_os = "android"))]
