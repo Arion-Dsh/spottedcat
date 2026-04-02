@@ -39,6 +39,7 @@ unsafe extern "C" fn sensor_callback(_fd: i32, _events: i32, data: *mut std::ffi
 pub(crate) struct PlatformData {
     pub(crate) native_window: Option<ndk::native_window::NativeWindow>,
     pub(crate) floating_surface: Option<wgpu::Surface<'static>>,
+    pub(crate) redraw_requested: bool,
     #[cfg(feature = "sensors")]
     pub(crate) sensor_state: Option<AndroidSensorState>,
     pub(crate) internal_data_path: Option<std::path::PathBuf>,
@@ -49,6 +50,7 @@ impl PlatformData {
         Self {
             native_window: None,
             floating_surface: None,
+            redraw_requested: false,
             #[cfg(feature = "sensors")]
             sensor_state: None,
             internal_data_path: None,
@@ -57,6 +59,10 @@ impl PlatformData {
 }
 
 impl App {
+    fn request_redraw(&mut self) {
+        self.platform.redraw_requested = true;
+    }
+
     #[cfg(feature = "sensors")]
     fn current_local_epoch_day() -> u64 {
         crate::android::current_local_epoch_day().unwrap_or_else(|| {
@@ -178,6 +184,7 @@ impl App {
         );
 
         eprintln!("[spot][android] Graphics initialization started for new surface.");
+        self.request_redraw();
     }
 
     pub(crate) fn run(&mut self, app: AndroidApp) {
@@ -195,13 +202,14 @@ impl App {
         );
 
         self.timing.reset();
+        self.request_redraw();
         let mut frame_count = 0u64;
 
         loop {
             let has_drawable_scene = self.scene.has_active_scene()
                 && self.ctx.runtime.graphics.is_some()
                 && (self.platform.floating_surface.is_some() || self.surface.is_some());
-            let poll_timeout = if has_drawable_scene {
+            let poll_timeout = if has_drawable_scene && self.platform.redraw_requested {
                 Duration::ZERO
             } else {
                 self.timing
@@ -261,6 +269,7 @@ impl App {
                                 Pt::from_physical_px(size.0 as f64, self.scale_factor),
                                 Pt::from_physical_px(size.1 as f64, self.scale_factor),
                             );
+                            self.request_redraw();
                         }
                         Err(e) => {
                             eprintln!("[spot][android][floating] surface creation failed: {:?}", e)
@@ -310,6 +319,7 @@ impl App {
                                     Pt::from_physical_px(size.0 as f64, self.scale_factor),
                                     Pt::from_physical_px(size.1 as f64, self.scale_factor),
                                 );
+                                self.request_redraw();
                             }
                         }
                     }
@@ -349,6 +359,7 @@ impl App {
                         if let Some(spot) = self.scene.spot_mut() {
                             spot.resumed(&mut self.ctx);
                         }
+                        self.request_redraw();
                         #[cfg(feature = "sensors")]
                         self.init_sensors();
                     }
@@ -377,6 +388,7 @@ impl App {
                         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
                         self.ctx.set_scale_factor(self.scale_factor);
                         eprintln!("[spot][android] ConfigChanged scale_factor: {}", self.scale_factor);
+                        self.request_redraw();
                     }
                     PollEvent::Main(MainEvent::Destroy) => {
                         eprintln!("[spot][android] Destroy");
@@ -444,6 +456,7 @@ impl App {
 
                         self.scene.clear_floating();
                         self.timing.reset();
+                        self.request_redraw();
                     }
                 }
             }
@@ -642,15 +655,19 @@ impl App {
             }
 
             // Fixed update loop
-            self.timing.run_updates(4, |dt| {
+            let updates = self.timing.run_updates(4, |dt| {
                 if let Some(spot) = self.scene.spot_mut() {
                     spot.update(&mut self.ctx, dt);
                 }
                 self.ctx.input_mut().end_frame();
             });
+            if updates > 0 {
+                self.request_redraw();
+            }
 
             // Draw
-            if self.scene.has_active_scene() {
+            if self.scene.has_active_scene() && self.platform.redraw_requested {
+                self.platform.redraw_requested = false;
                 // Initialize frame context
                 self.ctx.begin_frame();
                 if let Some(spot) = self.scene.spot_mut() {
@@ -691,11 +708,13 @@ impl App {
                             if let Some(window) = self.platform.native_window.clone() {
                                 self.setup_native_window_surface(&window);
                             }
+                            self.request_redraw();
                         }
                         wgpu::SurfaceError::Timeout => {
                             eprintln!(
                                 "[spot][android] Surface acquisition timeout. Frame skipped."
                             );
+                            self.request_redraw();
                         }
                         wgpu::SurfaceError::OutOfMemory => {
                             eprintln!("[spot][android] Out of memory error. Surface dropped.");
@@ -703,8 +722,11 @@ impl App {
                         }
                         _ => {
                             eprintln!("[spot][android] Surface draw error: {:?}", e);
+                            self.request_redraw();
                         }
                     }
+                } else {
+                    self.request_redraw();
                 }
 
                 // Force Android driver to reclaim memory by polling with Wait.
