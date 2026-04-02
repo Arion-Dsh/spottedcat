@@ -2,8 +2,10 @@
 
 use crate::DrawOption;
 use crate::ShaderOpts;
+use crate::drawable::{DrawCommand, DrawCommand3D};
 use crate::glyph_cache::GlyphCache;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
+use crate::image::ImageEntry;
 use crate::image_raw::{ImageRenderer, InstanceData};
 use crate::model::Vertex;
 use crate::packer::AtlasPacker;
@@ -122,6 +124,73 @@ pub(crate) struct ResolvedDraw {
     pub layer: i32,
 }
 
+type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
+type MaterialTextureSet<'a> = (
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+    MaterialTextureBinding<'a>,
+);
+
+fn resolve_material_texture<'a>(
+    images: &[Option<ImageEntry>],
+    atlases: &'a [AtlasSlot],
+    img_id: Option<u32>,
+    fallback_id: u32,
+) -> Option<MaterialTextureBinding<'a>> {
+    let id = img_id
+        .filter(|&id| images.get(id as usize).and_then(|v| v.as_ref()).is_some())
+        .unwrap_or(fallback_id);
+    let entry = images.get(id as usize).and_then(|v| v.as_ref())?;
+    let atlas_index = entry.atlas_index?;
+    let view = &atlases.get(atlas_index as usize)?.texture.0.view;
+    let uv_rect = entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+    Some((atlas_index, uv_rect, view))
+}
+
+fn expect_default_material_texture<'a>(
+    images: &[Option<ImageEntry>],
+    atlases: &'a [AtlasSlot],
+    image_id: u32,
+    label: &str,
+) -> MaterialTextureBinding<'a> {
+    resolve_material_texture(images, atlases, Some(image_id), image_id).unwrap_or_else(|| {
+        panic!(
+            "[spot][graphics] default {} texture {} is unavailable during prewarm",
+            label, image_id
+        )
+    })
+}
+
+fn resolve_material_textures<'a>(
+    images: &[Option<ImageEntry>],
+    atlases: &'a [AtlasSlot],
+    part: &crate::model::ModelPart,
+    white_image_id: u32,
+    black_image_id: u32,
+    normal_image_id: u32,
+) -> MaterialTextureSet<'a> {
+    let white = expect_default_material_texture(images, atlases, white_image_id, "white");
+    let black = expect_default_material_texture(images, atlases, black_image_id, "black");
+    let normal_default =
+        expect_default_material_texture(images, atlases, normal_image_id, "normal");
+
+    let albedo = resolve_material_texture(images, atlases, part.material.albedo, white_image_id)
+        .unwrap_or(white);
+    let pbr = resolve_material_texture(images, atlases, part.material.pbr, black_image_id)
+        .unwrap_or(black);
+    let normal = resolve_material_texture(images, atlases, part.material.normal, normal_image_id)
+        .unwrap_or(normal_default);
+    let ao = resolve_material_texture(images, atlases, part.material.occlusion, white_image_id)
+        .unwrap_or(white);
+    let emissive =
+        resolve_material_texture(images, atlases, part.material.emissive, black_image_id)
+            .unwrap_or(black);
+
+    (albedo, pbr, normal, ao, emissive)
+}
+
 pub struct Graphics {
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
@@ -141,6 +210,7 @@ pub struct Graphics {
     pub(crate) resolved_draws: Vec<ResolvedDraw>,
     pub(crate) text_shader_id: u32,
     pub(crate) dirty_assets: bool,
+    pub(crate) pipelines_dirty: bool,
     pub(crate) gpu_generation: u32,
     pub(crate) model_renderer: ModelRenderer,
     pub(crate) model_pipeline: wgpu::RenderPipeline,
@@ -652,6 +722,7 @@ impl Graphics {
             resolved_draws: Vec::with_capacity(10000),
             text_shader_id: 0,
             dirty_assets: true,
+            pipelines_dirty: false,
             gpu_generation: 0, // This will be set by the platform/app
             model_renderer,
             model_pipeline,
@@ -701,7 +772,8 @@ impl Graphics {
         }
 
         for (&id, data) in &ctx.registry.fonts {
-            if let std::collections::hash_map::Entry::Vacant(entry) = self.font_cache.entry(id as u64)
+            if let std::collections::hash_map::Entry::Vacant(entry) =
+                self.font_cache.entry(id as u64)
             {
                 if let Ok(font) = FontArc::try_from_vec(data.clone()) {
                     entry.insert(font);
@@ -715,24 +787,85 @@ impl Graphics {
         }
 
         if self.gpu_models.len() < ctx.registry.models.len() {
-            self.gpu_models.resize_with(ctx.registry.models.len(), || None);
+            self.gpu_models
+                .resize_with(ctx.registry.models.len(), || None);
         }
         for (idx, model_opt) in ctx.registry.models.iter().enumerate() {
             if self.gpu_models[idx].is_some() || model_opt.is_none() {
                 continue;
             }
-            let mesh_data = model_opt.as_ref().expect("mesh present after is_none check");
+            let mesh_data = model_opt
+                .as_ref()
+                .expect("mesh present after is_none check");
             let gpu_mesh = MeshData::new(&self.device, &mesh_data.vertices, &mesh_data.indices);
             gpu_mesh.upload(&self.queue, &mesh_data.vertices, &mesh_data.indices);
             self.gpu_models[idx] = Some(gpu_mesh);
         }
 
-        self.rebuild_atlases(ctx)?;
+        if self.gpu_skins.len() < ctx.registry.skins.len() {
+            self.gpu_skins
+                .resize_with(ctx.registry.skins.len(), || None);
+        }
+        for (idx, skin_opt) in ctx.registry.skins.iter().enumerate() {
+            if self.gpu_skins[idx].is_some() || skin_opt.is_none() {
+                continue;
+            }
+            self.gpu_skins[idx] = skin_opt.clone();
+        }
+
+        self.process_registrations(ctx)?;
         ctx.registry.dirty_assets = false;
         Ok(())
     }
 
+    pub(crate) fn prepare_frame_resources(
+        &mut self,
+        ctx: &mut crate::Context,
+        drawables: &[DrawCommand],
+    ) -> anyhow::Result<()> {
+        for drawable in drawables {
+            if let DrawCommand::Text(text, opts) = drawable {
+                self.ensure_text_layout(ctx, text, opts.scale())?;
+            }
+        }
+
+        if ctx.registry.dirty_assets {
+            self.process_registrations(ctx)?;
+        }
+
+        for command in &ctx.runtime.draw_list_3d {
+            let model = match command {
+                DrawCommand3D::Model(model, ..) | DrawCommand3D::ModelInstanced(model, ..) => model,
+            };
+
+            for part in model.parts.iter() {
+                let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
+                    &ctx.registry.images,
+                    &self.atlases,
+                    part,
+                    self.white_image_id,
+                    self.black_image_id,
+                    self.normal_image_id,
+                );
+                let material_key = crate::graphics::model_raw::MaterialBindGroupKey {
+                    atlas_indices: [albedo.0, pbr.0, normal.0, ao.0, emissive.0],
+                };
+                let _ = self.model_renderer.texture_bind_group_for_atlases(
+                    &self.device,
+                    material_key,
+                    [albedo.2, pbr.2, normal.2, ao.2, emissive.2],
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn sync_assets(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
+        if self.pipelines_dirty {
+            self.rebuild_surface_format_dependent_pipelines(ctx);
+        }
+
         if self.gpu_generation == ctx.registry.gpu_generation {
             if ctx.registry.dirty_assets {
                 self.sync_new_runtime_assets(ctx)?;
@@ -788,7 +921,13 @@ impl Graphics {
             }
         }
 
-        // 5. Clear 3D model bind group caches as they reference old atlas views
+        // 5. Restore Skins
+        self.gpu_skins.clear();
+        for skin_opt in &ctx.registry.skins {
+            self.gpu_skins.push(skin_opt.clone());
+        }
+
+        // 6. Clear 3D model bind group caches as they reference old atlas views
         self.model_renderer.clear_texture_bind_group_cache();
 
         self.gpu_generation = ctx.registry.gpu_generation;
@@ -838,6 +977,7 @@ impl Graphics {
                 old_format, new_fmt
             );
             self.config.format = new_fmt;
+            self.pipelines_dirty = true;
         } else {
             self.config.format = old_format;
         }
@@ -908,11 +1048,15 @@ impl Graphics {
         while ctx.registry.skins.len() <= id as usize {
             ctx.registry.skins.push(None);
         }
+        while self.gpu_skins.len() <= id as usize {
+            self.gpu_skins.push(None);
+        }
         let skin = SkinData {
             bones,
             bone_matrices,
         };
         ctx.registry.skins[id as usize] = Some(skin.clone());
+        self.gpu_skins[id as usize] = Some(skin.clone());
         self.model_renderer.skins.insert(id, skin);
         id
     }
@@ -924,6 +1068,20 @@ impl Graphics {
         matrices: &[[[f32; 4]; 4]],
     ) {
         if let Some(Some(skin)) = ctx.registry.skins.get_mut(skin_id as usize) {
+            for (i, matrix) in matrices.iter().enumerate() {
+                if i < skin.bone_matrices.len() {
+                    skin.bone_matrices[i] = *matrix;
+                }
+            }
+        }
+        if let Some(Some(skin)) = self.gpu_skins.get_mut(skin_id as usize) {
+            for (i, matrix) in matrices.iter().enumerate() {
+                if i < skin.bone_matrices.len() {
+                    skin.bone_matrices[i] = *matrix;
+                }
+            }
+        }
+        if let Some(skin) = self.model_renderer.skins.get_mut(&skin_id) {
             for (i, matrix) in matrices.iter().enumerate() {
                 if i < skin.bone_matrices.len() {
                     skin.bone_matrices[i] = *matrix;

@@ -48,6 +48,230 @@ fn inject_user_hooks(base_template: &str, user_functions: &str) -> String {
 
 #[allow(dead_code)]
 impl Graphics {
+    fn create_default_image_pipeline(&self) -> wgpu::RenderPipeline {
+        let shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("image_shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/image.wgsl").into()),
+            });
+
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("image_pipeline_layout"),
+                bind_group_layouts: &[
+                    &self.image_renderer.texture_bind_group_layout,
+                    &self.image_renderer.user_globals_bind_group_layout,
+                    &self.image_renderer.engine_globals_bind_group_layout,
+                ],
+                immediate_size: 0,
+            });
+
+        self.device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("image_pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[InstanceData::layout()],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::Always,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+    }
+
+    fn create_default_model_pipelines(&self) -> (wgpu::RenderPipeline, wgpu::RenderPipeline) {
+        let model_shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("model_shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/model.wgsl").into()),
+            });
+
+        let model_pipeline_layout =
+            self.device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("model_pipeline_layout"),
+                    bind_group_layouts: &[
+                        &self.model_renderer.globals_bind_group_layout,
+                        &self.model_renderer.texture_bind_group_layout,
+                        &self.model_renderer.bone_matrices_bind_group_layout,
+                        &self.model_renderer.environment_bind_group_layout,
+                    ],
+                    immediate_size: 0,
+                });
+
+        let model_pipeline = self
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("model_pipeline"),
+                layout: Some(&model_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &model_shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[Vertex::layout()],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &model_shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: self.config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            });
+
+        let instanced_model_shader =
+            self.device
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("model_instanced_shader"),
+                    source: wgpu::ShaderSource::Wgsl(
+                        include_str!("../shaders/model_instanced.wgsl").into(),
+                    ),
+                });
+
+        let instanced_model_pipeline =
+            self.device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("instanced_model_pipeline"),
+                    layout: Some(&model_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &instanced_model_shader,
+                        entry_point: Some("vs_main"),
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        buffers: &[
+                            Vertex::layout(),
+                            wgpu::VertexBufferLayout {
+                                array_stride: 64,
+                                step_mode: wgpu::VertexStepMode::Instance,
+                                attributes: &[
+                                    wgpu::VertexAttribute {
+                                        offset: 0,
+                                        shader_location: 5,
+                                        format: wgpu::VertexFormat::Float32x4,
+                                    },
+                                    wgpu::VertexAttribute {
+                                        offset: 16,
+                                        shader_location: 6,
+                                        format: wgpu::VertexFormat::Float32x4,
+                                    },
+                                    wgpu::VertexAttribute {
+                                        offset: 32,
+                                        shader_location: 7,
+                                        format: wgpu::VertexFormat::Float32x4,
+                                    },
+                                    wgpu::VertexAttribute {
+                                        offset: 48,
+                                        shader_location: 8,
+                                        format: wgpu::VertexFormat::Float32x4,
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        front_face: wgpu::FrontFace::Cw,
+                        cull_mode: Some(wgpu::Face::Back),
+                        ..Default::default()
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth24Plus,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Less,
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &instanced_model_shader,
+                        entry_point: Some("fs_main"),
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: self.config.format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+
+        (model_pipeline, instanced_model_pipeline)
+    }
+
+    pub(crate) fn rebuild_surface_format_dependent_pipelines(&mut self, ctx: &crate::Context) {
+        self.default_pipeline = self.create_default_image_pipeline();
+        let (model_pipeline, instanced_model_pipeline) = self.create_default_model_pipelines();
+        self.model_pipeline = model_pipeline;
+        self.instanced_model_pipeline = instanced_model_pipeline;
+
+        self.image_pipelines.clear();
+        self.model_pipelines.clear();
+        self.instanced_model_pipelines.clear();
+        for (&id, source) in &ctx.registry.image_shaders {
+            if id != 0 {
+                self.restore_image_shader(id, source);
+            }
+        }
+        for (&id, source) in &ctx.registry.model_shaders {
+            if id != 0 {
+                self.restore_model_shader(id, source);
+            }
+        }
+
+        self.pipelines_dirty = false;
+    }
+
     pub(crate) fn register_image_shader(&mut self, shader_id: u32, user_functions: &str) -> u32 {
         // Hook-function injection.
         // User provides WGSL code snippets:

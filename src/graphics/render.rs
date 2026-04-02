@@ -6,8 +6,8 @@ use crate::drawable::{DrawCommand, DrawCommand3D};
 use crate::graphics::model_raw::MaterialBindGroupKey;
 use crate::image_raw::InstanceData;
 use crate::pt::Pt;
-use std::time::Instant;
 use std::collections::HashMap;
+use std::time::Instant;
 
 use super::core::{AtlasSlot, Graphics, ResolvedDraw, SkinData};
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
@@ -567,8 +567,11 @@ impl Graphics {
                     let mut bone_offset = 0;
                     if let Some(skin_id) = skin_id_cmd
                         && let Some(Some(skin)) = skins.get(*skin_id as usize)
-                        && let Ok(off) =
-                            model_renderer.bone_offset_for_skin(queue, *skin_id, &skin.bone_matrices)
+                        && let Ok(off) = model_renderer.bone_offset_for_skin(
+                            queue,
+                            *skin_id,
+                            &skin.bone_matrices,
+                        )
                     {
                         bone_offset = off;
                     }
@@ -724,8 +727,11 @@ impl Graphics {
                     let mut bone_offset = 0;
                     if let Some(skin_id) = skin_id_cmd
                         && let Some(Some(skin)) = skins.get(*skin_id as usize)
-                        && let Ok(off) =
-                            model_renderer.bone_offset_for_skin(queue, *skin_id, &skin.bone_matrices)
+                        && let Ok(off) = model_renderer.bone_offset_for_skin(
+                            queue,
+                            *skin_id,
+                            &skin.bone_matrices,
+                        )
                     {
                         bone_offset = off;
                     }
@@ -867,6 +873,10 @@ impl Graphics {
         let _ = self.process_registrations(ctx);
         let draws = std::mem::take(&mut ctx.runtime.draw_list);
         self.process_image_commands(ctx, &draws);
+        self.prepare_frame_resources(ctx, &draws).map_err(|e| {
+            eprintln!("[spot][graphics] prepare_frame_resources failed: {:?}", e);
+            wgpu::SurfaceError::Lost
+        })?;
         let sf = ctx.scale_factor();
         self.draw_drawables_with_context(surface, &draws, sf, ctx)
     }

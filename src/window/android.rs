@@ -604,8 +604,7 @@ impl App {
                                     Some(previous) => {
                                         eprintln!(
                                             "[spot][android] Step counter reset detected: previous={} new={}",
-                                            previous,
-                                            count
+                                            previous, count
                                         );
                                         0
                                     }
@@ -637,16 +636,14 @@ impl App {
                                 Self::persist_step_state(state);
                                 eprintln!(
                                     "[spot][android] Computed steps_today={} yesterday_steps={} using count={}",
-                                    state.today_step_total,
-                                    state.yesterday_step_total,
-                                    count,
+                                    state.today_step_total, state.yesterday_step_total, count,
                                 );
                                 self.ctx
                                     .input_mut()
                                     .handle_step_counter(state.today_step_total as f32);
-                                self.ctx
-                                    .input_mut()
-                                    .handle_yesterday_step_counter(state.yesterday_step_total as f32);
+                                self.ctx.input_mut().handle_yesterday_step_counter(
+                                    state.yesterday_step_total as f32,
+                                );
                             }
                             _ => {}
                         }
@@ -865,25 +862,29 @@ impl App {
                 if !state.accel.is_null() {
                     let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.accel);
                     eprintln!("[spot][android] Enable accelerometer rc={}", rc);
-                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.accel, 20_000);
+                    let rc =
+                        ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.accel, 20_000);
                     eprintln!("[spot][android] Accelerometer event rate rc={}", rc);
                 }
                 if !state.mag.is_null() {
                     let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.mag);
                     eprintln!("[spot][android] Enable magnetometer rc={}", rc);
-                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.mag, 20_000);
+                    let rc =
+                        ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.mag, 20_000);
                     eprintln!("[spot][android] Magnetometer event rate rc={}", rc);
                 }
                 if !state.gyro.is_null() {
                     let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.gyro);
                     eprintln!("[spot][android] Enable gyroscope rc={}", rc);
-                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000);
+                    let rc =
+                        ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000);
                     eprintln!("[spot][android] Gyroscope event rate rc={}", rc);
                 }
                 if !state.rot.is_null() {
                     let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.rot);
                     eprintln!("[spot][android] Enable rotation vector rc={}", rc);
-                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.rot, 20_000);
+                    let rc =
+                        ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.rot, 20_000);
                     eprintln!("[spot][android] Rotation vector event rate rc={}", rc);
                 }
                 if !state.step_counter.is_null() {

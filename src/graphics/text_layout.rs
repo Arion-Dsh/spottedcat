@@ -8,59 +8,26 @@ use super::Graphics;
 use super::core::ResolvedDraw;
 
 impl Graphics {
-    pub(crate) fn layout_and_queue_text(
+    pub(crate) fn ensure_text_layout(
         &mut self,
         ctx: &mut crate::Context,
         text: &crate::Text,
-        opts: &DrawOption,
-        viewport_rect: [f32; 4],
+        image_scale: [f32; 2],
     ) -> anyhow::Result<()> {
         use crate::text::{CachedGlyph, TextLayout};
         use ab_glyph::{Font as _, FontArc, PxScale, ScaleFont as _};
-
         use std::sync::atomic::Ordering;
-
-        let start_pos = opts.position();
-        let mut shader_opts = ShaderOpts::default();
-        shader_opts.set_vec4(0, text.color);
 
         {
             let cache_lock = text.layout_cache.as_ref().lock().unwrap();
             if !text.dirty.load(Ordering::SeqCst)
                 && let Some(layout) = cache_lock.as_ref()
+                && layout.scale == image_scale
             {
-                for glyph in &layout.glyphs {
-                    let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
-                    let final_y = start_pos[1].as_f32() + glyph.instance.pos[1];
-
-                    if final_x + glyph.instance.size[0] >= viewport_rect[0]
-                        && final_x <= viewport_rect[2]
-                        && final_y + glyph.instance.size[1] >= viewport_rect[1]
-                        && final_y <= viewport_rect[3]
-                        && let Some(Some(img_entry)) =
-                            ctx.registry.images.get(glyph.image_id as usize)
-                        && let Some(atlas_index) = img_entry.atlas_index
-                        && let Some(uv_rect) = img_entry.uv_rect
-                    {
-                        let mut glyph_opts = *opts;
-                        glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
-
-                        self.resolved_draws.push(ResolvedDraw {
-                            atlas_index,
-                            bounds: img_entry.bounds,
-                            uv_rect,
-                            opts: glyph_opts,
-                            shader_id: self.text_shader_id,
-                            shader_opts,
-                            layer: opts.layer(),
-                        });
-                    }
-                }
                 return Ok(());
             }
         }
 
-        // 2. Cache miss or dirty - Perform layout
         let font_id = text.font_id;
         let font_data = ctx
             .registry
@@ -90,7 +57,7 @@ impl Graphics {
             vec![std::borrow::Cow::Borrowed(text.content.as_str())]
         };
 
-        let mut caret_pos = [Pt(0.0), Pt(0.0)]; // Relative to start_pos
+        let mut caret_pos = [Pt(0.0), Pt(0.0)];
 
         let mut global_min_y = scaled.ascent();
         for line in &lines {
@@ -113,7 +80,6 @@ impl Graphics {
 
         caret_pos[1] += Pt::from(y_offset - ascent);
 
-        let image_scale = opts.scale();
         let sx = image_scale[0];
         let sy = image_scale[1];
 
@@ -139,16 +105,14 @@ impl Graphics {
 
                 let entry = if let Some(e) = self.glyph_cache.get(&cache_key) {
                     e.clone()
+                } else if let Ok(e) =
+                    self.render_single_glyph(ctx, font_id, px_size, glyph_id.0.into())
+                {
+                    self.glyph_cache.insert(cache_key, e.clone());
+                    e
                 } else {
-                    if let Ok(e) =
-                        self.render_single_glyph(ctx, font_id, px_size, glyph_id.0.into())
-                    {
-                        self.glyph_cache.insert(cache_key, e.clone());
-                        e
-                    } else {
-                        caret_pos[0] += Pt::from(scaled.h_advance(glyph_id));
-                        continue;
-                    }
+                    caret_pos[0] += Pt::from(scaled.h_advance(glyph_id));
+                    continue;
                 };
 
                 let img_id = entry.image.id();
@@ -184,14 +148,40 @@ impl Graphics {
             caret_pos[1] += Pt::from(line_height);
         }
 
-        // 3. Store in cache
         let new_layout = TextLayout {
             glyphs: cached_glyphs,
-            bounds: (0.0, 0.0, y_offset), // width/height not fully used here but good to have
+            bounds: (0.0, 0.0, y_offset),
+            scale: image_scale,
         };
 
-        // Push TO resolved_draws for the current frame before completing
-        for glyph in &new_layout.glyphs {
+        let mut cache_lock = text.layout_cache.as_ref().lock().unwrap();
+        *cache_lock = Some(new_layout);
+        text.dirty.store(false, Ordering::SeqCst);
+
+        Ok(())
+    }
+
+    pub(crate) fn layout_and_queue_text(
+        &mut self,
+        ctx: &mut crate::Context,
+        text: &crate::Text,
+        opts: &DrawOption,
+        viewport_rect: [f32; 4],
+    ) -> anyhow::Result<()> {
+        let start_pos = opts.position();
+        let mut shader_opts = ShaderOpts::default();
+        shader_opts.set_vec4(0, text.color);
+        self.ensure_text_layout(ctx, text, opts.scale())?;
+        if ctx.registry.dirty_assets {
+            self.process_registrations(ctx)?;
+        }
+
+        let cache_lock = text.layout_cache.as_ref().lock().unwrap();
+        let Some(layout) = cache_lock.as_ref() else {
+            return Ok(());
+        };
+
+        for glyph in &layout.glyphs {
             let final_x = start_pos[0].as_f32() + glyph.instance.pos[0];
             let final_y = start_pos[1].as_f32() + glyph.instance.pos[1];
 
@@ -217,10 +207,6 @@ impl Graphics {
                 });
             }
         }
-
-        let mut cache_lock = text.layout_cache.as_ref().lock().unwrap();
-        *cache_lock = Some(new_layout);
-        text.dirty.store(false, Ordering::SeqCst);
 
         Ok(())
     }

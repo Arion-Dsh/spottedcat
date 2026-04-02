@@ -51,6 +51,7 @@ impl PartialEq for Text {
 pub(crate) struct TextLayout {
     pub(crate) glyphs: Vec<CachedGlyph>,
     pub(crate) bounds: (f32, f32, f32), // width, height, y_offset
+    pub(crate) scale: [f32; 2],
 }
 
 #[derive(Debug, Clone, PartialEq)]
