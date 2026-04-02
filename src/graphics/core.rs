@@ -683,12 +683,54 @@ impl Graphics {
         Ok(graphics)
     }
 
+    fn sync_new_runtime_assets(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
+        for (&id, source) in &ctx.registry.image_shaders {
+            if id != 0 && !self.image_pipelines.contains_key(&id) {
+                self.restore_image_shader(id, source);
+            }
+        }
+        for (&id, source) in &ctx.registry.model_shaders {
+            if id != 0 && !self.model_pipelines.contains_key(&id) {
+                self.restore_model_shader(id, source);
+            }
+        }
+
+        for (&id, data) in &ctx.registry.fonts {
+            if let std::collections::hash_map::Entry::Vacant(entry) = self.font_cache.entry(id as u64)
+            {
+                if let Ok(font) = FontArc::try_from_vec(data.clone()) {
+                    entry.insert(font);
+                } else {
+                    eprintln!(
+                        "[spot][graphics] Warning: Failed to sync font with ID {}",
+                        id
+                    );
+                }
+            }
+        }
+
+        if self.gpu_models.len() < ctx.registry.models.len() {
+            self.gpu_models.resize_with(ctx.registry.models.len(), || None);
+        }
+        for (idx, model_opt) in ctx.registry.models.iter().enumerate() {
+            if self.gpu_models[idx].is_some() || model_opt.is_none() {
+                continue;
+            }
+            let mesh_data = model_opt.as_ref().expect("mesh present after is_none check");
+            let gpu_mesh = MeshData::new(&self.device, &mesh_data.vertices, &mesh_data.indices);
+            gpu_mesh.upload(&self.queue, &mesh_data.vertices, &mesh_data.indices);
+            self.gpu_models[idx] = Some(gpu_mesh);
+        }
+
+        self.rebuild_atlases(ctx)?;
+        ctx.registry.dirty_assets = false;
+        Ok(())
+    }
+
     pub(crate) fn sync_assets(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
         if self.gpu_generation == ctx.registry.gpu_generation {
             if ctx.registry.dirty_assets {
-                // Only sync new/updated assets
-                self.rebuild_atlases(ctx)?;
-                ctx.registry.dirty_assets = false;
+                self.sync_new_runtime_assets(ctx)?;
             }
             return Ok(());
         }
