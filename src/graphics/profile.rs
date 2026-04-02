@@ -32,6 +32,47 @@ impl Default for RenderProfileStats {
 #[allow(dead_code)]
 pub(crate) static PROFILE_STATS: OnceLock<Mutex<RenderProfileStats>> = OnceLock::new();
 
+pub(crate) fn render_profiling_enabled() -> bool {
+    *PROFILE_RENDER.get_or_init(|| {
+        std::env::var("SPOT_PROFILE_RENDER")
+            .map(|value| {
+                let value = value.trim().to_ascii_lowercase();
+                !matches!(value.as_str(), "" | "0" | "false" | "off")
+            })
+            .unwrap_or(false)
+    })
+}
+
+pub(crate) fn record_render_frame(wait_ms: f64, total_ms: f64) {
+    if !render_profiling_enabled() {
+        return;
+    }
+
+    let work_ms = (total_ms - wait_ms).max(0.0);
+
+    let stats = PROFILE_STATS.get_or_init(|| Mutex::new(RenderProfileStats::default()));
+    let mut stats = stats.lock().unwrap();
+    stats.frame += 1;
+    stats.sum_total_ms += total_ms;
+    stats.sum_wait_ms += wait_ms;
+    stats.sum_work_ms += work_ms;
+    stats.min_total_ms = stats.min_total_ms.min(total_ms);
+    stats.max_total_ms = stats.max_total_ms.max(total_ms);
+
+    if stats.frame % 120 == 0 {
+        let frames = stats.frame as f64;
+        eprintln!(
+            "[spot][profile] frames={} avg_total={:.2}ms avg_wait={:.2}ms avg_work={:.2}ms min_total={:.2}ms max_total={:.2}ms",
+            stats.frame,
+            stats.sum_total_ms / frames,
+            stats.sum_wait_ms / frames,
+            stats.sum_work_ms / frames,
+            stats.min_total_ms,
+            stats.max_total_ms
+        );
+    }
+}
+
 pub(crate) fn parse_present_mode_from_env() -> Option<wgpu::PresentMode> {
     let v = std::env::var("SPOT_PRESENT_MODE").ok()?;
     let v = v.trim().to_ascii_lowercase();
@@ -56,12 +97,17 @@ pub(crate) fn pick_present_mode(surface_caps: &wgpu::SurfaceCapabilities) -> wgp
         return requested;
     }
 
-    if surface_caps
-        .present_modes
-        .contains(&wgpu::PresentMode::Immediate)
-    {
-        wgpu::PresentMode::Immediate
-    } else {
-        surface_caps.present_modes[0]
+    for preferred in [
+        wgpu::PresentMode::AutoVsync,
+        wgpu::PresentMode::Fifo,
+        wgpu::PresentMode::Mailbox,
+        wgpu::PresentMode::AutoNoVsync,
+        wgpu::PresentMode::Immediate,
+    ] {
+        if surface_caps.present_modes.contains(&preferred) {
+            return preferred;
+        }
     }
+
+    surface_caps.present_modes[0]
 }

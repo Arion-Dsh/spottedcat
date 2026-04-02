@@ -52,7 +52,11 @@ impl FixedTimestep {
         self.lag = Duration::ZERO;
     }
 
-    pub(crate) fn run_updates(&mut self, max_updates: usize, mut update: impl FnMut(Duration)) {
+    pub(crate) fn run_updates(
+        &mut self,
+        max_updates: usize,
+        mut update: impl FnMut(Duration),
+    ) -> usize {
         let now = Instant::now();
         if let Some(previous) = self.previous.replace(now) {
             let elapsed = now.duration_since(previous);
@@ -68,6 +72,18 @@ impl FixedTimestep {
             if self.lag >= self.step {
                 self.lag = Duration::ZERO;
             }
+
+            updates
+        } else {
+            0
+        }
+    }
+
+    pub(crate) fn next_deadline(&self) -> Instant {
+        let now = Instant::now();
+        match self.previous {
+            Some(previous) => previous + self.step.saturating_sub(self.lag),
+            None => now,
         }
     }
 }

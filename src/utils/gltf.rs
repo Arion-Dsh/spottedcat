@@ -113,5 +113,7 @@ pub fn load_gltf_from_bytes(ctx: &mut crate::Context, data: &[u8]) -> anyhow::Re
         }
     }
 
-    Ok(Model { parts: model_parts })
+    Ok(Model {
+        parts: model_parts.into(),
+    })
 }

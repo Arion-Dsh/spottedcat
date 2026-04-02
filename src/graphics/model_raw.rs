@@ -59,8 +59,10 @@ pub struct ModelRenderer {
     pub(crate) user_opts_stride: u32,
     pub(crate) bone_matrices_stride: u32,
     pub(crate) next_model_globals: u32,
+    pub(crate) next_user_shader_opts: u32,
     pub(crate) next_bone_batch: u32,
     pub(crate) max_model_globals: u32,
+    pub(crate) max_user_shader_opts: u32,
     pub(crate) max_instances: u32,
 
     pub(crate) meshes: HashMap<u32, MeshData>,
@@ -78,6 +80,7 @@ impl ModelRenderer {
         let model_globals_stride = (Self::GLOBALS_SIZE_BYTES as u32).div_ceil(align) * align;
         let user_opts_stride = (Self::USER_SHADER_OPTS_SIZE as u32).div_ceil(align) * align;
         let max_model_globals = 4096u32;
+        let max_user_shader_opts = 4096u32;
         let max_instances = 65536u32;
 
         let model_globals_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -89,7 +92,7 @@ impl ModelRenderer {
 
         let user_shader_opts_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("model_user_shader_opts_ubo"),
-            size: (user_opts_stride * max_model_globals) as u64,
+            size: (user_opts_stride * max_user_shader_opts) as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -405,8 +408,10 @@ impl ModelRenderer {
             user_opts_stride,
             bone_matrices_stride: bone_matrices_stride as u32,
             next_model_globals: 0,
+            next_user_shader_opts: 0,
             next_bone_batch: 0,
             max_model_globals,
+            max_user_shader_opts,
             max_instances,
             meshes: HashMap::new(),
             skins: HashMap::new(),
@@ -520,6 +525,7 @@ impl ModelRenderer {
 
     pub fn begin_frame(&mut self) {
         self.next_model_globals = 0;
+        self.next_user_shader_opts = 0;
         self.next_bone_batch = 0;
         self.skin_bone_offsets.clear();
     }
@@ -570,7 +576,11 @@ impl ModelRenderer {
                 Self::USER_SHADER_OPTS_SIZE
             ));
         }
-        let slot = self.next_model_globals - 1;
+        if self.next_user_shader_opts >= self.max_user_shader_opts {
+            return Err(anyhow::anyhow!("max model shader opts exceeded"));
+        }
+        let slot = self.next_user_shader_opts;
+        self.next_user_shader_opts += 1;
         let offset = slot as wgpu::BufferAddress * self.user_opts_stride as wgpu::BufferAddress;
         queue.write_buffer(&self.user_shader_opts_buffer, offset, bytes);
         Ok(offset as u32)

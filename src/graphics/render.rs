@@ -6,6 +6,7 @@ use crate::drawable::{DrawCommand, DrawCommand3D};
 use crate::graphics::model_raw::MaterialBindGroupKey;
 use crate::image_raw::InstanceData;
 use crate::pt::Pt;
+use std::time::Instant;
 use std::collections::HashMap;
 
 use super::core::{AtlasSlot, Graphics, ResolvedDraw, SkinData};
@@ -220,6 +221,27 @@ fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
 }
 
 impl Graphics {
+    fn prepare_3d_command_order(&mut self, ctx: &Context) {
+        self.opaque_draw_indices_3d.clear();
+        self.transparent_draw_indices_3d.clear();
+
+        self.opaque_draw_indices_3d
+            .reserve(ctx.runtime.draw_list_3d.len());
+        self.transparent_draw_indices_3d
+            .reserve(ctx.runtime.draw_list_3d.len());
+
+        for (index, command) in ctx.runtime.draw_list_3d.iter().enumerate() {
+            if draw_command_3d_is_transparent(command) {
+                self.transparent_draw_indices_3d.push(index);
+            } else {
+                self.opaque_draw_indices_3d.push(index);
+            }
+        }
+
+        self.opaque_draw_indices_3d
+            .sort_by_key(|&index| draw_command_3d_sort_key(&ctx.runtime.draw_list_3d[index]));
+    }
+
     fn process_image_commands(&mut self, ctx: &mut Context, drawables: &[DrawCommand]) {
         for command in drawables {
             match command {
@@ -258,12 +280,21 @@ impl Graphics {
             match drawable {
                 DrawCommand::Image(cmd) => {
                     if let Some(Some(entry)) = ctx.registry.images.get(cmd.id as usize) {
-                        if !entry.visible || !entry.is_ready() {
+                        if !entry.visible {
                             continue;
                         }
 
+                        let Some(atlas_index) = entry.atlas_index else {
+                            continue;
+                        };
+                        let Some(uv_rect) = entry.uv_rect else {
+                            continue;
+                        };
+
                         self.resolved_draws.push(ResolvedDraw {
-                            img_entry: entry.clone(),
+                            atlas_index,
+                            bounds: entry.bounds,
+                            uv_rect,
                             opts: cmd.opts,
                             shader_id: cmd.shader_id,
                             shader_opts: cmd.shader_opts,
@@ -293,7 +324,7 @@ impl Graphics {
         resolved_draws.sort_by(|a, b| {
             a.layer
                 .cmp(&b.layer)
-                .then(a.img_entry.atlas_index.cmp(&b.img_entry.atlas_index))
+                .then(a.atlas_index.cmp(&b.atlas_index))
                 .then(a.shader_id.cmp(&b.shader_id))
         });
 
@@ -325,20 +356,14 @@ impl Graphics {
         let mut last_set_scissor: Option<(u32, u32, u32, u32)> = None;
 
         for resolved in resolved_draws.iter() {
-            let img_entry = &resolved.img_entry;
             let opts = resolved.opts;
             let shader_id = resolved.shader_id;
             let shader_opts = resolved.shader_opts;
             let draw_opacity = opts.opacity();
 
-            let uv_rect = match img_entry.uv_rect {
-                Some(uv) => uv,
-                None => continue,
-            };
-
             let effective_user_globals = shader_opts;
 
-            let state_changed = current_atlas_index != img_entry.atlas_index
+            let state_changed = current_atlas_index != Some(resolved.atlas_index)
                 || current_shader_id != shader_id
                 || current_user_globals != effective_user_globals
                 || current_clip != opts.get_clip()
@@ -414,17 +439,17 @@ impl Graphics {
                 }
             }
 
-            current_atlas_index = img_entry.atlas_index;
+            current_atlas_index = Some(resolved.atlas_index);
             current_shader_id = shader_id;
 
             batch.push(InstanceData {
                 pos: [opts.position()[0].as_f32(), opts.position()[1].as_f32()],
                 rotation: opts.rotation(),
                 size: [
-                    img_entry.bounds.width.as_f32() * opts.scale()[0],
-                    img_entry.bounds.height.as_f32() * opts.scale()[1],
+                    resolved.bounds.width.as_f32() * opts.scale()[0],
+                    resolved.bounds.height.as_f32() * opts.scale()[1],
                 ],
-                uv_rect,
+                uv_rect: resolved.uv_rect,
             });
         }
 
@@ -462,6 +487,8 @@ impl Graphics {
         config: Render3DConfig,
         rpass: &mut wgpu::RenderPass<'a>,
         ctx: &Context,
+        opaque_draw_indices: &[usize],
+        transparent_draw_indices: &[usize],
         is_shadow_pass: bool,
     ) {
         let mut camera = ctx.runtime.camera;
@@ -486,23 +513,15 @@ impl Graphics {
         let mut current_pipeline: Option<*const wgpu::RenderPipeline> = None;
         let mut current_mesh_binding: Option<(u32, bool)> = None;
         let mut current_material_key: Option<MaterialBindGroupKey> = None;
+        let mut current_shader_opts: Option<ShaderOpts> = None;
+        let mut current_shader_opts_offset: u32 = 0;
         let mut current_bone_offset: Option<u32> = None;
         let mut environment_bound = false;
 
-        let mut opaque_commands = Vec::with_capacity(ctx.runtime.draw_list_3d.len());
-        let mut transparent_commands = Vec::new();
-        for command in &ctx.runtime.draw_list_3d {
-            if draw_command_3d_is_transparent(command) {
-                transparent_commands.push(command);
-            } else {
-                opaque_commands.push(command);
-            }
-        }
-        opaque_commands.sort_by_key(|command| draw_command_3d_sort_key(command));
-
-        for command in opaque_commands
-            .into_iter()
-            .chain(transparent_commands.into_iter())
+        for command in opaque_draw_indices
+            .iter()
+            .chain(transparent_draw_indices.iter())
+            .map(|&index| &ctx.runtime.draw_list_3d[index])
         {
             match command {
                 crate::drawable::DrawCommand3D::Model(
@@ -535,8 +554,34 @@ impl Graphics {
                         extra: [opts.opacity, 0.0, 0.0, 0.0],
                         ..Default::default()
                     };
+                    let pipeline = if is_shadow_pass {
+                        config.shadow_pipeline
+                    } else if *shader_id == 0 {
+                        config.model_pipeline
+                    } else {
+                        config
+                            .model_pipelines
+                            .get(shader_id)
+                            .unwrap_or(config.model_pipeline)
+                    };
+                    let mut bone_offset = 0;
+                    if let Some(skin_id) = skin_id_cmd
+                        && let Some(Some(skin)) = skins.get(*skin_id as usize)
+                        && let Ok(off) =
+                            model_renderer.bone_offset_for_skin(queue, *skin_id, &skin.bone_matrices)
+                    {
+                        bone_offset = off;
+                    }
+                    if !is_shadow_pass && current_shader_opts != Some(*shader_opts) {
+                        if let Ok(offset) =
+                            model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes())
+                        {
+                            current_shader_opts = Some(*shader_opts);
+                            current_shader_opts_offset = offset;
+                        }
+                    }
 
-                    for part in &model.parts {
+                    for part in model.parts.iter() {
                         if let Some(Some(mesh)) = models.get(part.id as usize) {
                             let mut globals = base_globals;
                             let mut material_texture_data = None;
@@ -559,17 +604,6 @@ impl Graphics {
                             }
 
                             if let Ok(offset) = model_renderer.upload_globals(queue, &globals) {
-                                let pipeline = if is_shadow_pass {
-                                    config.shadow_pipeline
-                                } else if *shader_id == 0 {
-                                    config.model_pipeline
-                                } else {
-                                    config
-                                        .model_pipelines
-                                        .get(shader_id)
-                                        .unwrap_or(config.model_pipeline)
-                                };
-
                                 let pipeline_ptr = pipeline as *const wgpu::RenderPipeline;
                                 if current_pipeline != Some(pipeline_ptr) {
                                     rpass.set_pipeline(pipeline);
@@ -582,18 +616,6 @@ impl Graphics {
                                         wgpu::IndexFormat::Uint32,
                                     );
                                     current_mesh_binding = Some((part.id, false));
-                                }
-
-                                let mut bone_offset = 0;
-                                if let Some(skin_id) = skin_id_cmd
-                                    && let Some(Some(skin)) = skins.get(*skin_id as usize)
-                                    && let Ok(off) = model_renderer.bone_offset_for_skin(
-                                        queue,
-                                        *skin_id,
-                                        &skin.bone_matrices,
-                                    )
-                                {
-                                    bone_offset = off;
                                 }
 
                                 if is_shadow_pass {
@@ -611,15 +633,11 @@ impl Graphics {
                                         current_bone_offset = Some(bone_offset);
                                     }
                                 } else {
-                                    if let Ok(opts_offset) = model_renderer
-                                        .upload_shader_opts_bytes(queue, shader_opts.as_bytes())
-                                    {
-                                        rpass.set_bind_group(
-                                            0,
-                                            &model_renderer.globals_bind_group,
-                                            &[offset, opts_offset],
-                                        );
-                                    }
+                                    rpass.set_bind_group(
+                                        0,
+                                        &model_renderer.globals_bind_group,
+                                        &[offset, current_shader_opts_offset],
+                                    );
 
                                     let (albedo, pbr, normal, ao, emissive) = material_texture_data
                                         .unwrap_or_else(|| {
@@ -693,6 +711,32 @@ impl Graphics {
                         extra: [opts.opacity, 0.0, 0.0, 0.0],
                         ..Default::default()
                     };
+                    let pipeline = if is_shadow_pass {
+                        config.instanced_shadow_pipeline
+                    } else if *shader_id == 0 {
+                        config.instanced_model_pipeline
+                    } else {
+                        config
+                            .instanced_model_pipelines
+                            .get(shader_id)
+                            .unwrap_or(config.instanced_model_pipeline)
+                    };
+                    let mut bone_offset = 0;
+                    if let Some(skin_id) = skin_id_cmd
+                        && let Some(Some(skin)) = skins.get(*skin_id as usize)
+                        && let Ok(off) =
+                            model_renderer.bone_offset_for_skin(queue, *skin_id, &skin.bone_matrices)
+                    {
+                        bone_offset = off;
+                    }
+                    if !is_shadow_pass && current_shader_opts != Some(*shader_opts) {
+                        if let Ok(offset) =
+                            model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes())
+                        {
+                            current_shader_opts = Some(*shader_opts);
+                            current_shader_opts_offset = offset;
+                        }
+                    }
 
                     // Upload instance data
                     if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {
@@ -700,7 +744,7 @@ impl Graphics {
                         continue;
                     }
 
-                    for part in &model.parts {
+                    for part in model.parts.iter() {
                         if let Some(Some(mesh)) = models.get(part.id as usize) {
                             let mut globals = base_globals;
                             let mut material_texture_data = None;
@@ -723,17 +767,6 @@ impl Graphics {
                             }
 
                             if let Ok(offset) = model_renderer.upload_globals(queue, &globals) {
-                                let pipeline = if is_shadow_pass {
-                                    config.instanced_shadow_pipeline
-                                } else if *shader_id == 0 {
-                                    config.instanced_model_pipeline
-                                } else {
-                                    config
-                                        .instanced_model_pipelines
-                                        .get(shader_id)
-                                        .unwrap_or(config.instanced_model_pipeline)
-                                };
-
                                 let pipeline_ptr = pipeline as *const wgpu::RenderPipeline;
                                 if current_pipeline != Some(pipeline_ptr) {
                                     rpass.set_pipeline(pipeline);
@@ -752,18 +785,6 @@ impl Graphics {
                                     current_mesh_binding = Some((part.id, true));
                                 }
 
-                                let mut bone_offset = 0;
-                                if let Some(skin_id) = skin_id_cmd
-                                    && let Some(Some(skin)) = skins.get(*skin_id as usize)
-                                    && let Ok(off) = model_renderer.bone_offset_for_skin(
-                                        queue,
-                                        *skin_id,
-                                        &skin.bone_matrices,
-                                    )
-                                {
-                                    bone_offset = off;
-                                }
-
                                 if is_shadow_pass {
                                     rpass.set_bind_group(
                                         0,
@@ -779,15 +800,11 @@ impl Graphics {
                                         current_bone_offset = Some(bone_offset);
                                     }
                                 } else {
-                                    if let Ok(opts_offset) = model_renderer
-                                        .upload_shader_opts_bytes(queue, shader_opts.as_bytes())
-                                    {
-                                        rpass.set_bind_group(
-                                            0,
-                                            &model_renderer.globals_bind_group,
-                                            &[offset, opts_offset],
-                                        );
-                                    }
+                                    rpass.set_bind_group(
+                                        0,
+                                        &model_renderer.globals_bind_group,
+                                        &[offset, current_shader_opts_offset],
+                                    );
 
                                     let (albedo, pbr, normal, ao, emissive) = material_texture_data
                                         .unwrap_or_else(|| {
@@ -848,7 +865,7 @@ impl Graphics {
             wgpu::SurfaceError::Lost
         })?;
         let _ = self.process_registrations(ctx);
-        let draws = ctx.draw_list().to_vec();
+        let draws = std::mem::take(&mut ctx.runtime.draw_list);
         self.process_image_commands(ctx, &draws);
         let sf = ctx.scale_factor();
         self.draw_drawables_with_context(surface, &draws, sf, ctx)
@@ -878,6 +895,8 @@ impl Graphics {
         scale_factor: f64,
         mut ctx: Option<&mut Context>,
     ) -> Result<(), wgpu::SurfaceError> {
+        let frame_started_at = Instant::now();
+        let wait_started_at = Instant::now();
         let frame = match surface.get_current_texture() {
             Ok(f) => f,
             Err(e) => {
@@ -885,6 +904,7 @@ impl Graphics {
                 return Err(e);
             }
         };
+        let wait_ms = wait_started_at.elapsed().as_secs_f64() * 1000.0;
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -899,6 +919,11 @@ impl Graphics {
 
         let width = self.config.width;
         let height = self.config.height;
+        if let Some(ctx_ref) = ctx.as_deref()
+            && !ctx_ref.runtime.draw_list_3d.is_empty()
+        {
+            self.prepare_3d_command_order(ctx_ref);
+        }
 
         // 1. Shadow Pass (3D)
         if let Some(ref mut ctx) = ctx
@@ -951,6 +976,8 @@ impl Graphics {
                     },
                     &mut rpass,
                     ctx,
+                    &self.opaque_draw_indices_3d,
+                    &self.transparent_draw_indices_3d,
                     true,
                 );
             }
@@ -1019,6 +1046,8 @@ impl Graphics {
                     },
                     &mut rpass,
                     ctx,
+                    &self.opaque_draw_indices_3d,
+                    &self.transparent_draw_indices_3d,
                     false,
                 );
             }
@@ -1048,6 +1077,10 @@ impl Graphics {
 
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
+        crate::graphics::profile::record_render_frame(
+            wait_ms,
+            frame_started_at.elapsed().as_secs_f64() * 1000.0,
+        );
 
         Ok(())
     }

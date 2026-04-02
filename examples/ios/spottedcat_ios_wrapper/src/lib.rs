@@ -185,6 +185,8 @@ pub extern "C" fn spottedcat_ios_start() {
         last_fps_time: std::time::Instant,
         frame_count: u32,
         current_fps: f32,
+        update_count: u32,
+        current_ups: f32,
         model: Model,
         rotation: f32,
         history_state: IosPedometerHistory,
@@ -244,6 +246,8 @@ pub extern "C" fn spottedcat_ios_start() {
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
                 current_fps: 0.0,
+                update_count: 0,
+                current_ups: 0.0,
                 model,
                 rotation: 0.0,
                 history_state,
@@ -252,7 +256,8 @@ pub extern "C" fn spottedcat_ios_start() {
         }
 
         fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) {
-            if self.frame_count % 60 == 0 {
+            self.update_count += 1;
+            if self.update_count % 60 == 0 {
                 eprintln!("[spot][ios] update loop running");
             }
 
@@ -310,10 +315,12 @@ pub extern "C" fn spottedcat_ios_start() {
 
             if elapsed >= std::time::Duration::from_secs(1) {
                 self.current_fps = self.frame_count as f32 / elapsed.as_secs_f32();
+                self.current_ups = self.update_count as f32 / elapsed.as_secs_f32();
                 self.fps_text
-                    .set_content(format!("FPS: {:.1}", self.current_fps));
+                    .set_content(format!("FPS: {:.1} | UPS: {:.1}", self.current_fps, self.current_ups));
                 self.last_fps_time = now;
                 self.frame_count = 0;
+                self.update_count = 0;
             }
 
             let opts_3d = DrawOption3D::default()

@@ -342,6 +342,11 @@ pub fn android_main(app: AndroidApp) {
         last_fps_time: std::time::Instant,
         frame_count: u32,
         current_fps: f32,
+        update_count: u32,
+        current_ups: f32,
+        sensor_text_refresh_accum: f32,
+        update_log_accum: f32,
+        touch_log_cooldown: f32,
         model: Model,
         rotation_anim: f32,
         gyro_data: [f32; 3],
@@ -421,6 +426,11 @@ pub fn android_main(app: AndroidApp) {
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
                 current_fps: 0.0,
+                update_count: 0,
+                current_ups: 0.0,
+                sensor_text_refresh_accum: 0.0,
+                update_log_accum: 0.0,
+                touch_log_cooldown: 0.0,
                 model,
                 rotation_anim: 0.0,
                 gyro_data: [0.0; 3],
@@ -430,12 +440,18 @@ pub fn android_main(app: AndroidApp) {
         }
 
         fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) {
-            // Log that update is running (at low frequency to avoid spam)
-            if self.frame_count % 60 == 0 {
+            self.update_count += 1;
+            let dt_secs = dt.as_secs_f32();
+            self.update_log_accum += dt_secs;
+            self.sensor_text_refresh_accum += dt_secs;
+            self.touch_log_cooldown = (self.touch_log_cooldown - dt_secs).max(0.0);
+
+            if self.update_log_accum >= 1.0 {
                 eprintln!("[spot][android] update loop running");
+                self.update_log_accum = 0.0;
             }
 
-            self.rotation_anim += dt.as_secs_f32() * 1.5;
+            self.rotation_anim += dt_secs * 1.5;
 
             // Update sensor data
             self.gyro_data = spottedcat::gyroscope(ctx).unwrap_or([0.0; 3]);
@@ -443,29 +459,32 @@ pub fn android_main(app: AndroidApp) {
             self.mag_data = spottedcat::magnetometer(ctx).unwrap_or([0.0; 3]);
             self.rot_data = spottedcat::rotation(ctx).unwrap_or([0.0; 4]);
 
-            self.gyro_text.set_content(format!(
-                "Gyro: {:.2}, {:.2}, {:.2}",
-                self.gyro_data[0], self.gyro_data[1], self.gyro_data[2]
-            ));
-            self.accel_text.set_content(format!(
-                "Accel: {:.2}, {:.2}, {:.2}",
-                self.accel_data[0], self.accel_data[1], self.accel_data[2]
-            ));
-            self.mag_text.set_content(format!(
-                "Mag: {:.2}, {:.2}, {:.2}",
-                self.mag_data[0], self.mag_data[1], self.mag_data[2]
-            ));
-            self.rot_text.set_content(format!(
-                "Rot: {:.2}, {:.2}, {:.2}, {:.2}",
-                self.rot_data[0], self.rot_data[1], self.rot_data[2], self.rot_data[3]
-            ));
+            if self.sensor_text_refresh_accum >= 0.1 {
+                self.gyro_text.set_content(format!(
+                    "Gyro: {:.2}, {:.2}, {:.2}",
+                    self.gyro_data[0], self.gyro_data[1], self.gyro_data[2]
+                ));
+                self.accel_text.set_content(format!(
+                    "Accel: {:.2}, {:.2}, {:.2}",
+                    self.accel_data[0], self.accel_data[1], self.accel_data[2]
+                ));
+                self.mag_text.set_content(format!(
+                    "Mag: {:.2}, {:.2}, {:.2}",
+                    self.mag_data[0], self.mag_data[1], self.mag_data[2]
+                ));
+                self.rot_text.set_content(format!(
+                    "Rot: {:.2}, {:.2}, {:.2}, {:.2}",
+                    self.rot_data[0], self.rot_data[1], self.rot_data[2], self.rot_data[3]
+                ));
+                self.sensor_text_refresh_accum = 0.0;
+            }
             
             self.step_count = spottedcat::today_step_count(ctx).unwrap_or(0.0);
             self.yesterday_step_count = spottedcat::yesterday_step_count(ctx).unwrap_or(0.0);
             if spottedcat::step_detected(ctx) {
                 self.step_detected_timer = 0.5;
             }
-            self.step_detected_timer = (self.step_detected_timer - dt.as_secs_f32()).max(0.0);
+            self.step_detected_timer = (self.step_detected_timer - dt_secs).max(0.0);
             self.step_text
                 .set_content(format!("Today's Steps: {:.0}", self.step_count));
             self.yesterday_step_text
@@ -541,11 +560,12 @@ pub fn android_main(app: AndroidApp) {
             // 1. Check direct touch events
             let mut active_touch = false;
             let current_touches = spottedcat::touches(ctx);
-            if !current_touches.is_empty() {
+            if !current_touches.is_empty() && self.touch_log_cooldown <= 0.0 {
                 eprintln!(
                     "[spot][android] active touches count: {}",
                     current_touches.len()
                 );
+                self.touch_log_cooldown = 0.25;
             }
 
             for touch in current_touches {
@@ -554,9 +574,12 @@ pub fn android_main(app: AndroidApp) {
                     || (touch.position.0 - self.touch_pos.unwrap().0)
                         .as_f32()
                         .abs()
-                        > 1.0
+                        > 8.0
                 {
-                    eprintln!("[spot][android] touch detected at: {:?}", touch.position);
+                    if self.touch_log_cooldown <= 0.0 {
+                        eprintln!("[spot][android] touch detected at: {:?}", touch.position);
+                        self.touch_log_cooldown = 0.25;
+                    }
                 }
                 self.touch_pos = Some(touch.position);
                 active_touch = true;
@@ -577,10 +600,12 @@ pub fn android_main(app: AndroidApp) {
 
             if elapsed >= std::time::Duration::from_secs(1) {
                 self.current_fps = self.frame_count as f32 / elapsed.as_secs_f32();
+                self.current_ups = self.update_count as f32 / elapsed.as_secs_f32();
                 self.fps_text
-                    .set_content(format!("FPS: {:.1}", self.current_fps));
+                    .set_content(format!("FPS: {:.1} | UPS: {:.1}", self.current_fps, self.current_ups));
                 self.last_fps_time = now;
                 self.frame_count = 0;
+                self.update_count = 0;
             }
 
             // Draw 3D model with gyroscope tilt

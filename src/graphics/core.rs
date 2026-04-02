@@ -4,7 +4,6 @@ use crate::DrawOption;
 use crate::ShaderOpts;
 use crate::glyph_cache::GlyphCache;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
-use crate::image::ImageEntry;
 use crate::image_raw::{ImageRenderer, InstanceData};
 use crate::model::Vertex;
 use crate::packer::AtlasPacker;
@@ -112,9 +111,11 @@ impl Camera {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct ResolvedDraw {
-    pub img_entry: ImageEntry,
+    pub atlas_index: u32,
+    pub bounds: crate::image::Bounds,
+    pub uv_rect: [f32; 4],
     pub opts: DrawOption,
     pub shader_id: u32,
     pub shader_opts: ShaderOpts,
@@ -133,6 +134,8 @@ pub struct Graphics {
     pub(crate) instanced_model_pipelines: HashMap<u32, wgpu::RenderPipeline>,
     pub(crate) atlases: Vec<AtlasSlot>,
     pub(crate) batch: Vec<InstanceData>,
+    pub(crate) opaque_draw_indices_3d: Vec<usize>,
+    pub(crate) transparent_draw_indices_3d: Vec<usize>,
     pub(crate) font_cache: HashMap<u64, FontArc>,
     pub(crate) glyph_cache: GlyphCache,
     pub(crate) resolved_draws: Vec<ResolvedDraw>,
@@ -642,6 +645,8 @@ impl Graphics {
             instanced_model_pipelines: HashMap::new(),
             atlases,
             batch: Vec::with_capacity(10000),
+            opaque_draw_indices_3d: Vec::new(),
+            transparent_draw_indices_3d: Vec::new(),
             font_cache: HashMap::new(),
             glyph_cache: GlyphCache::new(),
             resolved_draws: Vec::with_capacity(10000),

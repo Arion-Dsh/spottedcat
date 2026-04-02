@@ -39,12 +39,16 @@ impl Graphics {
                         && final_y <= viewport_rect[3]
                         && let Some(Some(img_entry)) =
                             ctx.registry.images.get(glyph.image_id as usize)
+                        && let Some(atlas_index) = img_entry.atlas_index
+                        && let Some(uv_rect) = img_entry.uv_rect
                     {
                         let mut glyph_opts = *opts;
                         glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
 
                         self.resolved_draws.push(ResolvedDraw {
-                            img_entry: img_entry.clone(),
+                            atlas_index,
+                            bounds: img_entry.bounds,
+                            uv_rect,
                             opts: glyph_opts,
                             shader_id: self.text_shader_id,
                             shader_opts,
@@ -196,12 +200,16 @@ impl Graphics {
                 && final_y + glyph.instance.size[1] >= viewport_rect[1]
                 && final_y <= viewport_rect[3]
                 && let Some(Some(img_entry)) = ctx.registry.images.get(glyph.image_id as usize)
+                && let Some(atlas_index) = img_entry.atlas_index
+                && let Some(uv_rect) = img_entry.uv_rect
             {
                 let mut glyph_opts = *opts;
                 glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
 
                 self.resolved_draws.push(ResolvedDraw {
-                    img_entry: img_entry.clone(),
+                    atlas_index,
+                    bounds: img_entry.bounds,
+                    uv_rect,
                     opts: glyph_opts,
                     shader_id: self.text_shader_id,
                     shader_opts,

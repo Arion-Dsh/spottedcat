@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 /// Handle to a 3D model resource.
 ///
 /// Models are collection of meshes and materials that can be rendered in 3D space.
@@ -41,7 +43,7 @@ pub struct ModelPart {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Model {
-    pub(crate) parts: Vec<ModelPart>,
+    pub(crate) parts: Arc<Vec<ModelPart>>,
 }
 
 impl Model {
@@ -57,58 +59,58 @@ impl Model {
     ) -> anyhow::Result<Self> {
         let mesh_id = ctx.register_mesh(vertices, indices);
         Ok(Self {
-            parts: vec![ModelPart {
+            parts: Arc::new(vec![ModelPart {
                 id: mesh_id,
                 material: Material::default(),
-            }],
+            }]),
         })
     }
 
     /// Sets the albedo material (texture) for this model.
     pub fn with_material(mut self, image: crate::Image) -> Self {
-        for part in &mut self.parts {
+        for part in Arc::make_mut(&mut self.parts).iter_mut() {
             part.material.albedo = Some(image.id());
         }
         self
     }
 
     pub fn with_albedo(mut self, image: crate::Image) -> Self {
-        for part in &mut self.parts {
+        for part in Arc::make_mut(&mut self.parts).iter_mut() {
             part.material.albedo = Some(image.id());
         }
         self
     }
 
     pub fn with_normal_map(mut self, image: crate::Image) -> Self {
-        for part in &mut self.parts {
+        for part in Arc::make_mut(&mut self.parts).iter_mut() {
             part.material.normal = Some(image.id());
         }
         self
     }
 
     pub fn with_pbr_map(mut self, image: crate::Image) -> Self {
-        for part in &mut self.parts {
+        for part in Arc::make_mut(&mut self.parts).iter_mut() {
             part.material.pbr = Some(image.id());
         }
         self
     }
 
     pub fn with_ao_map(mut self, image: crate::Image) -> Self {
-        for part in &mut self.parts {
+        for part in Arc::make_mut(&mut self.parts).iter_mut() {
             part.material.occlusion = Some(image.id());
         }
         self
     }
 
     pub fn with_emissive_map(mut self, image: crate::Image) -> Self {
-        for part in &mut self.parts {
+        for part in Arc::make_mut(&mut self.parts).iter_mut() {
             part.material.emissive = Some(image.id());
         }
         self
     }
 
     pub fn with_part_material(mut self, index: usize, material: Material) -> Self {
-        if let Some(part) = self.parts.get_mut(index) {
+        if let Some(part) = Arc::make_mut(&mut self.parts).get_mut(index) {
             part.material = material;
         }
         self
@@ -123,7 +125,7 @@ impl Model {
         material: Material,
     ) -> anyhow::Result<&mut Self> {
         let mesh_id = ctx.register_mesh(vertices, indices);
-        self.parts.push(ModelPart {
+        Arc::make_mut(&mut self.parts).push(ModelPart {
             id: mesh_id,
             material,
         });

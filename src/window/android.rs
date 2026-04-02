@@ -198,6 +198,17 @@ impl App {
         let mut frame_count = 0u64;
 
         loop {
+            let has_drawable_scene = self.scene.has_active_scene()
+                && self.ctx.runtime.graphics.is_some()
+                && (self.platform.floating_surface.is_some() || self.surface.is_some());
+            let poll_timeout = if has_drawable_scene {
+                Duration::ZERO
+            } else {
+                self.timing
+                    .next_deadline()
+                    .saturating_duration_since(Instant::now())
+            };
+
             // Check for new floating surface from JNI
             if let Some(surface_obj) = crate::android::take_floating_surface() {
                 let jvm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _) }.unwrap();
@@ -272,7 +283,7 @@ impl App {
                 }
             }
 
-            app.poll_events(Some(std::time::Duration::from_millis(0)), |poll_event| {
+            app.poll_events(Some(poll_timeout), |poll_event| {
                 match poll_event {
                     PollEvent::Main(MainEvent::InitWindow { .. }) => {
                         self.platform.native_window = app.native_window();
@@ -631,7 +642,6 @@ impl App {
             }
 
             // Fixed update loop
-            let frame_start = Instant::now();
             self.timing.run_updates(4, |dt| {
                 if let Some(spot) = self.scene.spot_mut() {
                     spot.update(&mut self.ctx, dt);
@@ -702,13 +712,6 @@ impl App {
                 // even with minimal rendering.
                 if let Some(g) = self.ctx.runtime.graphics.as_mut() {
                     g.poll_device(true);
-                }
-
-                // Throttle to 60 FPS to prevent driver-level memory growth due to high-frequency acquire calls
-                let frame_time = Duration::from_micros(16666);
-                let elapsed = frame_start.elapsed();
-                if elapsed < frame_time {
-                    std::thread::sleep(frame_time - elapsed);
                 }
 
                 // Periodic health check log every 300 frames (~5 seconds)

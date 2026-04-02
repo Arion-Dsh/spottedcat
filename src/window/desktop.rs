@@ -254,6 +254,8 @@ impl App {
 
         if let Some(Err(error)) = draw_result {
             self.handle_surface_error(event_loop, error);
+        } else {
+            self.request_redraw();
         }
     }
 }
@@ -263,8 +265,8 @@ impl ApplicationHandler for App {
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         web_sys::console::log_1(&"[spot][wasm] resumed() called".into());
 
-        event_loop.set_control_flow(ControlFlow::Poll);
         self.timing.reset();
+        event_loop.set_control_flow(ControlFlow::WaitUntil(self.timing.next_deadline()));
 
         self.create_window_if_needed(event_loop);
         self.ensure_audio_initialized();
@@ -375,7 +377,7 @@ impl ApplicationHandler for App {
             return;
         }
 
-        self.timing.run_updates(8, |dt| {
+        let updates = self.timing.run_updates(8, |dt| {
             #[cfg(all(target_os = "ios", feature = "sensors"))]
             if let Some(state) = self.platform.sensor_state.as_ref() {
                 state.poll(&mut self.ctx.input_mut());
@@ -387,7 +389,10 @@ impl ApplicationHandler for App {
             self.ctx.input_mut().end_frame();
         });
 
-        self.request_redraw();
+        if updates > 0 {
+            self.request_redraw();
+        }
+        event_loop.set_control_flow(ControlFlow::WaitUntil(self.timing.next_deadline()));
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {

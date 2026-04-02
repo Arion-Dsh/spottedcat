@@ -547,8 +547,4 @@ impl Context {
             self.runtime.current_state = prev_state;
         }
     }
-
-    pub(crate) fn draw_list(&self) -> &[DrawCommand] {
-        &self.runtime.draw_list
-    }
 }
