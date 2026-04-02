@@ -8,6 +8,11 @@ This example uses a small wrapper crate at `examples/ios/spottedcat_ios_wrapper`
 
 This example is **winit-driven**: the iOS app entrypoint is `main.m`, which calls `spottedcat_ios_start()`.
 
+The wrapper now shows:
+
+- Today's steps from `spottedcat::today_step_count(ctx)`
+- Last 7 days of step history queried directly from Rust via `CMPedometer`
+
 ## Build the xcframework
 
 From repo root:
@@ -28,6 +33,8 @@ This produces:
 3. Run
 
 The app calls `spottedcat_ios_start()` on launch.
+
+Note: step history is expected to be unavailable in the iOS Simulator because motion/pedometer data comes from real device sensors.
 
 Note: on iOS, `winit`'s `EventLoop::run_app` calls `UIApplicationMain`, so you cannot start it from a SwiftUI `@main` app (that would call `UIApplicationMain` twice).
 

@@ -1,6 +1,6 @@
+use crate::scenes::SceneFactory;
 #[cfg(target_os = "android")]
 use android_activity::AndroidApp;
-use crate::scenes::SceneFactory;
 #[cfg(target_os = "android")]
 use std::sync::Mutex;
 #[cfg(target_os = "android")]
@@ -317,6 +317,24 @@ pub fn stop_service(class_name: &str) {
             class_name, err
         );
     }
+}
+
+#[cfg(target_os = "android")]
+pub fn current_local_epoch_day() -> Option<u64> {
+    let jvm = JVM.get()?;
+    let _activity_ref = ACTIVITY.get()?;
+    let mut env = jvm.attach_current_thread().ok()?;
+
+    let local_date_class = find_class(&mut env, "java/time/LocalDate").ok()?;
+    let today = env
+        .call_static_method(&local_date_class, "now", "()Ljava/time/LocalDate;", &[])
+        .and_then(|value| value.l())
+        .ok()?;
+
+    env.call_method(&today, "toEpochDay", "()J", &[])
+        .and_then(|value| value.j())
+        .ok()
+        .map(|day| day.max(0) as u64)
 }
 
 #[cfg(target_os = "android")]

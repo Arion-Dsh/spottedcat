@@ -47,6 +47,11 @@ Typical flow:
 2. Assemble the local `.xcframework`
 3. Open the Xcode sample app and link against the locally built artifact
 
+Notes:
+
+- The iOS wrapper shows today's steps plus the last 7 days of pedometer history, both queried from Rust.
+- Historical pedometer data is expected to be unavailable in the iOS Simulator.
+
 ## Android
 
 Key files:
@@ -62,3 +67,9 @@ Typical flow:
 1. Build the Rust Android shared libraries locally
 2. Copy outputs into the Android app's `jniLibs/` directory locally
 3. Open the Gradle project and run it from Android Studio or `gradlew`
+
+Notes:
+
+- The sample shows sensor-driven "today's steps", not a historical or lifetime total.
+- On Android 10 and above, the sample requests `ACTIVITY_RECOGNITION` at runtime before step data becomes available.
+- Recent step history is requested from Rust via JNI after Health Connect permission is granted by the Android host app.

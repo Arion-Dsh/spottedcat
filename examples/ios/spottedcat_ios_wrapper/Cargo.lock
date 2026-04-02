@@ -2500,7 +2500,11 @@ dependencies = [
 name = "spottedcat_ios_wrapper"
 version = "0.5.4"
 dependencies = [
+ "block2 0.6.2",
  "image",
+ "objc2 0.6.3",
+ "objc2-core-motion",
+ "objc2-foundation 0.3.2",
  "spottedcat",
 ]
 

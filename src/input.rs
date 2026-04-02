@@ -44,6 +44,8 @@ pub struct InputManager {
     #[cfg(feature = "sensors")]
     step_count: Option<f32>,
     #[cfg(feature = "sensors")]
+    yesterday_step_count: Option<f32>,
+    #[cfg(feature = "sensors")]
     step_detected: bool,
 }
 
@@ -81,6 +83,8 @@ impl Default for InputManager {
             rotation: None,
             #[cfg(feature = "sensors")]
             step_count: None,
+            #[cfg(feature = "sensors")]
+            yesterday_step_count: None,
             #[cfg(feature = "sensors")]
             step_detected: false,
         }
@@ -156,6 +160,16 @@ impl InputManager {
     #[cfg(feature = "sensors")]
     pub fn step_count(&self) -> Option<f32> {
         self.step_count
+    }
+
+    #[cfg(feature = "sensors")]
+    pub fn today_step_count(&self) -> Option<f32> {
+        self.step_count
+    }
+
+    #[cfg(feature = "sensors")]
+    pub fn yesterday_step_count(&self) -> Option<f32> {
+        self.yesterday_step_count
     }
 
     #[cfg(feature = "sensors")]
@@ -425,6 +439,12 @@ impl InputManager {
     #[allow(dead_code)]
     pub(crate) fn handle_step_counter(&mut self, count: f32) {
         self.step_count = Some(count);
+    }
+
+    #[cfg(feature = "sensors")]
+    #[allow(dead_code)]
+    pub(crate) fn handle_yesterday_step_counter(&mut self, count: f32) {
+        self.yesterday_step_count = Some(count);
     }
 
     #[cfg(feature = "sensors")]

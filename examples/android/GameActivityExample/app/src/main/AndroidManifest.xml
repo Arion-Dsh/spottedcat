@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <application
         android:allowBackup="true"

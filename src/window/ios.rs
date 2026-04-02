@@ -3,7 +3,7 @@ use objc2::{msg_send, rc::Retained};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2_core_motion::{CMMotionManager, CMPedometer, CMPedometerData};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
-use objc2_foundation::MainThreadMarker;
+use objc2_foundation::{MainThreadMarker, NSCalendar, NSDate};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
 use std::sync::{Arc, Mutex};
 
@@ -12,6 +12,7 @@ pub(crate) struct IosSensorState {
     manager: Retained<CMMotionManager>,
     pedometer: Retained<CMPedometer>,
     latest_steps: Arc<Mutex<Option<f32>>>,
+    latest_yesterday_steps: Arc<Mutex<Option<f32>>>,
     previous_steps: Mutex<f32>,
 }
 
@@ -37,6 +38,7 @@ impl IosSensorState {
             manager,
             pedometer,
             latest_steps: Arc::new(Mutex::new(None)),
+            latest_yesterday_steps: Arc::new(Mutex::new(None)),
             previous_steps: Mutex::new(0.0),
         }
     }
@@ -63,6 +65,7 @@ impl IosSensorState {
             let pedo_avail: bool = msg_send![objc2::class!(CMPedometer), isStepCountingAvailable];
             if pedo_avail {
                 let latest_steps = self.latest_steps.clone();
+                let latest_yesterday_steps = self.latest_yesterday_steps.clone();
                 let calendar: Retained<objc2_foundation::NSCalendar> =
                     msg_send![objc2::class!(NSCalendar), currentCalendar];
                 let now: Retained<objc2_foundation::NSDate> =
@@ -88,6 +91,34 @@ impl IosSensorState {
                     },
                 );
                 let _: () = msg_send![&self.pedometer, startPedometerUpdatesFromDate: &*start_of_day, withHandler: &*handler];
+
+                let start_of_yesterday_ts: f64 = msg_send![&*start_of_day, timeIntervalSince1970];
+                let yesterday_start: Retained<NSDate> = msg_send![
+                    objc2::class!(NSDate),
+                    dateWithTimeIntervalSince1970: start_of_yesterday_ts - 86_400.0
+                ];
+                let yesterday_handler = block2::RcBlock::new(
+                    move |data: *mut CMPedometerData, _error: *mut objc2::runtime::AnyObject| {
+                        if data.is_null() {
+                            return;
+                        }
+                        let data = &*data;
+                        let steps_obj: *mut objc2::runtime::AnyObject =
+                            msg_send![data, numberOfSteps];
+                        if !steps_obj.is_null() {
+                            let steps: i32 = msg_send![steps_obj, intValue];
+                            if let Ok(mut latest) = latest_yesterday_steps.lock() {
+                                *latest = Some(steps as f32);
+                            }
+                        }
+                    },
+                );
+                let _: () = msg_send![
+                    &self.pedometer,
+                    queryPedometerDataFromDate: &*yesterday_start,
+                    toDate: &*start_of_day,
+                    withHandler: &*yesterday_handler
+                ];
             }
         }
     }
@@ -135,6 +166,12 @@ impl IosSensorState {
                     }
                     *prev = count;
                 }
+            }
+        }
+
+        if let Ok(steps) = self.latest_yesterday_steps.lock() {
+            if let Some(count) = *steps {
+                input.handle_yesterday_step_counter(count);
             }
         }
     }

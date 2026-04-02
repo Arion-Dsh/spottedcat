@@ -1,7 +1,7 @@
 use super::App;
+use crate::Pt;
 use crate::platform;
 use crate::scenes::take_quit_request;
-use crate::Pt;
 use android_activity::{AndroidApp, MainEvent, PollEvent};
 use std::time::{Duration, Instant};
 
@@ -16,9 +16,10 @@ pub(crate) struct AndroidSensorState {
     pub(crate) step_counter: *const ndk_sys::ASensor,
     pub(crate) step_detector: *const ndk_sys::ASensor,
     pub(crate) event_buffer: std::sync::Arc<std::sync::Mutex<Vec<ndk_sys::ASensorEvent>>>,
-    pub(crate) initial_hardware_count: f32,
-    pub(crate) last_system_day: u64,
-    pub(crate) last_hardware_count: f32,
+    pub(crate) last_local_day: u64,
+    pub(crate) today_step_total: u64,
+    pub(crate) yesterday_step_total: u64,
+    pub(crate) last_hardware_count: Option<u64>,
     pub(crate) internal_data_path: std::path::PathBuf,
 }
 
@@ -56,6 +57,51 @@ impl PlatformData {
 }
 
 impl App {
+    #[cfg(feature = "sensors")]
+    fn current_local_epoch_day() -> u64 {
+        crate::android::current_local_epoch_day().unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() / 86400)
+                .unwrap_or(0)
+        })
+    }
+
+    #[cfg(feature = "sensors")]
+    fn persist_step_state(state: &AndroidSensorState) {
+        let steps_file = state.internal_data_path.join("steps.txt");
+        let content = format!(
+            "v2 {} {} {} {}",
+            state.last_local_day,
+            state.today_step_total,
+            state.yesterday_step_total,
+            state.last_hardware_count.unwrap_or(0)
+        );
+        let _ = std::fs::write(steps_file, content);
+    }
+
+    #[cfg(feature = "sensors")]
+    fn roll_step_day_if_needed(state: &mut AndroidSensorState, current_day: u64) -> bool {
+        if state.last_local_day == 0 {
+            state.last_local_day = current_day;
+            return true;
+        }
+
+        if current_day <= state.last_local_day {
+            return false;
+        }
+
+        let day_gap = current_day - state.last_local_day;
+        if day_gap == 1 {
+            state.yesterday_step_total = state.today_step_total;
+        } else {
+            state.yesterday_step_total = 0;
+        }
+        state.today_step_total = 0;
+        state.last_local_day = current_day;
+        true
+    }
+
     fn setup_native_window_surface(&mut self, window: &ndk::native_window::NativeWindow) {
         let size = (window.width() as u32, window.height() as u32);
         if size.0 == 0 || size.1 == 0 {
@@ -314,7 +360,7 @@ impl App {
                             spot.suspended(&mut self.ctx);
                         }
                         #[cfg(feature = "sensors")]
-                        self.disable_sensors();
+                        self.disable_high_frequency_sensors();
                     }
                     PollEvent::Main(MainEvent::ConfigChanged { .. }) => {
                         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
@@ -393,12 +439,28 @@ impl App {
 
             // Sensor polling if enabled
             #[cfg(feature = "sensors")]
-            if let Some(state) = self.platform.sensor_state.as_ref() {
+            if self.platform.sensor_state.is_some() {
+                let current_day = Self::current_local_epoch_day();
+                if let Some(state) = self.platform.sensor_state.as_mut() {
+                    let rolled_day = Self::roll_step_day_if_needed(state, current_day);
+                    if rolled_day {
+                        Self::persist_step_state(state);
+                    }
+                    self.ctx
+                        .input_mut()
+                        .handle_step_counter(state.today_step_total as f32);
+                    self.ctx
+                        .input_mut()
+                        .handle_yesterday_step_counter(state.yesterday_step_total as f32);
+                }
+
+                let events = {
+                    let state = self.platform.sensor_state.as_ref().unwrap();
+                    let mut buffer = state.event_buffer.lock().unwrap();
+                    std::mem::take(&mut *buffer)
+                };
+
                 unsafe {
-                    let events = {
-                        let mut buffer = state.event_buffer.lock().unwrap();
-                        std::mem::take(&mut *buffer)
-                    };
                     for event in events {
                         match event.type_ {
                             1 => {
@@ -502,40 +564,65 @@ impl App {
                                 let w = event.__bindgen_anon_1.__bindgen_anon_1.data[3];
                                 self.ctx.input_mut().handle_rotation(x, y, z, w);
                             }
-                            17 => {
-                                // ASENSOR_TYPE_STEP_DETECTOR
+                            x if x == ndk_sys::ASENSOR_TYPE_STEP_DETECTOR as i32 => {
                                 self.ctx.input_mut().handle_step_detector();
                             }
-                            18 => {
-                                // ASENSOR_TYPE_STEP_COUNTER
-                                let count = event.__bindgen_anon_1.__bindgen_anon_1.data[0];
+                            x if x == ndk_sys::ASENSOR_TYPE_STEP_COUNTER as i32 => {
+                                let count = event.__bindgen_anon_1.u64_.step_counter;
                                 eprintln!("[spot][android] Step counter event: count={}", count);
 
                                 let state = self.platform.sensor_state.as_mut().unwrap();
-                                let current_day = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .map(|d| d.as_secs() / 86400)
-                                    .unwrap_or(0);
+                                let current_day = Self::current_local_epoch_day();
+                                let rolled_day = Self::roll_step_day_if_needed(state, current_day);
 
-                                if state.initial_hardware_count < 0.0
-                                    || current_day > state.last_system_day
-                                    || count < state.last_hardware_count
-                                {
-                                    state.initial_hardware_count = count;
-                                    state.last_system_day = current_day;
+                                let delta = match state.last_hardware_count {
+                                    Some(previous) if count >= previous => count - previous,
+                                    Some(previous) => {
+                                        eprintln!(
+                                            "[spot][android] Step counter reset detected: previous={} new={}",
+                                            previous,
+                                            count
+                                        );
+                                        0
+                                    }
+                                    None => {
+                                        eprintln!(
+                                            "[spot][android] Establishing initial step counter at {}",
+                                            count
+                                        );
+                                        0
+                                    }
+                                };
 
-                                    // Save immediately on reset for robustness
-                                    let steps_file = state.internal_data_path.join("steps.txt");
-                                    let content = format!(
-                                        "{} {} {}",
-                                        state.initial_hardware_count, state.last_system_day, count
-                                    );
-                                    let _ = std::fs::write(steps_file, content);
+                                if delta > 0 {
+                                    state.today_step_total =
+                                        state.today_step_total.saturating_add(delta);
                                 }
-                                state.last_hardware_count = count;
+                                state.last_hardware_count = Some(count);
 
-                                let steps_today = count - state.initial_hardware_count;
-                                self.ctx.input_mut().handle_step_counter(steps_today);
+                                if delta > 0 || rolled_day {
+                                    eprintln!(
+                                        "[spot][android] Updated daily steps: current_day={} today={} yesterday={} delta={} last_count={}",
+                                        current_day,
+                                        state.today_step_total,
+                                        state.yesterday_step_total,
+                                        delta,
+                                        count
+                                    );
+                                }
+                                Self::persist_step_state(state);
+                                eprintln!(
+                                    "[spot][android] Computed steps_today={} yesterday_steps={} using count={}",
+                                    state.today_step_total,
+                                    state.yesterday_step_total,
+                                    count,
+                                );
+                                self.ctx
+                                    .input_mut()
+                                    .handle_step_counter(state.today_step_total as f32);
+                                self.ctx
+                                    .input_mut()
+                                    .handle_yesterday_step_counter(state.yesterday_step_total as f32);
                             }
                             _ => {}
                         }
@@ -650,8 +737,20 @@ impl App {
                 let mag = ndk_sys::ASensorManager_getDefaultSensor(manager, 2);
                 let gyro = ndk_sys::ASensorManager_getDefaultSensor(manager, 4);
                 let rot = ndk_sys::ASensorManager_getDefaultSensor(manager, 11);
-                let step_detector = ndk_sys::ASensorManager_getDefaultSensor(manager, 17);
-                let step_counter = ndk_sys::ASensorManager_getDefaultSensor(manager, 18);
+                let step_detector = ndk_sys::ASensorManager_getDefaultSensor(
+                    manager,
+                    ndk_sys::ASENSOR_TYPE_STEP_DETECTOR as i32,
+                );
+                let step_counter = ndk_sys::ASensorManager_getDefaultSensor(
+                    manager,
+                    ndk_sys::ASENSOR_TYPE_STEP_COUNTER as i32,
+                );
+                if step_detector.is_null() {
+                    eprintln!("[spot][android] Step detector sensor unavailable on this device.");
+                }
+                if step_counter.is_null() {
+                    eprintln!("[spot][android] Step counter sensor unavailable on this device.");
+                }
 
                 let data_path = self
                     .platform
@@ -660,18 +759,33 @@ impl App {
                     .unwrap_or_else(|| std::path::PathBuf::from("/sdcard"));
                 let steps_file = data_path.join("steps.txt");
 
-                let mut initial_hardware_count = -1.0f32;
-                let mut last_system_day = 0u64;
-                let mut last_hardware_count = 0.0f32;
+                let mut last_local_day = Self::current_local_epoch_day();
+                let mut today_step_total = 0u64;
+                let mut yesterday_step_total = 0u64;
+                let mut last_hardware_count = None;
 
                 if let Ok(content) = std::fs::read_to_string(&steps_file) {
                     let parts: Vec<&str> = content.split_whitespace().collect();
-                    if parts.len() >= 3 {
-                        initial_hardware_count = parts[0].parse().unwrap_or(-1.0);
-                        last_system_day = parts[1].parse().unwrap_or(0);
-                        last_hardware_count = parts[2].parse().unwrap_or(0.0);
+                    if parts.first() == Some(&"v2") && parts.len() >= 5 {
+                        last_local_day = parts[1].parse().unwrap_or(last_local_day);
+                        today_step_total = parts[2].parse().unwrap_or(0);
+                        yesterday_step_total = parts[3].parse().unwrap_or(0);
+                        last_hardware_count = parts[4].parse().ok();
+                    } else if parts.len() >= 3 {
+                        last_local_day = parts[1].parse().unwrap_or(last_local_day);
+                        last_hardware_count = None;
                     }
                 }
+                eprintln!(
+                    "[spot][android] Restored step state: today={} yesterday={} last_day={} last_count={} file={}",
+                    today_step_total,
+                    yesterday_step_total,
+                    last_local_day,
+                    last_hardware_count
+                        .map(|v: u64| v.to_string())
+                        .unwrap_or_else(|| "none".to_string()),
+                    steps_file.display()
+                );
 
                 let sensor_state = AndroidSensorState {
                     _manager: manager,
@@ -685,8 +799,9 @@ impl App {
                     event_buffer: std::sync::Arc::new(std::sync::Mutex::new(Vec::with_capacity(
                         32,
                     ))),
-                    initial_hardware_count,
-                    last_system_day,
+                    last_local_day,
+                    today_step_total,
+                    yesterday_step_total,
                     last_hardware_count,
                     internal_data_path: data_path,
                 };
@@ -713,41 +828,55 @@ impl App {
                 );
 
                 if queue.is_null() {
+                    eprintln!("[spot][android] Failed to create sensor event queue");
                     self.platform.sensor_state = None;
                     return;
                 }
                 state_ref.queue = queue;
+                eprintln!("[spot][android] Sensor event queue created successfully");
             }
 
             if let Some(state) = self.platform.sensor_state.as_ref() {
                 if !state.accel.is_null() {
-                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.accel);
-                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.accel, 20_000);
+                    let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.accel);
+                    eprintln!("[spot][android] Enable accelerometer rc={}", rc);
+                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.accel, 20_000);
+                    eprintln!("[spot][android] Accelerometer event rate rc={}", rc);
                 }
                 if !state.mag.is_null() {
-                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.mag);
-                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.mag, 20_000);
+                    let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.mag);
+                    eprintln!("[spot][android] Enable magnetometer rc={}", rc);
+                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.mag, 20_000);
+                    eprintln!("[spot][android] Magnetometer event rate rc={}", rc);
                 }
                 if !state.gyro.is_null() {
-                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.gyro);
-                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000);
+                    let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.gyro);
+                    eprintln!("[spot][android] Enable gyroscope rc={}", rc);
+                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.gyro, 20_000);
+                    eprintln!("[spot][android] Gyroscope event rate rc={}", rc);
                 }
                 if !state.rot.is_null() {
-                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.rot);
-                    ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.rot, 20_000);
+                    let rc = ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.rot);
+                    eprintln!("[spot][android] Enable rotation vector rc={}", rc);
+                    let rc = ndk_sys::ASensorEventQueue_setEventRate(state.queue, state.rot, 20_000);
+                    eprintln!("[spot][android] Rotation vector event rate rc={}", rc);
                 }
                 if !state.step_counter.is_null() {
-                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.step_counter);
+                    let rc =
+                        ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.step_counter);
+                    eprintln!("[spot][android] Enable step counter rc={}", rc);
                 }
                 if !state.step_detector.is_null() {
-                    ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.step_detector);
+                    let rc =
+                        ndk_sys::ASensorEventQueue_enableSensor(state.queue, state.step_detector);
+                    eprintln!("[spot][android] Enable step detector rc={}", rc);
                 }
             }
         }
     }
 
     #[cfg(feature = "sensors")]
-    pub(crate) fn disable_sensors(&mut self) {
+    pub(crate) fn disable_high_frequency_sensors(&mut self) {
         unsafe {
             if let Some(state) = self.platform.sensor_state.as_ref() {
                 if !state.accel.is_null() {
@@ -762,20 +891,7 @@ impl App {
                 if !state.rot.is_null() {
                     ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.rot);
                 }
-                if !state.step_counter.is_null() {
-                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_counter);
-                }
-                if !state.step_detector.is_null() {
-                    ndk_sys::ASensorEventQueue_disableSensor(state.queue, state.step_detector);
-                }
-
-                // Persist step data
-                let steps_file = state.internal_data_path.join("steps.txt");
-                let content = format!(
-                    "{} {} {}",
-                    state.initial_hardware_count, state.last_system_day, state.last_hardware_count
-                );
-                let _ = std::fs::write(steps_file, content);
+                Self::persist_step_state(state);
             }
         }
     }

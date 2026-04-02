@@ -53,6 +53,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.games.activity)
+    implementation(libs.androidx.health.connect)
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.material)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

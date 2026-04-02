@@ -1,12 +1,16 @@
+#[cfg(target_os = "android")]
 use spottedcat::{
-    AndroidApp, Context, DrawOption, DrawOption3D, Image, Model, PlatformEvent, Pt, Spot, Text,
-    WindowConfig,
+    Context, DrawOption, DrawOption3D, Image, Model, PlatformEvent, Pt, Spot, Text, WindowConfig,
 };
 #[cfg(target_os = "android")]
+use spottedcat::AndroidApp;
+#[cfg(target_os = "android")]
 use jni::{
-    objects::{JClass, JString},
+    objects::{JClass, JObject, JString, JValue},
     JNIEnv,
 };
+#[cfg(target_os = "android")]
+use std::collections::BTreeMap;
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
@@ -22,6 +26,296 @@ pub unsafe extern "system" fn Java_com_example_gameactivityexample_MainActivity_
 }
 
 #[cfg(target_os = "android")]
+fn load_android_class<'a>(
+    env: &mut JNIEnv<'a>,
+    activity: &JObject<'a>,
+    class_name: &str,
+) -> Result<JClass<'a>, String> {
+    if class_name.starts_with("android/") || class_name.starts_with("java/") {
+        return env.find_class(class_name).map_err(|e| e.to_string());
+    }
+
+    let class_loader = env
+        .call_method(activity, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+    let class_name_java = env
+        .new_string(class_name.replace('/', "."))
+        .map_err(|e| e.to_string())?;
+    let class_name_obj = JObject::from(class_name_java);
+    let class_obj = env
+        .call_method(
+            class_loader,
+            "loadClass",
+            "(Ljava/lang/String;)Ljava/lang/Class;",
+            &[JValue::Object(&class_name_obj)],
+        )
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+    Ok(JClass::from(class_obj))
+}
+
+#[cfg(target_os = "android")]
+fn request_health_permission_from_rust() -> Result<(), String> {
+    let jvm = spottedcat::android::get_jvm().ok_or_else(|| "JVM unavailable".to_string())?;
+    let activity_ref =
+        spottedcat::android::get_activity().ok_or_else(|| "Activity unavailable".to_string())?;
+    let mut env = jvm.attach_current_thread().map_err(|e| e.to_string())?;
+    env.call_method(
+        activity_ref.as_obj(),
+        "requestHealthConnectPermissionFromRust",
+        "()V",
+        &[],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+fn fetch_health_history_from_rust() -> Result<String, String> {
+    let provider = "com.google.android.apps.healthdata";
+    let jvm = spottedcat::android::get_jvm().ok_or_else(|| "JVM unavailable".to_string())?;
+    let activity_ref =
+        spottedcat::android::get_activity().ok_or_else(|| "Activity unavailable".to_string())?;
+    let mut env = jvm.attach_current_thread().map_err(|e| e.to_string())?;
+    let activity = activity_ref.as_obj();
+
+    let health_client_class =
+        load_android_class(&mut env, activity, "androidx/health/connect/client/HealthConnectClient")?;
+    let provider_java = env.new_string(provider).map_err(|e| e.to_string())?;
+    let provider_obj = JObject::from(provider_java);
+    let sdk_available = env
+        .get_static_field(&health_client_class, "SDK_AVAILABLE", "I")
+        .and_then(|v| v.i())
+        .map_err(|e| e.to_string())?;
+    let sdk_status = env
+        .call_static_method(
+            &health_client_class,
+            "getSdkStatus",
+            "(Landroid/content/Context;Ljava/lang/String;)I",
+            &[
+                JValue::Object(activity),
+                JValue::Object(&provider_obj),
+            ],
+        )
+        .and_then(|v| v.i())
+        .map_err(|e| e.to_string())?;
+    if sdk_status != sdk_available {
+        return Err("Health Connect SDK unavailable".to_string());
+    }
+
+    let client = env
+        .call_static_method(
+            &health_client_class,
+            "getOrCreate",
+            "(Landroid/content/Context;Ljava/lang/String;)Landroidx/health/connect/client/HealthConnectClient;",
+            &[
+                JValue::Object(activity),
+                JValue::Object(&provider_obj),
+            ],
+        )
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let steps_record_class = load_android_class(
+        &mut env,
+        activity,
+        "androidx/health/connect/client/records/StepsRecord",
+    )?;
+    let count_total_metric = env
+        .get_static_field(
+            &steps_record_class,
+            "COUNT_TOTAL",
+            "Landroidx/health/connect/client/aggregate/AggregateMetric;",
+        )
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let hash_set_class = env.find_class("java/util/HashSet").map_err(|e| e.to_string())?;
+    let metric_set = env
+        .new_object(&hash_set_class, "()V", &[])
+        .map_err(|e| e.to_string())?;
+    env.call_method(
+        &metric_set,
+        "add",
+        "(Ljava/lang/Object;)Z",
+        &[JValue::Object(&count_total_metric)],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let local_date_class = env.find_class("java/time/LocalDate").map_err(|e| e.to_string())?;
+    let today = env
+        .call_static_method(&local_date_class, "now", "()Ljava/time/LocalDate;", &[])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+    let start_date = env
+        .call_method(&today, "minusDays", "(J)Ljava/time/LocalDate;", &[JValue::Long(6)])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+    let end_date = env
+        .call_method(&today, "plusDays", "(J)Ljava/time/LocalDate;", &[JValue::Long(1)])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+    let start_time = env
+        .call_method(
+            &start_date,
+            "atStartOfDay",
+            "()Ljava/time/LocalDateTime;",
+            &[],
+        )
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+    let end_time = env
+        .call_method(&end_date, "atStartOfDay", "()Ljava/time/LocalDateTime;", &[])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let time_range_filter_class = load_android_class(
+        &mut env,
+        activity,
+        "androidx/health/connect/client/time/TimeRangeFilter",
+    )?;
+    let time_range_filter = env
+        .call_static_method(
+            &time_range_filter_class,
+            "between",
+            "(Ljava/time/LocalDateTime;Ljava/time/LocalDateTime;)Landroidx/health/connect/client/time/TimeRangeFilter;",
+            &[
+                JValue::Object(&start_time),
+                JValue::Object(&end_time),
+            ],
+        )
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let period_class = env.find_class("java/time/Period").map_err(|e| e.to_string())?;
+    let one_day_period = env
+        .call_static_method(&period_class, "ofDays", "(I)Ljava/time/Period;", &[JValue::Int(1)])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let collections_class = env
+        .find_class("java/util/Collections")
+        .map_err(|e| e.to_string())?;
+    let empty_set = env
+        .call_static_method(&collections_class, "emptySet", "()Ljava/util/Set;", &[])
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let request_class = load_android_class(
+        &mut env,
+        activity,
+        "androidx/health/connect/client/request/AggregateGroupByPeriodRequest",
+    )?;
+    let request = env
+        .new_object(
+            &request_class,
+            "(Ljava/util/Set;Landroidx/health/connect/client/time/TimeRangeFilter;Ljava/time/Period;Ljava/util/Set;)V",
+            &[
+                JValue::Object(&metric_set),
+                JValue::Object(&time_range_filter),
+                JValue::Object(&one_day_period),
+                JValue::Object(&empty_set),
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+
+    let result_list = env
+        .call_method(
+            &client,
+            "aggregateGroupByPeriod",
+            "(Landroidx/health/connect/client/request/AggregateGroupByPeriodRequest;)Ljava/util/List;",
+            &[JValue::Object(&request)],
+        )
+        .and_then(|v| v.l())
+        .map_err(|e| e.to_string())?;
+
+    let size = env
+        .call_method(&result_list, "size", "()I", &[])
+        .and_then(|v| v.i())
+        .map_err(|e| e.to_string())?;
+
+    let mut counts_by_day = BTreeMap::new();
+    for idx in 0..size {
+        let entry = env
+            .call_method(
+                &result_list,
+                "get",
+                "(I)Ljava/lang/Object;",
+                &[JValue::Int(idx)],
+            )
+            .and_then(|v| v.l())
+            .map_err(|e| e.to_string())?;
+        let start_time = env
+            .call_method(
+                &entry,
+                "getStartTime",
+                "()Ljava/time/LocalDateTime;",
+                &[],
+            )
+            .and_then(|v| v.l())
+            .map_err(|e| e.to_string())?;
+        let local_date = env
+            .call_method(&start_time, "toLocalDate", "()Ljava/time/LocalDate;", &[])
+            .and_then(|v| v.l())
+            .map_err(|e| e.to_string())?;
+        let label = env
+            .call_method(&local_date, "toString", "()Ljava/lang/String;", &[])
+            .and_then(|v| v.l())
+            .and_then(|v| Ok(JString::from(v)))
+            .map_err(|e| e.to_string())?;
+        let label: String = env.get_string(&label).map_err(|e| e.to_string())?.into();
+
+        let aggregate_result = env
+            .call_method(
+                &entry,
+                "getResult",
+                "()Landroidx/health/connect/client/aggregate/AggregationResult;",
+                &[],
+            )
+            .and_then(|v| v.l())
+            .map_err(|e| e.to_string())?;
+        let value_obj = env
+            .call_method(
+                &aggregate_result,
+                "get",
+                "(Landroidx/health/connect/client/aggregate/AggregateMetric;)Ljava/lang/Object;",
+                &[JValue::Object(&count_total_metric)],
+            )
+            .and_then(|v| v.l())
+            .map_err(|e| e.to_string())?;
+        let count = if value_obj.is_null() {
+            0
+        } else {
+            env.call_method(&value_obj, "longValue", "()J", &[])
+                .and_then(|v| v.j())
+                .map_err(|e| e.to_string())?
+        };
+        counts_by_day.insert(label, count);
+    }
+
+    let mut lines = vec!["Health Connect (7 days, Rust JNI)".to_string()];
+    let mut total = 0i64;
+    for offset in (0..=6).rev() {
+        let date = env
+            .call_method(&today, "minusDays", "(J)Ljava/time/LocalDate;", &[JValue::Long(offset)])
+            .and_then(|v| v.l())
+            .map_err(|e| e.to_string())?;
+        let label = env
+            .call_method(&date, "toString", "()Ljava/lang/String;", &[])
+            .and_then(|v| v.l())
+            .and_then(|v| Ok(JString::from(v)))
+            .map_err(|e| e.to_string())?;
+        let label: String = env.get_string(&label).map_err(|e| e.to_string())?.into();
+        let count = *counts_by_day.get(&label).unwrap_or(&0);
+        total += count;
+        lines.push(format!("{label}: {count}"));
+    }
+    lines.push(format!("7d total: {total}"));
+    Ok(lines.join("\n"))
+}
+
+#[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     struct AndroidFfiSpot {
@@ -34,9 +328,16 @@ pub fn android_main(app: AndroidApp) {
         rot_text: Text,
         rot_data: [f32; 4],
         step_text: Text,
+        yesterday_step_text: Text,
+        history_text: Text,
+        health_status_text: Text,
         bridge_text: Text,
         step_count: f32,
+        yesterday_step_count: f32,
         step_detected_timer: f32,
+        requested_health_permission: bool,
+        permission_granted: bool,
+        history_loaded: bool,
         touch_pos: Option<(Pt, Pt)>,
         last_fps_time: std::time::Instant,
         frame_count: u32,
@@ -73,7 +374,19 @@ pub fn android_main(app: AndroidApp) {
             let accel_text = Text::new("Accel: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
             let mag_text = Text::new("Mag: 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
             let rot_text = Text::new("Rot: 0.0, 0.0, 0.0, 0.0", font_id).with_font_size(Pt::from(20.0));
-            let step_text = Text::new("Steps: 0", font_id).with_font_size(Pt::from(20.0));
+            let step_text =
+                Text::new("Today's Steps: 0", font_id).with_font_size(Pt::from(20.0));
+            let yesterday_step_text =
+                Text::new("Yesterday's Steps: 0", font_id).with_font_size(Pt::from(20.0));
+            let history_text = Text::new(
+                "History: waiting for Rust-triggered Health Connect request",
+                font_id,
+            )
+            .with_font_size(Pt::from(16.0))
+            .with_color([0.8, 0.9, 1.0, 1.0]);
+            let health_status_text = Text::new("Health: idle", font_id)
+                .with_font_size(Pt::from(18.0))
+                .with_color([0.5, 1.0, 0.8, 1.0]);
 
             // Setup 3D scene
             ctx.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
@@ -92,11 +405,18 @@ pub fn android_main(app: AndroidApp) {
                 rot_text,
                 rot_data: [0.0; 4],
                 step_text,
+                yesterday_step_text,
+                history_text,
+                health_status_text,
                 bridge_text: Text::new("Bridge: No Event", font_id)
                     .with_font_size(Pt::from(20.0))
                     .with_color([0.5, 1.0, 0.5, 1.0]),
                 step_count: 0.0,
+                yesterday_step_count: 0.0,
                 step_detected_timer: 0.0,
+                requested_health_permission: false,
+                permission_granted: false,
+                history_loaded: false,
                 touch_pos: None,
                 last_fps_time: std::time::Instant::now(),
                 frame_count: 0,
@@ -140,22 +460,65 @@ pub fn android_main(app: AndroidApp) {
                 self.rot_data[0], self.rot_data[1], self.rot_data[2], self.rot_data[3]
             ));
             
-            self.step_count = spottedcat::step_count(ctx).unwrap_or(0.0);
+            self.step_count = spottedcat::today_step_count(ctx).unwrap_or(0.0);
+            self.yesterday_step_count = spottedcat::yesterday_step_count(ctx).unwrap_or(0.0);
             if spottedcat::step_detected(ctx) {
                 self.step_detected_timer = 0.5;
             }
             self.step_detected_timer = (self.step_detected_timer - dt.as_secs_f32()).max(0.0);
-            self.step_text.set_content(format!("Steps: {:.0}", self.step_count));
+            self.step_text
+                .set_content(format!("Today's Steps: {:.0}", self.step_count));
+            self.yesterday_step_text
+                .set_content(format!("Yesterday's Steps: {:.0}", self.yesterday_step_count));
             if self.step_detected_timer > 0.0 {
                 self.step_text.set_color([1.0, 1.0, 0.0, 1.0]); // Yellow on detection
             } else {
                 self.step_text.set_color([1.0, 1.0, 1.0, 1.0]);
             }
 
+            if !self.requested_health_permission {
+                match request_health_permission_from_rust() {
+                    Ok(()) => {
+                        self.health_status_text
+                            .set_content("Health: Rust requested Health Connect permission");
+                        self.requested_health_permission = true;
+                    }
+                    Err(err) => {
+                        self.health_status_text
+                            .set_content(format!("Health: permission request failed: {err}"));
+                    }
+                }
+            }
+
             // --- Platform Bridge Example ---
             for event in spottedcat::poll_platform_events(ctx) {
                 let PlatformEvent::Event(t, d) = event;
-                self.bridge_text.set_content(format!("{}: {}", t, d));
+                match t.as_str() {
+                    "health_steps_history" => self.history_text.set_content(d),
+                    "health_connect_status" => self.health_status_text.set_content(format!("Health: {}", d)),
+                    "health_connect_permission" => {
+                        self.permission_granted = d == "granted";
+                        if d != "granted" {
+                            self.history_loaded = false;
+                        }
+                    }
+                    _ => self.bridge_text.set_content(format!("{}: {}", t, d)),
+                }
+            }
+
+            if self.permission_granted && !self.history_loaded {
+                match fetch_health_history_from_rust() {
+                    Ok(history) => {
+                        self.history_text.set_content(history);
+                        self.health_status_text
+                            .set_content("Health: Rust JNI history loaded".to_string());
+                        self.history_loaded = true;
+                    }
+                    Err(err) => {
+                        self.health_status_text
+                            .set_content(format!("Health: Rust JNI history failed: {err}"));
+                    }
+                }
             }
 
             // Touch to trigger Kotlin method
@@ -265,15 +628,24 @@ pub fn android_main(app: AndroidApp) {
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(310.0)]),
             );
 
-            self.bridge_text.draw(
+            self.yesterday_step_text.draw(
                 ctx,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(340.0)]),
             );
 
-            // Draw Bridge text
+            self.health_status_text.draw(
+                ctx,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(370.0)]),
+            );
+
+            self.history_text.draw(
+                ctx,
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(400.0)]),
+            );
+
             self.bridge_text.draw(
                 ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(300.0)]),
+                DrawOption::default().with_position([Pt::from(50.0), Pt::from(550.0)]),
             );
 
             // Draw image at touch position or center
@@ -291,6 +663,9 @@ pub fn android_main(app: AndroidApp) {
 
         fn resumed(&mut self, _ctx: &mut Context) {
             eprintln!("[spot][android] resumed called");
+            self.requested_health_permission = false;
+            self.permission_granted = false;
+            self.history_loaded = false;
         }
 
         fn suspended(&mut self, _ctx: &mut Context) {

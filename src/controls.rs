@@ -81,8 +81,26 @@ pub fn rotation(ctx: &Context) -> Option<[f32; 4]> {
 }
 
 #[cfg(feature = "sensors")]
+/// Returns the current day's step count when the platform provides it.
+///
+/// On iOS this is sourced from `CMPedometer` starting at the beginning of the
+/// current local day. On Android this is derived from the step counter sensor
+/// while the app keeps the sensor registered.
+pub fn today_step_count(ctx: &Context) -> Option<f32> {
+    ctx.input().today_step_count()
+}
+
+#[cfg(feature = "sensors")]
+/// Compatibility alias for `today_step_count`.
+///
+/// This is not a lifetime or historical total.
 pub fn step_count(ctx: &Context) -> Option<f32> {
-    ctx.input().step_count()
+    today_step_count(ctx)
+}
+
+#[cfg(feature = "sensors")]
+pub fn yesterday_step_count(ctx: &Context) -> Option<f32> {
+    ctx.input().yesterday_step_count()
 }
 
 #[cfg(feature = "sensors")]

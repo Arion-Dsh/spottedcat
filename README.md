@@ -1,6 +1,6 @@
 # spottedcat
 
-A simple, clean 2D/3D graphics library for drawing images and 3D models using Rust and wgpu.
+A simple, clean 2D/3D game engine using Rust and wgpu.
 
 > [!WARNING]
 > **ALPHA VERSION**: This library is currently in an alpha state. The API is subject to frequent breaking changes and significant refactoring. Use with caution in production environments.
@@ -108,6 +108,19 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 - **Audio**: Load and play sounds with `play_sound(ctx, ...)`, or generate tones with `play_sine(ctx, ...)`.
 - **Scenes**: Transition between states using `switch_scene::<NewScene>()`.
 - **Resources**: Share data between systems via `ctx.get_resource::<T>()`.
+
+### Sensors
+
+Enable the `sensors` feature to access motion and step APIs.
+
+- `today_step_count(ctx)` returns the current day's steps when the platform can provide them.
+- `step_detected(ctx)` reports whether a new step was observed during the current frame.
+
+Step semantics are intentionally limited to "today" for cross-platform consistency:
+
+- **iOS** uses `CMPedometer` updates starting from the beginning of the current local day.
+- **Android** derives today's steps from `TYPE_STEP_COUNTER` while the sensor stays registered.
+- Neither API should be treated as a lifetime or historical total. Historical fitness data belongs in HealthKit or Health Connect integration.
 
 ## Custom Shaders
 
