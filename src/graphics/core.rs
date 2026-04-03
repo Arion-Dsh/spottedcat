@@ -405,47 +405,7 @@ impl Graphics {
     }
 }
 
-// Basic math helpers
-
-pub fn identity() -> [[f32; 4]; 4] {
-    [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-}
-
-pub fn create_scale(s: [f32; 3]) -> [[f32; 4]; 4] {
-    [
-        [s[0], 0.0, 0.0, 0.0],
-        [0.0, s[1], 0.0, 0.0],
-        [0.0, 0.0, s[2], 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-}
-
-pub fn create_rotation_from_quat(q: [f32; 4]) -> [[f32; 4]; 4] {
-    let x2 = q[0] + q[0];
-    let y2 = q[1] + q[1];
-    let z2 = q[2] + q[2];
-    let xx = q[0] * x2;
-    let xy = q[0] * y2;
-    let xz = q[0] * z2;
-    let yy = q[1] * y2;
-    let yz = q[1] * z2;
-    let zz = q[2] * z2;
-    let wx = q[3] * x2;
-    let wy = q[3] * y2;
-    let wz = q[3] * z2;
-
-    [
-        [1.0 - (yy + zz), xy + wz, xz - wy, 0.0],
-        [xy - wz, 1.0 - (xx + zz), yz + wx, 0.0],
-        [xz + wy, yz - wx, 1.0 - (xx + yy), 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-}
+// Basic math helpers - removed and consolidated in crate::math.
 
 fn pick_surface_format(caps: &wgpu::SurfaceCapabilities) -> wgpu::TextureFormat {
     // Prefer Srgb formats with alpha

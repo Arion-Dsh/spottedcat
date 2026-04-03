@@ -382,20 +382,20 @@ impl Graphics {
         {
             match command {
                 DrawCommand3D::Model(model, opts, shader_id, shader_opts, skin_id_cmd) => {
-                    let model_mat = crate::graphics::model_raw::create_translation(opts.position);
-                    let rot_mat = crate::graphics::model_raw::create_rotation(opts.rotation);
-                    let scale_mat = crate::graphics::model_raw::create_scale(opts.scale);
-                    let model_mat_all = crate::graphics::model_raw::multiply(
+                    let model_mat = crate::math::mat4::from_translation(opts.position);
+                    let rot_mat = crate::math::mat4::from_rotation(opts.rotation);
+                    let scale_mat = crate::math::mat4::from_scale(opts.scale);
+                    let model_mat_all = crate::math::mat4::multiply(
                         model_mat,
-                        crate::graphics::model_raw::multiply(rot_mat, scale_mat),
+                        crate::math::mat4::multiply(rot_mat, scale_mat),
                     );
 
                     let mvp = if is_shadow_pass {
-                        crate::graphics::model_raw::multiply(lvp, model_mat_all)
+                        crate::math::mat4::multiply(lvp, model_mat_all)
                     } else {
-                        crate::graphics::model_raw::multiply(
+                        crate::math::mat4::multiply(
                             proj,
-                            crate::graphics::model_raw::multiply(view_mat, model_mat_all),
+                            crate::math::mat4::multiply(view_mat, model_mat_all),
                         )
                     };
 
@@ -542,20 +542,20 @@ impl Graphics {
                     skin_id_cmd,
                     transforms,
                 ) => {
-                    let model_mat = crate::graphics::model_raw::create_translation(opts.position);
-                    let rot_mat = crate::graphics::model_raw::create_rotation(opts.rotation);
-                    let scale_mat = crate::graphics::model_raw::create_scale(opts.scale);
-                    let model_mat_all = crate::graphics::model_raw::multiply(
+                    let model_mat = crate::math::mat4::from_translation(opts.position);
+                    let rot_mat = crate::math::mat4::from_rotation(opts.rotation);
+                    let scale_mat = crate::math::mat4::from_scale(opts.scale);
+                    let model_mat_all = crate::math::mat4::multiply(
                         model_mat,
-                        crate::graphics::model_raw::multiply(rot_mat, scale_mat),
+                        crate::math::mat4::multiply(rot_mat, scale_mat),
                     );
 
                     let mvp = if is_shadow_pass {
-                        crate::graphics::model_raw::multiply(lvp, model_mat_all)
+                        crate::math::mat4::multiply(lvp, model_mat_all)
                     } else {
-                        crate::graphics::model_raw::multiply(
+                        crate::math::mat4::multiply(
                             proj,
-                            crate::graphics::model_raw::multiply(view_mat, model_mat_all),
+                            crate::math::mat4::multiply(view_mat, model_mat_all),
                         )
                     };
 

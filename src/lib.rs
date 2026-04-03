@@ -63,6 +63,7 @@ mod fog;
 mod glyph_cache;
 mod graphics;
 pub mod image;
+pub mod math;
 mod image_raw;
 mod input;
 mod key;

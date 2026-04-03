@@ -678,77 +678,7 @@ impl MeshData {
     }
 }
 
-pub fn create_perspective(aspect: f32, fov_y: f32, near: f32, far: f32) -> [[f32; 4]; 4] {
-    let f = 1.0 / (fov_y / 2.0).tan();
-    [
-        [f / aspect, 0.0, 0.0, 0.0],
-        [0.0, f, 0.0, 0.0],
-        [0.0, 0.0, far / (near - far), -1.0],
-        [0.0, 0.0, (far * near) / (near - far), 0.0],
-    ]
-}
-
-pub fn create_scale(scale: [f32; 3]) -> [[f32; 4]; 4] {
-    [
-        [scale[0], 0.0, 0.0, 0.0],
-        [0.0, scale[1], 0.0, 0.0],
-        [0.0, 0.0, scale[2], 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ]
-}
-
-pub fn create_translation(pos: [f32; 3]) -> [[f32; 4]; 4] {
-    [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [pos[0], pos[1], pos[2], 1.0],
-    ]
-}
-
-pub fn create_rotation(rot: [f32; 3]) -> [[f32; 4]; 4] {
-    let (cx, sx) = (rot[0].cos(), rot[0].sin());
-    let (cy, sy) = (rot[1].cos(), rot[1].sin());
-    let (cz, sz) = (rot[2].cos(), rot[2].sin());
-
-    let rx = [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, cx, sx, 0.0],
-        [0.0, -sx, cx, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ];
-
-    let ry = [
-        [cy, 0.0, -sy, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [sy, 0.0, cy, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ];
-
-    let rz = [
-        [cz, sz, 0.0, 0.0],
-        [-sz, cz, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
-    ];
-
-    multiply(multiply(rx, ry), rz)
-}
-
-pub fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
-    let mut result = [[0.0; 4]; 4];
-    for i in 0..4 {
-        // column
-        for j in 0..4 {
-            // row
-            for k in 0..4 {
-                // mid
-                result[i][j] += a[k][j] * b[i][k];
-            }
-        }
-    }
-    result
-}
+// Matrix math helpers - removed and consolidated in crate::math.
 
 #[cfg(test)]
 mod tests {
@@ -769,7 +699,7 @@ mod tests {
     fn test_projection_aspect_ratio() {
         let aspect = 2.0;
         let fovy = std::f32::consts::PI / 2.0; // 90 deg
-        let proj = create_perspective(aspect, fovy, 0.1, 100.0);
+        let proj = crate::math::projection::perspective(aspect, fovy, 0.1, 100.0);
 
         // f = 1 / tan(45 deg) = 1.0
         // x_scale = f / aspect = 0.5
@@ -797,7 +727,7 @@ mod tests {
     fn test_square_stays_square_on_wide_viewport() {
         let width = 800.0;
         let height = 600.0;
-        let proj = create_perspective(width / height, std::f32::consts::PI / 4.0, 0.1, 1000.0);
+        let proj = crate::math::projection::perspective(width / height, std::f32::consts::PI / 4.0, 0.1, 1000.0);
 
         let corners = [
             [-1.0, -1.0, -5.0],

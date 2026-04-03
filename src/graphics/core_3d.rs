@@ -5,7 +5,7 @@ use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
 use crate::model::Vertex;
 
-use super::core::{AtlasSlot, Graphics, identity};
+use super::core::{AtlasSlot, Graphics};
 
 #[derive(Debug, Clone)]
 pub struct SkinData {
@@ -46,58 +46,11 @@ impl Default for Camera {
 
 impl Camera {
     pub fn view_matrix(&self) -> [[f32; 4]; 4] {
-        let f = {
-            let mut f = [
-                self.target[0] - self.eye[0],
-                self.target[1] - self.eye[1],
-                self.target[2] - self.eye[2],
-            ];
-            let len = (f[0] * f[0] + f[1] * f[1] + f[2] * f[2]).sqrt();
-            f[0] /= len;
-            f[1] /= len;
-            f[2] /= len;
-            f
-        };
-
-        let s = {
-            let mut s = [
-                self.up[1] * f[2] - self.up[2] * f[1],
-                self.up[2] * f[0] - self.up[0] * f[2],
-                self.up[0] * f[1] - self.up[1] * f[0],
-            ];
-            let len = (s[0] * s[0] + s[1] * s[1] + s[2] * s[2]).sqrt();
-            s[0] /= len;
-            s[1] /= len;
-            s[2] /= len;
-            s
-        };
-
-        let u = [
-            f[1] * s[2] - f[2] * s[1],
-            f[2] * s[0] - f[0] * s[2],
-            f[0] * s[1] - f[1] * s[0],
-        ];
-
-        [
-            [s[0], u[0], -f[0], 0.0],
-            [s[1], u[1], -f[1], 0.0],
-            [s[2], u[2], -f[2], 0.0],
-            [
-                -(s[0] * self.eye[0] + s[1] * self.eye[1] + s[2] * self.eye[2]),
-                -(u[0] * self.eye[0] + u[1] * self.eye[1] + u[2] * self.eye[2]),
-                f[0] * self.eye[0] + f[1] * self.eye[1] + f[2] * self.eye[2],
-                1.0,
-            ],
-        ]
+        crate::math::mat4::look_at(self.eye, self.target, self.up)
     }
 
     pub fn projection_matrix(&self) -> [[f32; 4]; 4] {
-        crate::graphics::model_raw::create_perspective(
-            self.aspect,
-            self.fovy,
-            self.znear,
-            self.zfar,
-        )
+        crate::math::projection::perspective(self.aspect, self.fovy, self.znear, self.zfar)
     }
 }
 
@@ -748,7 +701,7 @@ impl Graphics {
                     position: [1.0, 1.0, 1.0, 0.0],
                     color: [1.0, 1.0, 1.0, 1.0],
                 }; 4],
-                light_view_proj: identity(),
+                light_view_proj: crate::math::mat4::identity(),
             },
         }
     }

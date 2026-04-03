@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
-pub use crate::graphics::core::{create_rotation_from_quat, create_scale, identity};
 pub use crate::graphics::core_3d::{Bone, Camera, SkinData};
-pub use crate::graphics::model_raw::{
-    Light, SceneGlobals, create_perspective, create_rotation, create_translation, multiply,
-};
+pub use crate::graphics::model_raw::{Light, SceneGlobals};
 
 /// Handle to a 3D model resource.
 ///
