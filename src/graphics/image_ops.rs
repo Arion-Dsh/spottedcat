@@ -4,7 +4,7 @@ use crate::packer::AtlasPacker;
 use crate::platform;
 use crate::texture::Texture;
 
-use super::Graphics;
+use super::core::Graphics;
 use super::core::AtlasSlot;
 
 impl Graphics {

@@ -1,4 +1,4 @@
-use spottedcat::graphics::{Bone, identity};
+use spottedcat::model::{Bone, identity};
 use spottedcat::model::{Model, Vertex};
 use spottedcat::{Context, DrawOption3D, Spot, WindowConfig};
 

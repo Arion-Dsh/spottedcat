@@ -80,6 +80,7 @@ pub use drawable::DrawOption;
 pub use drawable_3d::DrawOption3D;
 #[cfg(feature = "effects")]
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
+pub use graphics::core::Graphics;
 pub use image::{Bounds, Image};
 pub use input::InputManager;
 pub use key::Key;

@@ -2,7 +2,7 @@ use crate::DrawOption;
 use crate::audio::AudioSystem;
 use crate::context_3d::{Model3dRegistry, Model3dRuntime};
 use crate::drawable::DrawCommand;
-use crate::graphics::Graphics;
+use crate::Graphics;
 use crate::input::InputManager;
 use crate::pt::Pt;
 use crate::shader_opts::ShaderOpts;

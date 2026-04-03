@@ -1,4 +1,4 @@
-use crate::graphics::Graphics;
+use crate::Graphics;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use std::cell::RefCell;

@@ -101,7 +101,7 @@ impl App {
 
 pub(crate) unsafe fn handle_wasm_graphics_init_result(
     app_ptr: *mut App,
-    graphics_r: anyhow::Result<crate::graphics::Graphics>,
+    graphics_r: anyhow::Result<crate::Graphics>,
 ) {
     match graphics_r {
         Ok(graphics) => {

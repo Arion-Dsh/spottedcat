@@ -4,7 +4,7 @@ use crate::glyph_cache::GlyphEntry;
 use crate::pt::Pt;
 use ab_glyph::FontArc;
 
-use super::Graphics;
+use super::core::Graphics;
 
 // Font management is now handled by the Context for persistence.
 // Graphics only caches the parsed FontArc for performance.

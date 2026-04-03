@@ -4,7 +4,7 @@ use crate::DrawOption;
 use crate::ShaderOpts;
 use crate::pt::Pt;
 
-use super::Graphics;
+use super::core::Graphics;
 use super::core::ResolvedDraw;
 
 impl Graphics {

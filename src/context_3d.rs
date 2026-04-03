@@ -12,7 +12,7 @@ use crate::drawable::DrawCommand3D;
 #[derive(Debug)]
 pub(crate) struct Model3dRuntime {
     pub(crate) draw_list: Vec<DrawCommand3D>,
-    pub(crate) camera: crate::graphics::Camera,
+    pub(crate) camera: crate::model::Camera,
 }
 
 #[cfg(feature = "model-3d")]
@@ -20,7 +20,7 @@ impl Default for Model3dRuntime {
     fn default() -> Self {
         Self {
             draw_list: Vec::new(),
-            camera: crate::graphics::Camera::default(),
+            camera: crate::model::Camera::default(),
         }
     }
 }
@@ -40,7 +40,7 @@ impl Model3dRuntime {
 #[derive(Debug)]
 pub(crate) struct Model3dRegistry {
     pub(crate) models: Vec<Option<crate::model::MeshDataPersistent>>,
-    pub(crate) skins: Vec<Option<crate::graphics::SkinData>>,
+    pub(crate) skins: Vec<Option<crate::model::SkinData>>,
     pub(crate) model_shaders: HashMap<u32, String>,
     pub(crate) next_mesh_id: u32,
     pub(crate) next_skin_id: u32,
@@ -151,7 +151,7 @@ impl Context {
             && index < 4
         {
             g.ensure_model_3d().scene_globals.lights[index] =
-                crate::graphics::Light { position, color };
+                crate::model::Light { position, color };
         }
     }
 
@@ -229,7 +229,7 @@ impl Context {
     /// Returns `0` when 3D rendering is unavailable.
     pub fn create_skin(
         &mut self,
-        bones: Vec<crate::graphics::Bone>,
+        bones: Vec<crate::model::Bone>,
         matrices: Vec<[[f32; 4]; 4]>,
     ) -> u32 {
         if let Some(mut g) = self.runtime.graphics.take() {

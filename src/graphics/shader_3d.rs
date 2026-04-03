@@ -1,6 +1,6 @@
 use crate::model::Vertex;
 
-use super::Graphics;
+use super::core::Graphics;
 
 fn inject_user_hooks(base_template: &str, user_functions: &str) -> String {
     let mut combined_shader = base_template.to_string();

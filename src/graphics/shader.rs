@@ -2,7 +2,7 @@
 
 use crate::image_raw::InstanceData;
 
-use super::Graphics;
+use super::core::Graphics;
 
 #[allow(dead_code)]
 impl Graphics {
