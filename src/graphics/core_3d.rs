@@ -50,7 +50,7 @@ impl Camera {
     }
 
     pub fn projection_matrix(&self) -> [[f32; 4]; 4] {
-        crate::math::projection::perspective(self.aspect, self.fovy, self.znear, self.zfar)
+        crate::math::projection::perspective(self.fovy, self.aspect, self.znear, self.zfar)
     }
 }
 
@@ -434,7 +434,7 @@ impl Graphics {
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                front_face: wgpu::FrontFace::Cw,
+                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
@@ -507,7 +507,7 @@ impl Graphics {
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
-                    front_face: wgpu::FrontFace::Cw,
+                    front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
                     ..Default::default()
                 },
@@ -577,7 +577,7 @@ impl Graphics {
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                front_face: wgpu::FrontFace::Cw,
+                front_face: wgpu::FrontFace::Ccw,
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
@@ -635,7 +635,7 @@ impl Graphics {
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
-                    front_face: wgpu::FrontFace::Cw,
+                    front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
                     ..Default::default()
                 },

@@ -69,6 +69,7 @@ pub(crate) fn begin_graphics_init(
     surface_ptr: *const wgpu::Surface<'static>,
     width: u32,
     height: u32,
+    transparent: bool,
     callback: Box<dyn FnOnce(anyhow::Result<Graphics>)>,
 ) {
     match init_state {

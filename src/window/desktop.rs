@@ -3,6 +3,8 @@ use crate::Pt;
 use crate::platform;
 use crate::scenes::take_quit_request;
 use winit::application::ApplicationHandler;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use wasm_bindgen::JsCast;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Fullscreen, Window, WindowId};
@@ -12,6 +14,10 @@ pub(crate) struct PlatformData {
     pub(crate) window_id: Option<WindowId>,
     #[cfg(all(target_os = "ios", feature = "sensors"))]
     pub(crate) sensor_state: Option<super::ios::IosSensorState>,
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub(crate) canvas_id: Option<String>,
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub(crate) last_physical_size: Option<(u32, u32)>,
 }
 
 impl PlatformData {
@@ -21,6 +27,22 @@ impl PlatformData {
             window_id: None,
             #[cfg(all(target_os = "ios", feature = "sensors"))]
             sensor_state: None,
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            canvas_id: None,
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            last_physical_size: None,
+        }
+    }
+
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub(crate) fn new_wasm(canvas_id: Option<String>) -> Self {
+        Self {
+            window: None,
+            window_id: None,
+            #[cfg(all(target_os = "ios", feature = "sensors"))]
+            sensor_state: None,
+            canvas_id,
+            last_physical_size: None,
         }
     }
 }
@@ -257,9 +279,7 @@ impl App {
         self.ensure_scene_ready();
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        if self.scene.has_active_scene() {
-            self.sync_canvas_resize();
-        }
+        self.sync_canvas_resize();
 
         let Some(surface) = self.surface.as_ref() else {
             return;
@@ -288,13 +308,11 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        web_sys::console::log_1(&"[spot][wasm] resumed() called".into());
-
         self.timing.reset();
         event_loop.set_control_flow(ControlFlow::WaitUntil(self.timing.next_deadline()));
 
         self.create_window_if_needed(event_loop);
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         self.ensure_audio_initialized();
         self.ensure_surface();
         self.begin_graphics_init_if_needed();
@@ -313,6 +331,21 @@ impl ApplicationHandler for App {
             }
         }
 
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            self.sync_canvas_resize();
+            if let Some(window) = self.platform.window.as_ref() {
+                let window_ptr = window as *const winit::window::Window;
+                let closure = wasm_bindgen::prelude::Closure::once(move || {
+                    unsafe { (*window_ptr).request_redraw(); }
+                });
+                web_sys::window()
+                    .and_then(|w| w.request_animation_frame(closure.as_ref().unchecked_ref()).ok())
+                    .expect("failed to request_animation_frame");
+                closure.forget();
+            }
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         self.request_redraw();
     }
 
@@ -418,6 +451,9 @@ impl ApplicationHandler for App {
             self.ctx.input_mut().end_frame();
         });
 
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        self.request_redraw();
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         if updates > 0 {
             self.request_redraw();
         }

@@ -699,7 +699,7 @@ mod tests {
     fn test_projection_aspect_ratio() {
         let aspect = 2.0;
         let fovy = std::f32::consts::PI / 2.0; // 90 deg
-        let proj = crate::math::projection::perspective(aspect, fovy, 0.1, 100.0);
+        let proj = crate::math::projection::perspective(fovy, aspect, 0.1, 100.0);
 
         // f = 1 / tan(45 deg) = 1.0
         // x_scale = f / aspect = 0.5
@@ -727,7 +727,7 @@ mod tests {
     fn test_square_stays_square_on_wide_viewport() {
         let width = 800.0;
         let height = 600.0;
-        let proj = crate::math::projection::perspective(width / height, std::f32::consts::PI / 4.0, 0.1, 1000.0);
+        let proj = crate::math::projection::perspective(std::f32::consts::PI / 4.0, width / height, 0.1, 1000.0);
 
         let corners = [
             [-1.0, -1.0, -5.0],

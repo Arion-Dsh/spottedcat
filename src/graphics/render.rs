@@ -5,7 +5,10 @@ use crate::ShaderOpts;
 use crate::drawable::DrawCommand;
 use crate::image_raw::InstanceData;
 use std::collections::HashMap;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::Instant;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use web_time::Instant;
 
 use super::core::{AtlasSlot, Graphics, ResolvedDraw};
 use crate::image_raw::ImageRenderer;
@@ -118,6 +121,7 @@ impl Graphics {
                 DrawCommand::ClearImage(_, _) | DrawCommand::CopyImage(_, _) => {}
             }
         }
+
     }
 
     pub(crate) fn render_batches_internal<'a>(
@@ -384,8 +388,17 @@ impl Graphics {
                     depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
+                            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                            r: 0.1,
+                            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                             r: 0.0,
+                            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                            g: 0.1,
+                            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                             g: 0.0,
+                            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                            b: 0.2,
+                            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                             b: 0.0,
                             a: if self.transparent { 0.0 } else { 1.0 },
                         }),
@@ -417,8 +430,17 @@ impl Graphics {
                         load: wgpu::LoadOp::Load,
                         #[cfg(not(feature = "model-3d"))]
                         load: wgpu::LoadOp::Clear(wgpu::Color {
+                            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                            r: 0.1,
+                            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                             r: 0.0,
+                            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                            g: 0.1,
+                            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                             g: 0.0,
+                            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                            b: 0.2,
+                            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                             b: 0.0,
                             a: if self.transparent { 0.0 } else { 1.0 },
                         }),

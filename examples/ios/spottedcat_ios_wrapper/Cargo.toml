@@ -1,13 +1,13 @@
 [package]
 name = "spottedcat_ios_wrapper"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2024"
 
 [lib]
 crate-type = ["staticlib"]
 
 [dependencies]
-spottedcat = { path = "../../..", features = ["sensors"] }
+spottedcat = { path = "../../..", features = ["sensors", "model-3d", "utils"] }
 image = "0.25"
 
 [target.'cfg(target_os = "ios")'.dependencies]

@@ -16,7 +16,10 @@ pub(crate) type GraphicsInitState = platform::GraphicsInitState;
 pub mod android;
 #[cfg(all(
     not(target_os = "android"),
-    not(all(target_arch = "wasm32", target_os = "unknown"))
+    any(
+        not(all(target_arch = "wasm32", target_os = "unknown")),
+        all(target_arch = "wasm32", target_os = "unknown")
+    )
 ))]
 pub mod desktop;
 #[cfg(target_os = "ios")]
@@ -28,7 +31,10 @@ pub mod wasm;
 pub(crate) use self::android::PlatformData;
 #[cfg(all(
     not(target_os = "android"),
-    not(all(target_arch = "wasm32", target_os = "unknown"))
+    any(
+        not(all(target_arch = "wasm32", target_os = "unknown")),
+        all(target_arch = "wasm32", target_os = "unknown")
+    )
 ))]
 pub(crate) use self::desktop::PlatformData;
 

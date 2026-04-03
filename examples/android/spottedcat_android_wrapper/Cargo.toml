@@ -1,12 +1,12 @@
 [package]
 name = "spottedcat_android_wrapper"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-spottedcat = { path = "../../..", features = ["sensors"] }
+spottedcat = { path = "../../..", features = ["sensors", "model-3d", "utils"] }
 image = "0.25"
 jni = "0.21"

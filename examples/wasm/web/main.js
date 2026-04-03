@@ -1,12 +1,40 @@
 import init from "../pkg/wasm_demo.js";
 
+function setupCanvas() {
+  const canvas = document.getElementById("spot-canvas");
+  if (!canvas) {
+    console.error("[spot][js] #spot-canvas not found");
+    return;
+  }
+
+  const resizeCanvas = () => {
+    const dpr = globalThis.devicePixelRatio || 1;
+    const cssWidth = globalThis.innerWidth || document.documentElement.clientWidth || 300;
+    const cssHeight = globalThis.innerHeight || document.documentElement.clientHeight || 150;
+
+    canvas.style.width = "100vw";
+    canvas.style.height = "100vh";
+    canvas.style.display = "block";
+
+    const width = Math.max(1, Math.round(cssWidth * dpr));
+    const height = Math.max(1, Math.round(cssHeight * dpr));
+
+    if (canvas.width !== width) {
+      canvas.width = width;
+    }
+    if (canvas.height !== height) {
+      canvas.height = height;
+    }
+  };
+
+  resizeCanvas();
+  globalThis.addEventListener("resize", resizeCanvas);
+}
+
 async function main() {
-  console.log("[spot][js] main() start");
-  console.log("[spot][js] isSecureContext=", globalThis.isSecureContext);
-  console.log("[spot][js] navigator.gpu=", navigator.gpu);
+  setupCanvas();
   try {
     const wasm = await init();
-    console.log("[spot][js] wasm init() resolved");
     if (wasm && typeof wasm.run_demo === "function") {
       if (!globalThis.isSecureContext || !navigator.gpu) {
         console.error(
@@ -15,7 +43,6 @@ async function main() {
         return;
       }
 
-      console.log("[spot][js] calling wasm.run_demo()");
       try {
         wasm.run_demo();
       } catch (e) {

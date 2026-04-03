@@ -59,7 +59,17 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
     let mut app = window::App::new_wasm::<T>(window.clone(), window.canvas_id.clone());
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     let mut app = window::App::new::<T>(window);
-    event_loop.run_app(&mut app).expect("event loop error");
+
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    {
+        let app = Box::new(app);
+        let app = Box::leak(app);
+        event_loop.run_app(app).expect("event loop error");
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    {
+        event_loop.run_app(&mut app).expect("event loop error");
+    }
 }
 
 /// Starts the application on Android with the specified scene type `T`.

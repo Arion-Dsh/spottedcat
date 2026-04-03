@@ -48,7 +48,7 @@ pub mod mat4 {
 /// Perspective and Orthographic projections.
 pub mod projection {
     /// Creates a Right-Handed perspective projection matrix for WGPU (0..1 depth).
-    pub fn perspective(aspect: f32, fov_y: f32, near: f32, far: f32) -> [[f32; 4]; 4] {
+    pub fn perspective(fov_y: f32, aspect: f32, near: f32, far: f32) -> [[f32; 4]; 4] {
         ultraviolet::projection::perspective_wgpu_dx(fov_y, aspect, near, far).into()
     }
 }

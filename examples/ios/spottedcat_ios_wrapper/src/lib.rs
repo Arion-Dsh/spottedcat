@@ -201,7 +201,7 @@ pub extern "C" fn spottedcat_ios_start() {
             let img = image::load_from_memory(HAPPY_TREE_BYTES)
                 .unwrap()
                 .to_rgba8();
-            let happy_tree = Image::new_from_rgba8(
+            let happy_tree = spottedcat::image::create(
                 ctx,
                 Pt::from(img.width()),
                 Pt::from(img.height()),
@@ -231,7 +231,7 @@ pub extern "C" fn spottedcat_ios_start() {
             ctx.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
             ctx.set_camera_pos([0.0, 0.0, 5.0]);
 
-            let model = Model::cube(ctx, 1.0).unwrap();
+            let model = spottedcat::model::create_cube(ctx, 1.0).unwrap();
             let history_state = IosPedometerHistory::new();
 
             Self {
@@ -326,30 +326,36 @@ pub extern "C" fn spottedcat_ios_start() {
             let opts_3d = DrawOption3D::default()
                 .with_position([0.0, 0.0, 0.0])
                 .with_rotation([0.0, self.rotation, 0.0]);
-            self.model.draw(ctx, opts_3d);
+            spottedcat::model::draw(ctx, &self.model, opts_3d);
 
-            self.text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.text,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(100.0)]),
             );
-            self.fps_text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.fps_text,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(150.0)]),
             );
-            self.today_steps_text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.today_steps_text,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(190.0)]),
             );
-            self.yesterday_steps_text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.yesterday_steps_text,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(220.0)]),
             );
-            self.history_status_text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.history_status_text,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(250.0)]),
             );
-            self.history_text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.history_text,
                 DrawOption::default().with_position([Pt::from(50.0), Pt::from(280.0)]),
             );
 
@@ -359,7 +365,7 @@ pub extern "C" fn spottedcat_ios_start() {
                 pos.0 - self.happy_tree.width() / 2.0,
                 pos.1 - self.happy_tree.height() / 2.0,
             ]);
-            self.happy_tree.draw(ctx, img_opts);
+            spottedcat::image::draw(ctx, self.happy_tree, img_opts);
         }
 
         fn resumed(&mut self, _ctx: &mut Context) {

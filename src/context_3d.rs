@@ -94,7 +94,7 @@ impl Context {
         self.runtime.model_3d.camera.up = [x, y, z];
     }
 
-    /// Sets the camera field of view in degrees.
+    /// Sets the camera field of view in radians.
     pub fn set_camera_fov(&mut self, fov: f32) {
         self.runtime.model_3d.camera.fovy = fov;
     }

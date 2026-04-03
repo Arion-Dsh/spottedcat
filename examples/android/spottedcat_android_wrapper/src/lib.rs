@@ -318,11 +318,12 @@ fn fetch_health_history_from_rust() -> Result<String, String> {
 
 #[cfg(target_os = "android")]
 fn draw_text_block(ctx: &mut Context, text: &Text, x: f32, y: &mut f32, gap_after: f32) {
-    text.draw(
+    spottedcat::text::draw(
         ctx,
+        text,
         DrawOption::default().with_position([Pt::from(x), Pt::from(*y)]),
     );
-    let (_, height) = text.measure(ctx);
+    let (_, height): (f32, f32) = spottedcat::text::measure(ctx, text);
     *y += height.max(1.0) + gap_after;
 }
 
@@ -375,7 +376,7 @@ pub fn android_main(app: AndroidApp) {
                 .unwrap()
                 .to_rgba8();
             let happy_tree =
-                Image::new_from_rgba8(ctx, Pt::from(img.width()), Pt::from(img.height()), &img).unwrap();
+                spottedcat::image::create(ctx, Pt::from(img.width()), Pt::from(img.height()), &img).unwrap();
 
             // Register a font and create text
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
@@ -410,7 +411,7 @@ pub fn android_main(app: AndroidApp) {
             ctx.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
             ctx.set_camera_pos([0.0, 0.0, 5.0]);
 
-            let model = Model::cube(ctx, 1.5).unwrap();
+            let model = spottedcat::model::create_cube(ctx, 1.5).unwrap();
 
             Self {
                 happy_tree,
@@ -539,9 +540,7 @@ pub fn android_main(app: AndroidApp) {
             }
 
             // Touch to trigger Kotlin method
-            let tapped_this_frame = ctx
-                .input()
-                .touches()
+            let tapped_this_frame = spottedcat::touches(ctx)
                 .iter()
                 .any(|touch| touch.phase == TouchPhase::Started);
             if tapped_this_frame {
@@ -694,7 +693,7 @@ pub fn android_main(app: AndroidApp) {
                     self.rotation_anim + self.gyro_data[1] * 0.5, 
                     self.gyro_data[2] * 0.5
                 ]);
-            self.model.draw(ctx, opts_3d);
+            spottedcat::model::draw(ctx, &self.model, opts_3d);
 
             let mut cursor_y = top_padding;
             let section_gap = if compact_layout { 8.0 } else { 10.0 };
@@ -711,14 +710,15 @@ pub fn android_main(app: AndroidApp) {
             draw_text_block(ctx, &self.mag_text, panel_x, &mut cursor_y, section_gap);
             draw_text_block(ctx, &self.rot_text, panel_x, &mut cursor_y, section_gap);
 
-            let (_, bridge_height) = self.bridge_text.measure(ctx);
+            let (_, bridge_height): (f32, f32) = spottedcat::text::measure(ctx, &self.bridge_text);
             let bridge_y = if cursor_y + bridge_height + section_gap <= height - side_padding {
                 cursor_y
             } else {
                 (height - side_padding - bridge_height).max(top_padding)
             };
-            self.bridge_text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.bridge_text,
                 DrawOption::default().with_position([Pt::from(panel_x), Pt::from(bridge_y)]),
             );
 
@@ -777,7 +777,7 @@ pub fn android_main(app: AndroidApp) {
                     Pt::from(center_y - scaled_height * 0.5),
                 ])
                 .with_scale([image_scale, image_scale]);
-            self.happy_tree.draw(ctx, img_opts);
+            spottedcat::image::draw(ctx, self.happy_tree, img_opts);
         }
 
         fn resumed(&mut self, _ctx: &mut Context) {
@@ -813,8 +813,9 @@ pub fn android_main(app: AndroidApp) {
             Self { text }
         }
         fn draw(&mut self, ctx: &mut Context) {
-            self.text.draw(
+            spottedcat::text::draw(
                 ctx,
+                &self.text,
                 DrawOption::default().with_position([Pt::from(10.0), Pt::from(30.0)]),
             );
         }

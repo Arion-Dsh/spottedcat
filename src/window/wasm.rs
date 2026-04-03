@@ -2,33 +2,7 @@ use super::App;
 use crate::{Pt, platform};
 use wasm_bindgen::JsCast;
 
-pub(crate) struct PlatformData {
-    pub(crate) window: Option<winit::window::Window>,
-    pub(crate) window_id: Option<winit::window::WindowId>,
-    pub(crate) canvas_id: Option<String>,
-    pub(crate) last_physical_size: Option<(u32, u32)>,
-}
-
-impl PlatformData {
-    pub(crate) fn new() -> Self {
-        Self {
-            window: None,
-            window_id: None,
-            canvas_id: None,
-            last_physical_size: None,
-            audio_initialized: false,
-        }
-    }
-
-    pub(crate) fn new_wasm(canvas_id: Option<String>) -> Self {
-        Self {
-            window: None,
-            window_id: None,
-            canvas_id,
-            last_physical_size: None,
-        }
-    }
-}
+// PlatformData is now defined in desktop.rs to share winit ApplicationHandler logic.
 
 impl App {
     /// Lazily initialise the audio system on the first user gesture so that
@@ -67,8 +41,8 @@ impl App {
         };
 
         let rect = canvas.get_bounding_client_rect();
-        let css_w = rect.width();
-        let css_h = rect.height();
+        let css_w = rect.width() as f64;
+        let css_h = rect.height() as f64;
         if !(css_w.is_finite() && css_h.is_finite()) {
             return;
         }
@@ -101,22 +75,33 @@ impl App {
 
 pub(crate) unsafe fn handle_wasm_graphics_init_result(
     app_ptr: *mut App,
-    graphics_r: anyhow::Result<crate::Graphics>,
+    graphics_r: anyhow::Result<crate::graphics::core::Graphics>,
 ) {
     match graphics_r {
         Ok(graphics) => {
-            web_sys::console::log_1(&"[spot][wasm] Graphics initialized successfully".into());
-            (*app_ptr).init_state = platform::GraphicsInitState::Ready(Some(graphics));
+            unsafe {
+                (*app_ptr).init_state = platform::GraphicsInitState::Ready(Box::new(Some(graphics)));
+            }
         }
         Err(e) => {
             web_sys::console::error_1(
                 &format!("[spot][wasm][init] Graphics::new failed: {:?}", e).into(),
             );
-            (*app_ptr).init_state = platform::GraphicsInitState::Failed;
+            unsafe {
+                (*app_ptr).init_state = platform::GraphicsInitState::Failed;
+            }
         }
     }
 
-    if let Some(window) = (*app_ptr).platform.window.as_ref() {
-        window.request_redraw();
+    if let Some(_) = unsafe { (*app_ptr).platform.window.as_ref() } {
+        let closure = wasm_bindgen::prelude::Closure::once(move || {
+            if let Some(window) = unsafe { (*app_ptr).platform.window.as_ref() } {
+                window.request_redraw();
+            }
+        });
+        web_sys::window()
+            .and_then(|w| w.request_animation_frame(closure.as_ref().unchecked_ref()).ok())
+            .expect("failed to request_animation_frame");
+        closure.forget();
     }
 }

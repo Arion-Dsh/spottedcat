@@ -34,12 +34,19 @@ pub(crate) static PROFILE_STATS: OnceLock<Mutex<RenderProfileStats>> = OnceLock:
 
 pub(crate) fn render_profiling_enabled() -> bool {
     *PROFILE_RENDER.get_or_init(|| {
-        std::env::var("SPOT_PROFILE_RENDER")
-            .map(|value| {
-                let value = value.trim().to_ascii_lowercase();
-                !matches!(value.as_str(), "" | "0" | "false" | "off")
-            })
-            .unwrap_or(false)
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            false
+        }
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        {
+            std::env::var("SPOT_PROFILE_RENDER")
+                .map(|value| {
+                    let value = value.trim().to_ascii_lowercase();
+                    !matches!(value.as_str(), "" | "0" | "false" | "off")
+                })
+                .unwrap_or(false)
+        }
     })
 }
 
@@ -74,7 +81,12 @@ pub(crate) fn record_render_frame(wait_ms: f64, total_ms: f64) {
 }
 
 pub(crate) fn parse_present_mode_from_env() -> Option<wgpu::PresentMode> {
-    let v = std::env::var("SPOT_PRESENT_MODE").ok()?;
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    let v: Option<String> = None;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    let v: Option<String> = std::env::var("SPOT_PRESENT_MODE").ok();
+    
+    let v = v?;
     let v = v.trim().to_ascii_lowercase();
     if v.is_empty() {
         return None;
