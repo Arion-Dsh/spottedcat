@@ -19,6 +19,7 @@ pub(crate) enum DrawCommand {
     CopyImage(u32, u32),
 }
 
+#[cfg(feature = "model-3d")]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand3D {
     Model(
@@ -39,6 +40,7 @@ pub(crate) enum DrawCommand3D {
 }
 
 /// Unified options for drawing 3D models.
+#[cfg(feature = "model-3d")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawOption3D {
     pub position: [f32; 3],
@@ -47,6 +49,7 @@ pub struct DrawOption3D {
     pub opacity: f32,
 }
 
+#[cfg(feature = "model-3d")]
 impl Default for DrawOption3D {
     fn default() -> Self {
         Self {
@@ -58,6 +61,7 @@ impl Default for DrawOption3D {
     }
 }
 
+#[cfg(feature = "model-3d")]
 impl DrawOption3D {
     pub fn new(position: [f32; 3], rotation: [f32; 3], scale: [f32; 3]) -> Self {
         Self {

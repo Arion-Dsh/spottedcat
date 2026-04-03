@@ -37,12 +37,12 @@ pub struct SceneGlobals {
     pub projection_params: [f32; 4], // [proj_x, proj_y, znear, zfar]
     pub ambient_color: [f32; 4],
     pub fog_color: [f32; 4],
-    pub fog_distance: [f32; 4], // [start, end, exponent, density]
-    pub fog_height: [f32; 4],   // [base, falloff, exponent, density]
-    pub fog_params: [f32; 4],   // [strength, reserved, reserved, reserved]
+    pub fog_distance: [f32; 4],          // [start, end, exponent, density]
+    pub fog_height: [f32; 4],            // [base, falloff, exponent, density]
+    pub fog_params: [f32; 4],            // [strength, reserved, reserved, reserved]
     pub fog_background_zenith: [f32; 4], // [rgb, mix]
     pub fog_background_horizon: [f32; 4], // [rgb, mix]
-    pub fog_background_nadir: [f32; 4], // [rgb, mix]
+    pub fog_background_nadir: [f32; 4],  // [rgb, mix]
     pub fog_background_params: [f32; 4], // [horizon_glow, sky_fog_blend, geometry_fog_blend, reserved]
     pub fog_sampling: [f32; 4], // [min_height_samples, max_height_samples, height_sample_scale, reserved]
     pub lights: [Light; 4],

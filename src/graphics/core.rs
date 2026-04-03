@@ -2,11 +2,16 @@
 
 use crate::DrawOption;
 use crate::ShaderOpts;
-use crate::drawable::{DrawCommand, DrawCommand3D};
+use crate::drawable::DrawCommand;
+#[cfg(feature = "model-3d")]
+use crate::drawable::DrawCommand3D;
 use crate::glyph_cache::GlyphCache;
+#[cfg(feature = "model-3d")]
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
+#[cfg(feature = "model-3d")]
 use crate::image::ImageEntry;
 use crate::image_raw::{ImageRenderer, InstanceData};
+#[cfg(feature = "model-3d")]
 use crate::model::Vertex;
 use crate::packer::AtlasPacker;
 use crate::texture::Texture;
@@ -19,18 +24,21 @@ pub(crate) struct AtlasSlot {
     pub bind_group: wgpu::BindGroup,
 }
 
+#[cfg(feature = "model-3d")]
 #[derive(Debug, Clone)]
 pub struct SkinData {
     pub bones: Vec<Bone>,
     pub bone_matrices: Vec<[[f32; 4]; 4]>,
 }
 
+#[cfg(feature = "model-3d")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bone {
     pub parent_index: Option<usize>, // Index into 'bones' Vec
     pub inverse_bind_matrix: [[f32; 4]; 4],
 }
 
+#[cfg(feature = "model-3d")]
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
     pub eye: [f32; 3],
@@ -42,6 +50,7 @@ pub struct Camera {
     pub zfar: f32,
 }
 
+#[cfg(feature = "model-3d")]
 impl Default for Camera {
     fn default() -> Self {
         Self {
@@ -56,6 +65,7 @@ impl Default for Camera {
     }
 }
 
+#[cfg(feature = "model-3d")]
 impl Camera {
     pub fn view_matrix(&self) -> [[f32; 4]; 4] {
         let f = {
@@ -124,7 +134,9 @@ pub(crate) struct ResolvedDraw {
     pub layer: i32,
 }
 
+#[cfg(feature = "model-3d")]
 type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
+#[cfg(feature = "model-3d")]
 type MaterialTextureSet<'a> = (
     MaterialTextureBinding<'a>,
     MaterialTextureBinding<'a>,
@@ -133,6 +145,7 @@ type MaterialTextureSet<'a> = (
     MaterialTextureBinding<'a>,
 );
 
+#[cfg(feature = "model-3d")]
 fn resolve_material_texture<'a>(
     images: &[Option<ImageEntry>],
     atlases: &'a [AtlasSlot],
@@ -149,6 +162,7 @@ fn resolve_material_texture<'a>(
     Some((atlas_index, uv_rect, view))
 }
 
+#[cfg(feature = "model-3d")]
 fn expect_default_material_texture<'a>(
     images: &[Option<ImageEntry>],
     atlases: &'a [AtlasSlot],
@@ -163,6 +177,7 @@ fn expect_default_material_texture<'a>(
     })
 }
 
+#[cfg(feature = "model-3d")]
 fn resolve_material_textures<'a>(
     images: &[Option<ImageEntry>],
     atlases: &'a [AtlasSlot],
@@ -191,27 +206,12 @@ fn resolve_material_textures<'a>(
     (albedo, pbr, normal, ao, emissive)
 }
 
-pub struct Graphics {
-    pub(crate) device: wgpu::Device,
-    pub(crate) queue: wgpu::Queue,
-    pub(crate) adapter: wgpu::Adapter,
-    pub(crate) config: wgpu::SurfaceConfiguration,
-    pub(crate) image_renderer: ImageRenderer,
-    pub(crate) default_pipeline: wgpu::RenderPipeline,
-    pub(crate) image_pipelines: HashMap<u32, wgpu::RenderPipeline>,
+#[cfg(feature = "model-3d")]
+pub(crate) struct Graphics3D {
     pub(crate) model_pipelines: HashMap<u32, wgpu::RenderPipeline>,
     pub(crate) instanced_model_pipelines: HashMap<u32, wgpu::RenderPipeline>,
-    pub(crate) atlases: Vec<AtlasSlot>,
-    pub(crate) batch: Vec<InstanceData>,
     pub(crate) opaque_draw_indices_3d: Vec<usize>,
     pub(crate) transparent_draw_indices_3d: Vec<usize>,
-    pub(crate) font_cache: HashMap<u64, FontArc>,
-    pub(crate) glyph_cache: GlyphCache,
-    pub(crate) resolved_draws: Vec<ResolvedDraw>,
-    pub(crate) text_shader_id: u32,
-    pub(crate) dirty_assets: bool,
-    pub(crate) pipelines_dirty: bool,
-    pub(crate) gpu_generation: u32,
     pub(crate) model_renderer: ModelRenderer,
     pub(crate) model_pipeline: wgpu::RenderPipeline,
     pub(crate) instanced_model_pipeline: wgpu::RenderPipeline,
@@ -238,6 +238,27 @@ pub struct Graphics {
     pub(crate) brdf_lut_texture: wgpu::Texture,
     pub(crate) environment_bind_group: wgpu::BindGroup,
     pub(crate) scene_globals: crate::graphics::model_raw::SceneGlobals,
+}
+
+pub struct Graphics {
+    pub(crate) device: wgpu::Device,
+    pub(crate) queue: wgpu::Queue,
+    pub(crate) adapter: wgpu::Adapter,
+    pub(crate) config: wgpu::SurfaceConfiguration,
+    pub(crate) image_renderer: ImageRenderer,
+    pub(crate) default_pipeline: wgpu::RenderPipeline,
+    pub(crate) image_pipelines: HashMap<u32, wgpu::RenderPipeline>,
+    pub(crate) atlases: Vec<AtlasSlot>,
+    pub(crate) batch: Vec<InstanceData>,
+    pub(crate) font_cache: HashMap<u64, FontArc>,
+    pub(crate) glyph_cache: GlyphCache,
+    pub(crate) resolved_draws: Vec<ResolvedDraw>,
+    pub(crate) text_shader_id: u32,
+    pub(crate) dirty_assets: bool,
+    pub(crate) pipelines_dirty: bool,
+    pub(crate) gpu_generation: u32,
+    #[cfg(feature = "model-3d")]
+    pub(crate) model_3d: Option<Graphics3D>,
     pub(crate) transparent: bool,
 }
 
@@ -251,6 +272,34 @@ impl std::fmt::Debug for Graphics {
 }
 
 impl Graphics {
+    #[cfg(feature = "model-3d")]
+    pub(crate) fn model_3d(&self) -> Option<&Graphics3D> {
+        self.model_3d.as_ref()
+    }
+
+    #[cfg(feature = "model-3d")]
+    pub(crate) fn model_3d_mut(&mut self) -> Option<&mut Graphics3D> {
+        self.model_3d.as_mut()
+    }
+
+    #[cfg(feature = "model-3d")]
+    pub(crate) fn ensure_model_3d(&mut self) -> &mut Graphics3D {
+        if self.model_3d.is_none() {
+            let width = self.config.width.max(1);
+            let height = self.config.height.max(1);
+            self.model_3d = Some(Self::build_model_3d(
+                &self.device,
+                &self.config,
+                width,
+                height,
+            ));
+        }
+        self.model_3d
+            .as_mut()
+            .expect("Graphics3D must exist after ensure_model_3d")
+    }
+
+    #[cfg(feature = "model-3d")]
     pub(crate) fn create_fog_background_bind_group_layout(
         device: &wgpu::Device,
     ) -> wgpu::BindGroupLayout {
@@ -263,9 +312,10 @@ impl Graphics {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: std::num::NonZeroU64::new(
-                            std::mem::size_of::<crate::graphics::model_raw::SceneGlobals>() as u64,
-                        ),
+                        min_binding_size: std::num::NonZeroU64::new(std::mem::size_of::<
+                            crate::graphics::model_raw::SceneGlobals,
+                        >()
+                            as u64),
                     },
                     count: None,
                 },
@@ -283,6 +333,7 @@ impl Graphics {
         })
     }
 
+    #[cfg(feature = "model-3d")]
     pub(crate) fn create_fog_background_bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
@@ -298,9 +349,9 @@ impl Graphics {
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: scene_globals_buffer,
                         offset: 0,
-                        size: std::num::NonZeroU64::new(
-                            std::mem::size_of::<crate::graphics::model_raw::SceneGlobals>() as u64,
-                        ),
+                        size: std::num::NonZeroU64::new(std::mem::size_of::<
+                            crate::graphics::model_raw::SceneGlobals,
+                        >() as u64),
                     }),
                 },
                 wgpu::BindGroupEntry {
@@ -311,6 +362,7 @@ impl Graphics {
         })
     }
 
+    #[cfg(feature = "model-3d")]
     pub(crate) fn create_fog_background_pipeline(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
@@ -318,9 +370,7 @@ impl Graphics {
     ) -> wgpu::RenderPipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fog_background_shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../shaders/fog_background.wgsl").into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/fog_background.wgsl").into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -359,132 +409,14 @@ impl Graphics {
         })
     }
 
-    pub async fn new(
-        instance: &wgpu::Instance,
-        surface: &wgpu::Surface<'_>,
+    #[cfg(feature = "model-3d")]
+    fn build_model_3d(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
         width: u32,
         height: u32,
-        transparent: bool,
-    ) -> anyhow::Result<Self> {
-        let width = width.max(1);
-        let height = height.max(1);
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(surface),
-                force_fallback_adapter: false,
-            })
-            .await?;
-
-        let info = adapter.get_info();
-        eprintln!(
-            "[spot][init] Selected adapter: {:?} ({:?})",
-            info.name, info.backend
-        );
-
-        let adapter_limits = adapter.limits();
-
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: adapter_limits,
-                experimental_features: wgpu::ExperimentalFeatures::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: wgpu::Trace::Off,
-            })
-            .await?;
-
-        let adapter_clone = adapter.clone();
-
-        let caps = surface.get_capabilities(&adapter);
-        let mut config = surface
-            .get_default_config(&adapter, width, height)
-            .unwrap_or_else(|| wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: pick_surface_format(&caps),
-                width: width.max(1),
-                height: height.max(1),
-                present_mode: caps.present_modes[0],
-                alpha_mode: caps.alpha_modes[0],
-                view_formats: vec![],
-                desired_maximum_frame_latency: 1,
-            });
-
-        config.alpha_mode = pick_alpha_mode(&caps, transparent);
-
-        config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
-        config.usage = crate::platform::surface_usage(&caps);
-
-        surface.configure(&device, &config);
-
-        let image_renderer = ImageRenderer::new(&device, config.format, 200000);
-
-        let image_pipelines = HashMap::new();
-
-        let atlas_size = 2048;
-        let packer = AtlasPacker::new(atlas_size, atlas_size, 2);
-        let atlas_texture = Texture::create_empty(&device, atlas_size, atlas_size, config.format);
-        let atlas_bind_group =
-            image_renderer.create_texture_bind_group(&device, &atlas_texture.0.view);
-        let atlases = vec![AtlasSlot {
-            packer,
-            texture: atlas_texture,
-            bind_group: atlas_bind_group,
-        }];
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("image_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/image.wgsl").into()),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("image_pipeline_layout"),
-            bind_group_layouts: &[
-                &image_renderer.texture_bind_group_layout,
-                &image_renderer.user_globals_bind_group_layout,
-                &image_renderer.engine_globals_bind_group_layout,
-            ],
-            immediate_size: 0,
-        });
-
-        let default_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("image_pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[InstanceData::layout()],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-
-        // Initialize 3D Renderer
-        let model_renderer = ModelRenderer::new(&device);
+    ) -> Graphics3D {
+        let model_renderer = ModelRenderer::new(device);
 
         let shadow_size = 1024;
         let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -573,7 +505,7 @@ impl Graphics {
         });
         let brdf_lut_view = brdf_lut_texture.create_view(&Default::default());
         let environment_bind_group = model_renderer.create_environment_bind_group(
-            &device,
+            device,
             &shadow_view,
             &irradiance_view,
             &prefiltered_view,
@@ -705,18 +637,18 @@ impl Graphics {
                 }),
                 multiview_mask: None,
                 cache: None,
-                });
+            });
 
         let fog_background_bind_group_layout =
-            Self::create_fog_background_bind_group_layout(&device);
+            Self::create_fog_background_bind_group_layout(device);
         let fog_background_bind_group = Self::create_fog_background_bind_group(
-            &device,
+            device,
             &fog_background_bind_group_layout,
             &model_renderer.scene_globals_buffer,
             &depth_view,
         );
         let fog_background_pipeline = Self::create_fog_background_pipeline(
-            &device,
+            device,
             config.format,
             &fog_background_bind_group_layout,
         );
@@ -725,8 +657,8 @@ impl Graphics {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("shadow_pipeline_layout"),
                 bind_group_layouts: &[
-                    &model_renderer.globals_bind_group_layout,       // Group 0
-                    &model_renderer.bone_matrices_bind_group_layout, // Group 1 (mapped to Group 2 in full shader, but here bgls[1])
+                    &model_renderer.globals_bind_group_layout,
+                    &model_renderer.bone_matrices_bind_group_layout,
                 ],
                 immediate_size: 0,
             });
@@ -822,27 +754,11 @@ impl Graphics {
                 cache: None,
             });
 
-        let graphics = Self {
-            device,
-            queue,
-            adapter: adapter_clone,
-            config,
-            image_renderer,
-            default_pipeline,
-            image_pipelines,
+        Graphics3D {
             model_pipelines: HashMap::new(),
             instanced_model_pipelines: HashMap::new(),
-            atlases,
-            batch: Vec::with_capacity(10000),
             opaque_draw_indices_3d: Vec::new(),
             transparent_draw_indices_3d: Vec::new(),
-            font_cache: HashMap::new(),
-            glyph_cache: GlyphCache::new(),
-            resolved_draws: Vec::with_capacity(10000),
-            text_shader_id: 0,
-            dirty_assets: true,
-            pipelines_dirty: false,
-            gpu_generation: 0, // This will be set by the platform/app
             model_renderer,
             model_pipeline,
             instanced_model_pipeline,
@@ -857,7 +773,6 @@ impl Graphics {
             shadow_view,
             shadow_pipeline,
             instanced_shadow_pipeline,
-
             irradiance_texture,
             prefiltered_texture,
             brdf_lut_texture,
@@ -887,6 +802,155 @@ impl Graphics {
                 }; 4],
                 light_view_proj: identity(),
             },
+        }
+    }
+
+    pub async fn new(
+        instance: &wgpu::Instance,
+        surface: &wgpu::Surface<'_>,
+        width: u32,
+        height: u32,
+        transparent: bool,
+    ) -> anyhow::Result<Self> {
+        let width = width.max(1);
+        let height = height.max(1);
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(surface),
+                force_fallback_adapter: false,
+            })
+            .await?;
+
+        let info = adapter.get_info();
+        eprintln!(
+            "[spot][init] Selected adapter: {:?} ({:?})",
+            info.name, info.backend
+        );
+
+        let adapter_limits = adapter.limits();
+
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::empty(),
+                required_limits: adapter_limits,
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
+            .await?;
+
+        let adapter_clone = adapter.clone();
+
+        let caps = surface.get_capabilities(&adapter);
+        let mut config = surface
+            .get_default_config(&adapter, width, height)
+            .unwrap_or_else(|| wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: pick_surface_format(&caps),
+                width: width.max(1),
+                height: height.max(1),
+                present_mode: caps.present_modes[0],
+                alpha_mode: caps.alpha_modes[0],
+                view_formats: vec![],
+                desired_maximum_frame_latency: 1,
+            });
+
+        config.alpha_mode = pick_alpha_mode(&caps, transparent);
+
+        config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
+        config.usage = crate::platform::surface_usage(&caps);
+
+        surface.configure(&device, &config);
+
+        let image_renderer = ImageRenderer::new(&device, config.format, 200000);
+
+        let image_pipelines = HashMap::new();
+
+        let atlas_size = 2048;
+        let packer = AtlasPacker::new(atlas_size, atlas_size, 2);
+        let atlas_texture = Texture::create_empty(&device, atlas_size, atlas_size, config.format);
+        let atlas_bind_group =
+            image_renderer.create_texture_bind_group(&device, &atlas_texture.0.view);
+        let atlases = vec![AtlasSlot {
+            packer,
+            texture: atlas_texture,
+            bind_group: atlas_bind_group,
+        }];
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("image_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/image.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("image_pipeline_layout"),
+            bind_group_layouts: &[
+                &image_renderer.texture_bind_group_layout,
+                &image_renderer.user_globals_bind_group_layout,
+                &image_renderer.engine_globals_bind_group_layout,
+            ],
+            immediate_size: 0,
+        });
+
+        let default_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("image_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[InstanceData::layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        #[cfg(feature = "model-3d")]
+        let model_3d = None;
+
+        let graphics = Self {
+            device,
+            queue,
+            adapter: adapter_clone,
+            config,
+            image_renderer,
+            default_pipeline,
+            image_pipelines,
+            atlases,
+            batch: Vec::with_capacity(10000),
+            font_cache: HashMap::new(),
+            glyph_cache: GlyphCache::new(),
+            resolved_draws: Vec::with_capacity(10000),
+            text_shader_id: 0,
+            dirty_assets: true,
+            pipelines_dirty: false,
+            gpu_generation: 0, // This will be set by the platform/app
+            #[cfg(feature = "model-3d")]
+            model_3d,
             transparent,
         };
 
@@ -900,9 +964,22 @@ impl Graphics {
                 self.restore_image_shader(id, source);
             }
         }
-        for (&id, source) in &ctx.registry.model_shaders {
-            if id != 0 && !self.model_pipelines.contains_key(&id) {
-                self.restore_model_shader(id, source);
+        #[cfg(feature = "model-3d")]
+        {
+            let missing_model_shader_ids = if let Some(model_3d) = self.model_3d() {
+                ctx.registry
+                    .model_shaders
+                    .keys()
+                    .copied()
+                    .filter(|&id| id != 0 && !model_3d.model_pipelines.contains_key(&id))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            for id in missing_model_shader_ids {
+                if let Some(source) = ctx.registry.model_shaders.get(&id) {
+                    self.restore_model_shader(id, source);
+                }
             }
         }
 
@@ -921,31 +998,42 @@ impl Graphics {
             }
         }
 
-        if self.gpu_models.len() < ctx.registry.models.len() {
-            self.gpu_models
-                .resize_with(ctx.registry.models.len(), || None);
-        }
-        for (idx, model_opt) in ctx.registry.models.iter().enumerate() {
-            if self.gpu_models[idx].is_some() || model_opt.is_none() {
-                continue;
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            if self.model_3d().expect("checked Some").gpu_models.len() < ctx.registry.models.len() {
+                self.model_3d_mut()
+                    .expect("checked Some")
+                    .gpu_models
+                    .resize_with(ctx.registry.models.len(), || None);
             }
-            let mesh_data = model_opt
-                .as_ref()
-                .expect("mesh present after is_none check");
-            let gpu_mesh = MeshData::new(&self.device, &mesh_data.vertices, &mesh_data.indices);
-            gpu_mesh.upload(&self.queue, &mesh_data.vertices, &mesh_data.indices);
-            self.gpu_models[idx] = Some(gpu_mesh);
-        }
+            for (idx, model_opt) in ctx.registry.models.iter().enumerate() {
+                if self.model_3d().expect("checked Some").gpu_models[idx].is_some()
+                    || model_opt.is_none()
+                {
+                    continue;
+                }
+                let mesh_data = model_opt
+                    .as_ref()
+                    .expect("mesh present after is_none check");
+                let gpu_mesh = MeshData::new(&self.device, &mesh_data.vertices, &mesh_data.indices);
+                gpu_mesh.upload(&self.queue, &mesh_data.vertices, &mesh_data.indices);
+                self.model_3d_mut().expect("checked Some").gpu_models[idx] = Some(gpu_mesh);
+            }
 
-        if self.gpu_skins.len() < ctx.registry.skins.len() {
-            self.gpu_skins
-                .resize_with(ctx.registry.skins.len(), || None);
-        }
-        for (idx, skin_opt) in ctx.registry.skins.iter().enumerate() {
-            if self.gpu_skins[idx].is_some() || skin_opt.is_none() {
-                continue;
+            if self.model_3d().expect("checked Some").gpu_skins.len() < ctx.registry.skins.len() {
+                self.model_3d_mut()
+                    .expect("checked Some")
+                    .gpu_skins
+                    .resize_with(ctx.registry.skins.len(), || None);
             }
-            self.gpu_skins[idx] = skin_opt.clone();
+            for (idx, skin_opt) in ctx.registry.skins.iter().enumerate() {
+                if self.model_3d().expect("checked Some").gpu_skins[idx].is_some()
+                    || skin_opt.is_none()
+                {
+                    continue;
+                }
+                self.model_3d_mut().expect("checked Some").gpu_skins[idx] = skin_opt.clone();
+            }
         }
 
         self.process_registrations(ctx)?;
@@ -968,28 +1056,37 @@ impl Graphics {
             self.process_registrations(ctx)?;
         }
 
-        for command in &ctx.runtime.draw_list_3d {
-            let model = match command {
-                DrawCommand3D::Model(model, ..) | DrawCommand3D::ModelInstanced(model, ..) => model,
-            };
-
-            for part in model.parts.iter() {
-                let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
-                    &ctx.registry.images,
-                    &self.atlases,
-                    part,
-                    self.white_image_id,
-                    self.black_image_id,
-                    self.normal_image_id,
-                );
-                let material_key = crate::graphics::model_raw::MaterialBindGroupKey {
-                    atlas_indices: [albedo.0, pbr.0, normal.0, ao.0, emissive.0],
+        #[cfg(feature = "model-3d")]
+        if !ctx.runtime.draw_list_3d.is_empty() {
+            self.ensure_model_3d();
+            for command in &ctx.runtime.draw_list_3d {
+                let model = match command {
+                    DrawCommand3D::Model(model, ..) | DrawCommand3D::ModelInstanced(model, ..) => {
+                        model
+                    }
                 };
-                let _ = self.model_renderer.texture_bind_group_for_atlases(
-                    &self.device,
-                    material_key,
-                    [albedo.2, pbr.2, normal.2, ao.2, emissive.2],
-                );
+
+                for part in model.parts.iter() {
+                    let device = &self.device;
+                    let atlases = &self.atlases;
+                    let model_3d = self.model_3d.as_mut().expect("ensured above");
+                    let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
+                        &ctx.registry.images,
+                        atlases,
+                        part,
+                        model_3d.white_image_id,
+                        model_3d.black_image_id,
+                        model_3d.normal_image_id,
+                    );
+                    let material_key = crate::graphics::model_raw::MaterialBindGroupKey {
+                        atlas_indices: [albedo.0, pbr.0, normal.0, ao.0, emissive.0],
+                    };
+                    let _ = model_3d.model_renderer.texture_bind_group_for_atlases(
+                        device,
+                        material_key,
+                        [albedo.2, pbr.2, normal.2, ao.2, emissive.2],
+                    );
+                }
             }
         }
 
@@ -1019,13 +1116,25 @@ impl Graphics {
 
         // 1. Restore Shaders
         self.image_pipelines.clear();
-        self.model_pipelines.clear();
-        self.instanced_model_pipelines.clear();
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            self.model_3d_mut()
+                .expect("checked Some")
+                .model_pipelines
+                .clear();
+            self.model_3d_mut()
+                .expect("checked Some")
+                .instanced_model_pipelines
+                .clear();
+        }
         for (&id, source) in &ctx.registry.image_shaders {
             self.restore_image_shader(id, source);
         }
-        for (&id, source) in &ctx.registry.model_shaders {
-            self.restore_model_shader(id, source);
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            for (&id, source) in &ctx.registry.model_shaders {
+                self.restore_model_shader(id, source);
+            }
         }
 
         // 2. Restore Fonts
@@ -1045,33 +1154,61 @@ impl Graphics {
         self.rebuild_atlases(ctx)?;
 
         // 4. Restore Meshes
-        self.gpu_models.clear();
-        for model_opt in &ctx.registry.models {
-            if let Some(mesh_data) = model_opt {
-                let gpu_mesh = MeshData::new(&self.device, &mesh_data.vertices, &mesh_data.indices);
-                gpu_mesh.upload(&self.queue, &mesh_data.vertices, &mesh_data.indices);
-                self.gpu_models.push(Some(gpu_mesh));
-            } else {
-                self.gpu_models.push(None);
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            self.model_3d_mut()
+                .expect("checked Some")
+                .gpu_models
+                .clear();
+            for model_opt in &ctx.registry.models {
+                if let Some(mesh_data) = model_opt {
+                    let gpu_mesh =
+                        MeshData::new(&self.device, &mesh_data.vertices, &mesh_data.indices);
+                    gpu_mesh.upload(&self.queue, &mesh_data.vertices, &mesh_data.indices);
+                    self.model_3d_mut()
+                        .expect("checked Some")
+                        .gpu_models
+                        .push(Some(gpu_mesh));
+                } else {
+                    self.model_3d_mut()
+                        .expect("checked Some")
+                        .gpu_models
+                        .push(None);
+                }
             }
         }
 
         // 5. Restore Skins
-        self.gpu_skins.clear();
-        for skin_opt in &ctx.registry.skins {
-            self.gpu_skins.push(skin_opt.clone());
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            self.model_3d_mut().expect("checked Some").gpu_skins.clear();
+            for skin_opt in &ctx.registry.skins {
+                self.model_3d_mut()
+                    .expect("checked Some")
+                    .gpu_skins
+                    .push(skin_opt.clone());
+            }
         }
 
         // 6. Clear 3D model bind group caches as they reference old atlas views
-        self.model_renderer.clear_texture_bind_group_cache();
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            self.model_3d_mut()
+                .expect("checked Some")
+                .model_renderer
+                .clear_texture_bind_group_cache();
+        }
 
         self.gpu_generation = ctx.registry.gpu_generation;
 
         // Set default IDs (aligned with Context::register_defaults)
         // White: 1, Black: 2, Normal: 3
-        self.white_image_id = 1;
-        self.black_image_id = 2;
-        self.normal_image_id = 3;
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some() {
+            self.model_3d_mut().expect("checked Some").white_image_id = 1;
+            self.model_3d_mut().expect("checked Some").black_image_id = 2;
+            self.model_3d_mut().expect("checked Some").normal_image_id = 3;
+        }
         self.text_shader_id = 1;
 
         eprintln!(
@@ -1097,7 +1234,9 @@ impl Graphics {
             return;
         }
 
+        #[cfg(feature = "model-3d")]
         let old_width = self.config.width;
+        #[cfg(feature = "model-3d")]
         let old_height = self.config.height;
         let old_format = self.config.format;
 
@@ -1124,33 +1263,50 @@ impl Graphics {
 
         // Only recreate depth texture if size changed.
         // IMPORTANT: On Android, we always recreate on resize to ensure stability with new surfaces.
-        if width != old_width || height != old_height || cfg!(target_os = "android") {
-            self.depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("depth_texture"),
-                size: wgpu::Extent3d {
-                    width: self.config.width,
-                    height: self.config.height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth24Plus,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            self.depth_view = self
+        #[cfg(feature = "model-3d")]
+        if self.model_3d.is_some()
+            && (width != old_width || height != old_height || cfg!(target_os = "android"))
+        {
+            self.model_3d_mut().expect("checked Some").depth_texture =
+                self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("depth_texture"),
+                    size: wgpu::Extent3d {
+                        width: self.config.width,
+                        height: self.config.height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Depth24Plus,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                });
+            self.model_3d_mut().expect("checked Some").depth_view = self
+                .model_3d()
+                .expect("checked Some")
                 .depth_texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
-            self.fog_background_bind_group = Self::create_fog_background_bind_group(
+            self.model_3d_mut()
+                .expect("checked Some")
+                .fog_background_bind_group = Self::create_fog_background_bind_group(
                 &self.device,
-                &self.fog_background_bind_group_layout,
-                &self.model_renderer.scene_globals_buffer,
-                &self.depth_view,
+                &self
+                    .model_3d()
+                    .expect("checked Some")
+                    .fog_background_bind_group_layout,
+                &self
+                    .model_3d()
+                    .expect("checked Some")
+                    .model_renderer
+                    .scene_globals_buffer,
+                &self.model_3d().expect("checked Some").depth_view,
             );
         }
     }
 
+    #[cfg(feature = "model-3d")]
     pub fn create_mesh(
         &mut self,
         ctx: &mut crate::Context,
@@ -1170,11 +1326,15 @@ impl Graphics {
 
         let mesh = MeshData::new(&self.device, vertices, indices);
         mesh.upload(&self.queue, vertices, indices);
-        self.model_renderer.meshes.insert(id, mesh);
+        self.ensure_model_3d()
+            .model_renderer
+            .meshes
+            .insert(id, mesh);
 
         Ok(id)
     }
 
+    #[cfg(feature = "model-3d")]
     pub fn create_skin(
         &mut self,
         ctx: &mut crate::Context,
@@ -1187,19 +1347,20 @@ impl Graphics {
         while ctx.registry.skins.len() <= id as usize {
             ctx.registry.skins.push(None);
         }
-        while self.gpu_skins.len() <= id as usize {
-            self.gpu_skins.push(None);
+        while self.ensure_model_3d().gpu_skins.len() <= id as usize {
+            self.ensure_model_3d().gpu_skins.push(None);
         }
         let skin = SkinData {
             bones,
             bone_matrices,
         };
         ctx.registry.skins[id as usize] = Some(skin.clone());
-        self.gpu_skins[id as usize] = Some(skin.clone());
-        self.model_renderer.skins.insert(id, skin);
+        self.ensure_model_3d().gpu_skins[id as usize] = Some(skin.clone());
+        self.ensure_model_3d().model_renderer.skins.insert(id, skin);
         id
     }
 
+    #[cfg(feature = "model-3d")]
     pub fn update_bone_matrices(
         &mut self,
         ctx: &mut crate::Context,
@@ -1213,14 +1374,19 @@ impl Graphics {
                 }
             }
         }
-        if let Some(Some(skin)) = self.gpu_skins.get_mut(skin_id as usize) {
+        if let Some(Some(skin)) = self.ensure_model_3d().gpu_skins.get_mut(skin_id as usize) {
             for (i, matrix) in matrices.iter().enumerate() {
                 if i < skin.bone_matrices.len() {
                     skin.bone_matrices[i] = *matrix;
                 }
             }
         }
-        if let Some(skin) = self.model_renderer.skins.get_mut(&skin_id) {
+        if let Some(skin) = self
+            .ensure_model_3d()
+            .model_renderer
+            .skins
+            .get_mut(&skin_id)
+        {
             for (i, matrix) in matrices.iter().enumerate() {
                 if i < skin.bone_matrices.len() {
                     skin.bone_matrices[i] = *matrix;

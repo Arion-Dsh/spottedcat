@@ -24,7 +24,7 @@ ab_glyph = "0.2"
 cpal = { version = "0.17.3", features = ["wasm-bindgen"] }
 symphonia = { version = "0.5", features = ["all"] }
 image = "0.25"
-gltf = "1.4.1"
+gltf = { version = "1.4.1", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 winit = { version = "0.30" }
@@ -43,11 +43,12 @@ objc2-core-motion = { version = "0.3.2" }
 block2 = { version = "0.6.2" }
 
 [dev-dependencies]
-gltf = "1.4.1"
-image = "0.25"
 fundsp = "0.18"
+
+
 [features]
-default = []
+default = ["model-3d"]
+model-3d = ["dep:gltf"]
 sensors = []
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
@@ -77,6 +78,37 @@ path = "examples/text_performance_test.rs"
 [[example]]
 name = "gltf_loader"
 path = "examples/gltf_loader.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "billboard"
+path = "examples/billboard.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "fog_world"
+path = "examples/fog_world.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "instancing_test"
+path = "examples/instancing_test.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "metal_sphere"
+path = "examples/metal_sphere.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "model_test"
+path = "examples/model_test.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "render_state_stress"
+path = "examples/render_state_stress.rs"
+required-features = ["model-3d"]
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]

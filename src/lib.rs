@@ -49,6 +49,7 @@ mod image_raw;
 mod input;
 mod key;
 mod launch;
+#[cfg(feature = "model-3d")]
 pub mod model;
 mod mouse;
 mod packer;
@@ -70,12 +71,16 @@ pub use assets::*;
 pub use context::Context;
 pub(crate) use context::DrawState;
 pub use controls::*;
+#[cfg(not(feature = "model-3d"))]
+pub use drawable::DrawOption;
+#[cfg(feature = "model-3d")]
 pub use drawable::{DrawOption, DrawOption3D};
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
 pub use image::{Bounds, Image};
 pub use input::InputManager;
 pub use key::Key;
 pub use launch::{WindowConfig, run};
+#[cfg(feature = "model-3d")]
 pub use model::Model;
 pub use mouse::MouseButton;
 pub use platform_events::PlatformEvent;

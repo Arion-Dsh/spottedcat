@@ -221,13 +221,7 @@ impl FogSettings {
     /// - `end`: distance where the main ramp reaches full effect
     /// - `density`: contribution of the distance fog term
     /// - `exponent`: shape of the distance ramp
-    pub fn with_distance(
-        mut self,
-        start: f32,
-        end: f32,
-        density: f32,
-        exponent: f32,
-    ) -> Self {
+    pub fn with_distance(mut self, start: f32, end: f32, density: f32, exponent: f32) -> Self {
         self.distance_start = start;
         self.distance_end = end;
         self.distance_density = density;
@@ -242,13 +236,7 @@ impl FogSettings {
     /// - `falloff`: vertical range over which the fog fades out
     /// - `density`: contribution of the height fog term
     /// - `exponent`: shape of the vertical density curve
-    pub fn with_height(
-        mut self,
-        base: f32,
-        falloff: f32,
-        density: f32,
-        exponent: f32,
-    ) -> Self {
+    pub fn with_height(mut self, base: f32, falloff: f32, density: f32, exponent: f32) -> Self {
         self.height_base = base;
         self.height_falloff = falloff;
         self.height_density = density;
@@ -256,10 +244,12 @@ impl FogSettings {
         self
     }
 
+    #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
     pub(crate) fn effective_strength(&self) -> f32 {
         self.strength.unwrap_or(self.color[3])
     }
 
+    #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
     pub(crate) fn is_enabled(&self) -> bool {
         self.effective_strength() > 0.0
             && (self.distance_density > 0.0 || self.height_density > 0.0)

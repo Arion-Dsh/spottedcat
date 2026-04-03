@@ -2,23 +2,32 @@
 
 use crate::Context;
 use crate::ShaderOpts;
-use crate::drawable::{DrawCommand, DrawCommand3D};
-use crate::graphics::model_raw::MaterialBindGroupKey;
+use crate::drawable::DrawCommand;
 use crate::image_raw::InstanceData;
 use crate::pt::Pt;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use super::core::{AtlasSlot, Graphics, ResolvedDraw, SkinData};
+#[cfg(feature = "model-3d")]
+use super::core::SkinData;
+use super::core::{AtlasSlot, Graphics, ResolvedDraw};
+#[cfg(feature = "model-3d")]
+use crate::drawable::DrawCommand3D;
+#[cfg(feature = "model-3d")]
+use crate::graphics::model_raw::MaterialBindGroupKey;
+#[cfg(feature = "model-3d")]
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
+#[cfg(feature = "model-3d")]
 use crate::image::ImageEntry;
 use crate::image_raw::ImageRenderer;
 
+#[cfg(feature = "model-3d")]
 fn normalize3(v: [f32; 3]) -> [f32; 3] {
     let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(0.0001);
     [v[0] / len, v[1] / len, v[2] / len]
 }
 
+#[cfg(feature = "model-3d")]
 fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [
         a[1] * b[2] - a[2] * b[1],
@@ -37,6 +46,7 @@ pub(crate) struct RenderConfig<'a> {
     pub default_pipeline: &'a wgpu::RenderPipeline,
 }
 
+#[cfg(feature = "model-3d")]
 pub(crate) struct Render3DConfig<'a> {
     pub model_pipeline: &'a wgpu::RenderPipeline,
     pub instanced_model_pipeline: &'a wgpu::RenderPipeline,
@@ -52,7 +62,9 @@ pub(crate) struct Render3DConfig<'a> {
     pub height: u32,
 }
 
+#[cfg(feature = "model-3d")]
 type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
+#[cfg(feature = "model-3d")]
 type MaterialTextureSet<'a> = (
     MaterialTextureBinding<'a>,
     MaterialTextureBinding<'a>,
@@ -61,6 +73,7 @@ type MaterialTextureSet<'a> = (
     MaterialTextureBinding<'a>,
 );
 
+#[cfg(feature = "model-3d")]
 fn resolve_material_texture<'a>(
     images: &[Option<ImageEntry>],
     atlases: &'a [AtlasSlot],
@@ -103,6 +116,7 @@ fn expect_atlas_bind_group(atlases: &[AtlasSlot], atlas_index: Option<u32>) -> &
         .bind_group
 }
 
+#[cfg(feature = "model-3d")]
 fn expect_default_material_texture<'a>(
     images: &[Option<ImageEntry>],
     atlases: &'a [AtlasSlot],
@@ -117,6 +131,7 @@ fn expect_default_material_texture<'a>(
     })
 }
 
+#[cfg(feature = "model-3d")]
 fn resolve_material_textures<'a>(
     images: &[Option<ImageEntry>],
     atlases: &'a [AtlasSlot],
@@ -145,6 +160,7 @@ fn resolve_material_textures<'a>(
     (albedo, pbr, normal, ao, emissive)
 }
 
+#[cfg(feature = "model-3d")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct DrawCommand3DSortKey {
     instanced: bool,
@@ -158,6 +174,7 @@ struct DrawCommand3DSortKey {
     emissive_id: u32,
 }
 
+#[cfg(feature = "model-3d")]
 fn draw_command_3d_is_transparent(command: &DrawCommand3D) -> bool {
     match command {
         DrawCommand3D::Model(_, opts, ..) | DrawCommand3D::ModelInstanced(_, opts, ..) => {
@@ -166,6 +183,7 @@ fn draw_command_3d_is_transparent(command: &DrawCommand3D) -> bool {
     }
 }
 
+#[cfg(feature = "model-3d")]
 fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
     match command {
         DrawCommand3D::Model(model, _, shader_id, _, skin_id) => DrawCommand3DSortKey {
@@ -234,24 +252,29 @@ fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
 }
 
 impl Graphics {
+    #[cfg(feature = "model-3d")]
     fn prepare_3d_command_order(&mut self, ctx: &Context) {
-        self.opaque_draw_indices_3d.clear();
-        self.transparent_draw_indices_3d.clear();
+        let model_3d = self.ensure_model_3d();
+        model_3d.opaque_draw_indices_3d.clear();
+        model_3d.transparent_draw_indices_3d.clear();
 
-        self.opaque_draw_indices_3d
+        model_3d
+            .opaque_draw_indices_3d
             .reserve(ctx.runtime.draw_list_3d.len());
-        self.transparent_draw_indices_3d
+        model_3d
+            .transparent_draw_indices_3d
             .reserve(ctx.runtime.draw_list_3d.len());
 
         for (index, command) in ctx.runtime.draw_list_3d.iter().enumerate() {
             if draw_command_3d_is_transparent(command) {
-                self.transparent_draw_indices_3d.push(index);
+                model_3d.transparent_draw_indices_3d.push(index);
             } else {
-                self.opaque_draw_indices_3d.push(index);
+                model_3d.opaque_draw_indices_3d.push(index);
             }
         }
 
-        self.opaque_draw_indices_3d
+        model_3d
+            .opaque_draw_indices_3d
             .sort_by_key(|&index| draw_command_3d_sort_key(&ctx.runtime.draw_list_3d[index]));
     }
 
@@ -487,6 +510,7 @@ impl Graphics {
         }
     }
 
+    #[cfg(feature = "model-3d")]
     #[allow(clippy::too_many_arguments)]
     pub(super) fn render_3d_internal<'a>(
         model_renderer: &mut ModelRenderer,
@@ -890,6 +914,10 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         ctx: &mut Context,
     ) -> Result<(), wgpu::SurfaceError> {
+        #[cfg(feature = "model-3d")]
+        if !ctx.runtime.draw_list_3d.is_empty() {
+            self.ensure_model_3d();
+        }
         self.sync_assets(ctx).map_err(|e| {
             eprintln!("[spot][graphics] sync_assets failed: {:?}", e);
             wgpu::SurfaceError::Lost
@@ -948,11 +976,15 @@ impl Graphics {
                 label: Some("command_encoder"),
             });
 
-        self.model_renderer.begin_frame();
+        #[cfg(feature = "model-3d")]
+        if let Some(model_3d) = self.model_3d_mut() {
+            model_3d.model_renderer.begin_frame();
+        }
         self.image_renderer.begin_frame();
 
         let width = self.config.width;
         let height = self.config.height;
+        #[cfg(feature = "model-3d")]
         if let Some(ctx_ref) = ctx.as_deref()
             && !ctx_ref.runtime.draw_list_3d.is_empty()
         {
@@ -960,9 +992,11 @@ impl Graphics {
         }
 
         // 1. Shadow Pass (3D)
+        #[cfg(feature = "model-3d")]
         if let Some(ref mut ctx) = ctx
             && !ctx.runtime.draw_list_3d.is_empty()
         {
+            self.ensure_model_3d();
             let mut shadow_encoder =
                 self.device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -973,7 +1007,7 @@ impl Graphics {
                     label: Some("shadow_pass"),
                     color_attachments: &[],
                     depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &self.shadow_view,
+                        view: &self.model_3d().expect("ensured").shadow_view,
                         depth_ops: Some(wgpu::Operations {
                             load: wgpu::LoadOp::Clear(1.0),
                             store: wgpu::StoreOp::Store,
@@ -985,33 +1019,37 @@ impl Graphics {
                     multiview_mask: None,
                 });
 
+                let queue = &self.queue;
+                let device = &self.device;
+                let atlases = &self.atlases;
+                let model_3d = self.model_3d.as_mut().expect("ensured");
                 Self::render_3d_internal(
-                    &mut self.model_renderer,
-                    &self.queue,
-                    &self.device,
-                    &mut self.scene_globals,
-                    &self.gpu_models,
-                    &self.gpu_skins,
+                    &mut model_3d.model_renderer,
+                    queue,
+                    device,
+                    &mut model_3d.scene_globals,
+                    &model_3d.gpu_models,
+                    &model_3d.gpu_skins,
                     &ctx.registry.images,
-                    &self.atlases,
+                    atlases,
                     Render3DConfig {
-                        model_pipeline: &self.model_pipeline,
-                        instanced_model_pipeline: &self.instanced_model_pipeline,
-                        shadow_pipeline: &self.shadow_pipeline,
-                        instanced_shadow_pipeline: &self.instanced_shadow_pipeline,
-                        model_pipelines: &self.model_pipelines,
-                        instanced_model_pipelines: &self.instanced_model_pipelines,
-                        white_image_id: self.white_image_id,
-                        black_image_id: self.black_image_id,
-                        normal_image_id: self.normal_image_id,
-                        environment_bind_group: &self.environment_bind_group,
+                        model_pipeline: &model_3d.model_pipeline,
+                        instanced_model_pipeline: &model_3d.instanced_model_pipeline,
+                        shadow_pipeline: &model_3d.shadow_pipeline,
+                        instanced_shadow_pipeline: &model_3d.instanced_shadow_pipeline,
+                        model_pipelines: &model_3d.model_pipelines,
+                        instanced_model_pipelines: &model_3d.instanced_model_pipelines,
+                        white_image_id: model_3d.white_image_id,
+                        black_image_id: model_3d.black_image_id,
+                        normal_image_id: model_3d.normal_image_id,
+                        environment_bind_group: &model_3d.environment_bind_group,
                         width,
                         height,
                     },
                     &mut rpass,
                     ctx,
-                    &self.opaque_draw_indices_3d,
-                    &self.transparent_draw_indices_3d,
+                    &model_3d.opaque_draw_indices_3d,
+                    &model_3d.transparent_draw_indices_3d,
                     true,
                 );
             }
@@ -1022,7 +1060,22 @@ impl Graphics {
             self.resolve_drawables(ctx, drawables, width, height);
         }
 
+        #[cfg(feature = "model-3d")]
+        let depth_stencil_attachment =
+            self.model_3d()
+                .map(|model_3d| wgpu::RenderPassDepthStencilAttachment {
+                    view: &model_3d.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                });
+        #[cfg(not(feature = "model-3d"))]
+        let depth_stencil_attachment = None;
+
         {
+            #[cfg_attr(not(feature = "model-3d"), allow(unused_mut, unused_variables))]
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_3d_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1039,47 +1092,47 @@ impl Graphics {
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
+                depth_stencil_attachment,
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
 
-            if let Some(ref mut ctx) = ctx {
+            #[cfg(feature = "model-3d")]
+            if let Some(ref mut ctx) = ctx
+                && !ctx.runtime.draw_list_3d.is_empty()
+            {
+                let queue = &self.queue;
+                let device = &self.device;
+                let atlases = &self.atlases;
+                let model_3d = self.model_3d.as_mut().expect("ensured");
                 Self::render_3d_internal(
-                    &mut self.model_renderer,
-                    &self.queue,
-                    &self.device,
-                    &mut self.scene_globals,
-                    &self.gpu_models,
-                    &self.gpu_skins,
+                    &mut model_3d.model_renderer,
+                    queue,
+                    device,
+                    &mut model_3d.scene_globals,
+                    &model_3d.gpu_models,
+                    &model_3d.gpu_skins,
                     &ctx.registry.images,
-                    &self.atlases,
+                    atlases,
                     Render3DConfig {
-                        model_pipeline: &self.model_pipeline,
-                        instanced_model_pipeline: &self.instanced_model_pipeline,
-                        shadow_pipeline: &self.shadow_pipeline,
-                        instanced_shadow_pipeline: &self.instanced_shadow_pipeline,
-                        model_pipelines: &self.model_pipelines,
-                        instanced_model_pipelines: &self.instanced_model_pipelines,
-                        white_image_id: self.white_image_id,
-                        black_image_id: self.black_image_id,
-                        normal_image_id: self.normal_image_id,
-                        environment_bind_group: &self.environment_bind_group,
+                        model_pipeline: &model_3d.model_pipeline,
+                        instanced_model_pipeline: &model_3d.instanced_model_pipeline,
+                        shadow_pipeline: &model_3d.shadow_pipeline,
+                        instanced_shadow_pipeline: &model_3d.instanced_shadow_pipeline,
+                        model_pipelines: &model_3d.model_pipelines,
+                        instanced_model_pipelines: &model_3d.instanced_model_pipelines,
+                        white_image_id: model_3d.white_image_id,
+                        black_image_id: model_3d.black_image_id,
+                        normal_image_id: model_3d.normal_image_id,
+                        environment_bind_group: &model_3d.environment_bind_group,
                         width,
                         height,
                     },
                     &mut rpass,
                     ctx,
-                    &self.opaque_draw_indices_3d,
-                    &self.transparent_draw_indices_3d,
+                    &model_3d.opaque_draw_indices_3d,
+                    &model_3d.transparent_draw_indices_3d,
                     false,
                 );
             }
@@ -1103,9 +1156,13 @@ impl Graphics {
                 multiview_mask: None,
             });
 
-            if !self.transparent && self.scene_globals.fog_params[0] > 0.0 {
-                rpass.set_pipeline(&self.fog_background_pipeline);
-                rpass.set_bind_group(0, &self.fog_background_bind_group, &[]);
+            #[cfg(feature = "model-3d")]
+            if !self.transparent
+                && let Some(model_3d) = self.model_3d()
+                && model_3d.scene_globals.fog_params[0] > 0.0
+            {
+                rpass.set_pipeline(&model_3d.fog_background_pipeline);
+                rpass.set_bind_group(0, &model_3d.fog_background_bind_group, &[]);
                 rpass.draw(0..3, 0..1);
             }
 

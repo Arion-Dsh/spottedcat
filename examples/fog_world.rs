@@ -24,8 +24,7 @@ impl Spot for FogWorld {
             Pt::from(2.0),
             Pt::from(2.0),
             &[
-                58, 69, 66, 255, 48, 58, 55, 255,
-                48, 58, 55, 255, 58, 69, 66, 255,
+                58, 69, 66, 255, 48, 58, 55, 255, 48, 58, 55, 255, 58, 69, 66, 255,
             ],
         )
         .unwrap();
@@ -114,7 +113,11 @@ impl Spot for FogWorld {
                 ctx,
                 DrawOption3D::default()
                     .with_position([0.0, 1.0 + row as f32 * 0.18, z - 2.0])
-                    .with_scale([1.2 + row as f32 * 0.18, 1.2 + row as f32 * 0.18, 1.2 + row as f32 * 0.18]),
+                    .with_scale([
+                        1.2 + row as f32 * 0.18,
+                        1.2 + row as f32 * 0.18,
+                        1.2 + row as f32 * 0.18,
+                    ]),
             );
         }
 

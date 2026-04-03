@@ -4,6 +4,7 @@ pub fn register_image_shader(ctx: &mut Context, wgsl_source: &str) -> u32 {
     ctx.register_image_shader(wgsl_source)
 }
 
+#[cfg(feature = "model-3d")]
 pub fn register_model_shader(ctx: &mut Context, wgsl_source: &str) -> u32 {
     ctx.register_model_shader(wgsl_source)
 }

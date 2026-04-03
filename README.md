@@ -44,6 +44,13 @@ Add to your `Cargo.toml`:
 spottedcat = "0.6.0"
 ```
 
+`model-3d` is enabled by default. If you want a 2D-only build surface, disable default features:
+
+```toml
+[dependencies]
+spottedcat = { version = "0.6.0", default-features = false }
+```
+
 ### Basic Example
 
 ```rust
@@ -123,6 +130,10 @@ Step semantics are intentionally limited to "today" for cross-platform consisten
 - **iOS** uses `CMPedometer` updates starting from the beginning of the current local day.
 - **Android** derives today's steps from `TYPE_STEP_COUNTER` while the sensor stays registered.
 - Neither API should be treated as a lifetime or historical total. Historical fitness data belongs in HealthKit or Health Connect integration.
+
+### Model 3D
+
+`model-3d` gates the 3D model stack, including `Model`, `DrawOption3D`, custom model shaders, mesh loaders, lighting, and the 3D examples.
 
 ## Custom Shaders
 
