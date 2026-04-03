@@ -1,3 +1,4 @@
+#![cfg(feature = "effects")]
 /// Style controls for the fullscreen fog background pass.
 ///
 /// These values are intentionally artistic rather than physical:

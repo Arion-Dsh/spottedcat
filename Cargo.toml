@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.6.4"
+version = "0.7.0"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -23,7 +23,7 @@ anyhow = "1"
 ab_glyph = "0.2"
 cpal = { version = "0.17.3", features = ["wasm-bindgen"] }
 symphonia = { version = "0.5", features = ["all"] }
-image = "0.25"
+image = { version = "0.25", optional = true }
 gltf = { version = "1.4.1", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
@@ -47,8 +47,11 @@ fundsp = "0.18"
 
 
 [features]
-default = ["model-3d"]
-model-3d = ["dep:gltf"]
+default = []
+model-3d = []
+effects = ["model-3d"]
+utils = ["dep:image"]
+gltf = ["dep:gltf", "model-3d", "utils"]
 sensors = []
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
@@ -88,7 +91,7 @@ required-features = ["model-3d"]
 [[example]]
 name = "fog_world"
 path = "examples/fog_world.rs"
-required-features = ["model-3d"]
+required-features = ["model-3d", "effects"]
 
 [[example]]
 name = "instancing_test"

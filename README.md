@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.6.3"
+spottedcat = "0.7.0"
 ```
 
-`model-3d` is enabled by default. If you want a 2D-only build surface, disable default features:
+By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.6.3", default-features = false }
+spottedcat = { version = "0.7.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
@@ -133,7 +133,7 @@ Step semantics are intentionally limited to "today" for cross-platform consisten
 
 ### Model 3D
 
-`model-3d` gates the 3D model stack, including `Model`, `DrawOption3D`, custom model shaders, mesh loaders, lighting, and the 3D examples.
+The `model-3d` feature gates the 3D model stack, including `Model`, `DrawOption3D`, custom model shaders, mesh loaders, and lighting. This feature is **disabled by default** to minimize the engine's footprint when only 2D features are needed.
 
 ## Custom Shaders
 

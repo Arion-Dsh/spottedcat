@@ -43,6 +43,7 @@ mod context_3d;
 mod controls;
 mod drawable;
 mod drawable_3d;
+#[cfg(feature = "effects")]
 mod fog;
 mod glyph_cache;
 pub mod graphics;
@@ -64,6 +65,7 @@ mod sound;
 mod text;
 mod texture;
 mod touch;
+#[cfg(any(feature = "utils", feature = "model-3d", feature = "gltf"))]
 pub mod utils;
 mod window;
 
@@ -76,6 +78,7 @@ pub use controls::*;
 pub use drawable::DrawOption;
 #[cfg(feature = "model-3d")]
 pub use drawable_3d::DrawOption3D;
+#[cfg(feature = "effects")]
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
 pub use image::{Bounds, Image};
 pub use input::InputManager;

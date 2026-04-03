@@ -52,7 +52,7 @@ impl std::fmt::Debug for ResourceMap {
 #[derive(Debug)]
 pub(crate) struct ContextRuntime {
     pub(crate) draw_list: Vec<DrawCommand>,
-    #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
+    #[cfg(feature = "model-3d")]
     pub(crate) model_3d: Model3dRuntime,
     pub(crate) input: InputManager,
     pub(crate) scale_factor: f64,
@@ -68,6 +68,7 @@ impl ContextRuntime {
     fn new() -> Self {
         Self {
             draw_list: Vec::new(),
+            #[cfg(feature = "model-3d")]
             model_3d: Model3dRuntime::default(),
             input: InputManager::new(),
             scale_factor: 1.0,
@@ -85,7 +86,7 @@ impl ContextRuntime {
 pub(crate) struct ResourceRegistry {
     resources: ResourceMap,
     pub(crate) images: Vec<Option<crate::image::ImageEntry>>,
-    #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
+    #[cfg(feature = "model-3d")]
     pub(crate) model_3d: Model3dRegistry,
     pub(crate) fonts: HashMap<u32, Vec<u8>>,
     pub(crate) image_shaders: HashMap<u32, String>,
@@ -101,6 +102,7 @@ impl ResourceRegistry {
         Self {
             resources: ResourceMap::default(),
             images: Vec::new(),
+            #[cfg(feature = "model-3d")]
             model_3d: Model3dRegistry::default(),
             fonts: HashMap::new(),
             image_shaders: HashMap::new(),
@@ -139,9 +141,10 @@ impl Context {
     }
 
     fn register_defaults(&mut self) {
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]);
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[0, 0, 0, 255]);
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[128, 128, 255, 255]);
+        self.register_image(Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]); // ID 1
+        self.register_image(Pt::from(1.0), Pt::from(1.0), &[0, 0, 0, 255]);       // ID 2
+        #[cfg(feature = "model-3d")]
+        self.register_image(Pt::from(1.0), Pt::from(1.0), &[128, 128, 255, 255]); // ID 3 (Normal)
 
         let text_shader_src = r#"
             fn user_fs_hook() {
@@ -272,6 +275,7 @@ impl Context {
 
     pub(crate) fn begin_frame(&mut self) {
         self.runtime.draw_list.clear();
+        #[cfg(feature = "model-3d")]
         self.runtime.model_3d.begin_frame();
         self.runtime.state_stack.clear();
         self.runtime.current_state = DrawState::default();

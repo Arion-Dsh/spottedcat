@@ -1,7 +1,7 @@
 #[cfg(feature = "model-3d")]
 use std::collections::HashMap;
 
-#[cfg(feature = "model-3d")]
+#[cfg(all(feature = "model-3d", feature = "effects"))]
 use crate::FogSettings;
 #[cfg(feature = "model-3d")]
 use crate::context::Context;
@@ -129,6 +129,7 @@ impl Context {
         }
     }
 
+    #[cfg(feature = "effects")]
     pub fn set_fog(&mut self, fog: FogSettings) {
         if let Some(g) = self.runtime.graphics.as_mut() {
             let scene_globals = &mut g.ensure_model_3d().scene_globals;
@@ -190,6 +191,7 @@ impl Context {
         }
     }
 
+    #[cfg(feature = "effects")]
     pub fn clear_fog(&mut self) {
         self.set_fog(FogSettings::default());
     }

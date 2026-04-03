@@ -176,8 +176,11 @@ pub(crate) struct Graphics3D {
     pub(crate) model_renderer: ModelRenderer,
     pub(crate) model_pipeline: wgpu::RenderPipeline,
     pub(crate) instanced_model_pipeline: wgpu::RenderPipeline,
+    #[cfg(feature = "effects")]
     pub(crate) fog_background_bind_group_layout: wgpu::BindGroupLayout,
+    #[cfg(feature = "effects")]
     pub(crate) fog_background_bind_group: wgpu::BindGroup,
+    #[cfg(feature = "effects")]
     pub(crate) fog_background_pipeline: wgpu::RenderPipeline,
     pub(crate) gpu_models: Vec<Option<MeshData>>,
     pub(crate) gpu_skins: Vec<Option<SkinData>>,
@@ -228,6 +231,7 @@ impl Graphics {
             .expect("Graphics3D must exist after ensure_model_3d")
     }
 
+    #[cfg(feature = "effects")]
     pub(crate) fn create_fog_background_bind_group_layout(
         device: &wgpu::Device,
     ) -> wgpu::BindGroupLayout {
@@ -261,6 +265,7 @@ impl Graphics {
         })
     }
 
+    #[cfg(feature = "effects")]
     pub(crate) fn create_fog_background_bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
@@ -289,6 +294,7 @@ impl Graphics {
         })
     }
 
+    #[cfg(feature = "effects")]
     pub(crate) fn create_fog_background_pipeline(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
@@ -349,7 +355,7 @@ impl Graphics {
         config: &wgpu::SurfaceConfiguration,
         width: u32,
         height: u32,
-        backend: wgpu::Backend,
+        _backend: wgpu::Backend,
     ) -> Graphics3D {
         let model_renderer = ModelRenderer::new(device);
 
@@ -574,19 +580,22 @@ impl Graphics {
                 cache: None,
             });
 
+        #[cfg(feature = "effects")]
         let fog_background_bind_group_layout =
             Self::create_fog_background_bind_group_layout(device);
+        #[cfg(feature = "effects")]
         let fog_background_bind_group = Self::create_fog_background_bind_group(
             device,
             &fog_background_bind_group_layout,
             &model_renderer.scene_globals_buffer,
             &depth_view,
         );
+        #[cfg(feature = "effects")]
         let fog_background_pipeline = Self::create_fog_background_pipeline(
             device,
             config.format,
             &fog_background_bind_group_layout,
-            backend,
+            _backend,
         );
 
         let shadow_pipeline_layout =
@@ -698,8 +707,11 @@ impl Graphics {
             model_renderer,
             model_pipeline,
             instanced_model_pipeline,
+            #[cfg(feature = "effects")]
             fog_background_bind_group_layout,
+            #[cfg(feature = "effects")]
             fog_background_bind_group,
+            #[cfg(feature = "effects")]
             fog_background_pipeline,
             gpu_models: Vec::new(),
             gpu_skins: Vec::new(),
@@ -929,21 +941,24 @@ impl Graphics {
                 .expect("checked Some")
                 .depth_texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
-            self.model_3d_mut()
-                .expect("checked Some")
-                .fog_background_bind_group = Self::create_fog_background_bind_group(
-                &self.device,
-                &self
-                    .model_3d()
+            #[cfg(feature = "effects")]
+            {
+                self.model_3d_mut()
                     .expect("checked Some")
-                    .fog_background_bind_group_layout,
-                &self
-                    .model_3d()
-                    .expect("checked Some")
-                    .model_renderer
-                    .scene_globals_buffer,
-                &self.model_3d().expect("checked Some").depth_view,
-            );
+                    .fog_background_bind_group = Self::create_fog_background_bind_group(
+                    &self.device,
+                    &self
+                        .model_3d()
+                        .expect("checked Some")
+                        .fog_background_bind_group_layout,
+                    &self
+                        .model_3d()
+                        .expect("checked Some")
+                        .model_renderer
+                        .scene_globals_buffer,
+                    &self.model_3d().expect("checked Some").depth_view,
+                );
+            }
         }
     }
 

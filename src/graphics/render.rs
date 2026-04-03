@@ -364,21 +364,18 @@ impl Graphics {
         }
 
         #[cfg(feature = "model-3d")]
-        let depth_stencil_attachment =
-            self.model_3d()
-                .map(|model_3d| wgpu::RenderPassDepthStencilAttachment {
-                    view: &model_3d.depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                });
-        #[cfg(not(feature = "model-3d"))]
-        let depth_stencil_attachment = None;
-
         {
-            #[cfg_attr(not(feature = "model-3d"), allow(unused_mut, unused_variables))]
+            let depth_stencil_attachment =
+                self.model_3d()
+                    .map(|model_3d| wgpu::RenderPassDepthStencilAttachment {
+                        view: &model_3d.depth_view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    });
+
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_3d_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -401,7 +398,6 @@ impl Graphics {
                 multiview_mask: None,
             });
 
-            #[cfg(feature = "model-3d")]
             if let Some(ref mut ctx) = ctx
                 && !ctx.runtime.model_3d.draw_list.is_empty()
             {
@@ -417,7 +413,15 @@ impl Graphics {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
+                        #[cfg(feature = "model-3d")]
                         load: wgpu::LoadOp::Load,
+                        #[cfg(not(feature = "model-3d"))]
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: if self.transparent { 0.0 } else { 1.0 },
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -427,7 +431,7 @@ impl Graphics {
                 multiview_mask: None,
             });
 
-            #[cfg(feature = "model-3d")]
+            #[cfg(all(feature = "model-3d", feature = "effects"))]
             if !self.transparent
                 && let Some(model_3d) = self.model_3d()
                 && model_3d.scene_globals.fog_params[0] > 0.0
