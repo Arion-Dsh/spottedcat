@@ -16,7 +16,8 @@ impl Spot for SevenLevelNestTestSpot {
             rgba[i * 4 + 2] = 0; // B
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
 
         // Level 2 - Blue
         let mut rgba = vec![0u8; 200 * 200 * 4];
@@ -24,7 +25,8 @@ impl Spot for SevenLevelNestTestSpot {
             rgba[i * 4 + 2] = 255; // B
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
 
         // Level 3 - Green
         let mut rgba = vec![0u8; 200 * 200 * 4];
@@ -32,7 +34,8 @@ impl Spot for SevenLevelNestTestSpot {
             rgba[i * 4 + 1] = 255; // G
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
 
         // Level 4 - Yellow
         let mut rgba = vec![255u8; 200 * 200 * 4];
@@ -40,7 +43,8 @@ impl Spot for SevenLevelNestTestSpot {
             rgba[i * 4 + 2] = 0; // B
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
 
         // Level 5 - Cyan
         let mut rgba = vec![0u8; 200 * 200 * 4];
@@ -49,7 +53,8 @@ impl Spot for SevenLevelNestTestSpot {
             rgba[i * 4 + 2] = 255; // B
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
 
         // Level 6 - Magenta
         let mut rgba = vec![255u8; 200 * 200 * 4];
@@ -57,14 +62,16 @@ impl Spot for SevenLevelNestTestSpot {
             rgba[i * 4 + 1] = 0; // G
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
 
         // Level 7 - White
         let mut rgba = vec![255u8; 100 * 100 * 4];
         for i in 0..100 * 100 {
             rgba[i * 4 + 3] = 255; // A
         }
-        images.push(spottedcat::create_image(ctx, Pt::from(100.0), Pt::from(100.0), &rgba).unwrap());
+        images
+            .push(spottedcat::image::create(ctx, Pt::from(100.0), Pt::from(100.0), &rgba).unwrap());
 
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
@@ -96,32 +103,50 @@ impl Spot for SevenLevelNestTestSpot {
                         let level5_opts =
                             DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
 
-                        spottedcat::image::with_clip_scope(ctx4, self.images[4], level5_opts, |ctx5| {
-                            // Level 6 - Magenta
-                            let level6_opts = DrawOption::default()
-                                .with_position([Pt::from(10.0), Pt::from(10.0)]);
-
-                            spottedcat::image::with_clip_scope(ctx5, self.images[5], level6_opts, |ctx6| {
-                                // Level 7 - White (half size with text)
-                                let level7_opts = DrawOption::default()
+                        spottedcat::image::with_clip_scope(
+                            ctx4,
+                            self.images[4],
+                            level5_opts,
+                            |ctx5| {
+                                // Level 6 - Magenta
+                                let level6_opts = DrawOption::default()
                                     .with_position([Pt::from(10.0), Pt::from(10.0)]);
 
-                                spottedcat::image::with_clip_scope(ctx6, self.images[6], level7_opts, |ctx7| {
-                                    // Add text in the center of level7
-                                    let text_opts = DrawOption::default()
-                                        .with_position([Pt::from(25.0), Pt::from(40.0)]);
+                                spottedcat::image::with_clip_scope(
+                                    ctx5,
+                                    self.images[5],
+                                    level6_opts,
+                                    |ctx6| {
+                                        // Level 7 - White (half size with text)
+                                        let level7_opts = DrawOption::default()
+                                            .with_position([Pt::from(10.0), Pt::from(10.0)]);
 
-                                    let text = spottedcat::Text::new(
-                                        "7级嵌套测试文字宽度测试",
-                                        self.font_id,
-                                    )
-                                    .with_font_size(Pt::from(16.0))
-                                    .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
+                                        spottedcat::image::with_clip_scope(
+                                            ctx6,
+                                            self.images[6],
+                                            level7_opts,
+                                            |ctx7| {
+                                                // Add text in the center of level7
+                                                let text_opts = DrawOption::default()
+                                                    .with_position([
+                                                        Pt::from(25.0),
+                                                        Pt::from(40.0),
+                                                    ]);
 
-                                    spottedcat::text::draw(ctx7, &text, text_opts);
-                                });
-                            });
-                        });
+                                                let text = spottedcat::Text::new(
+                                                    "7级嵌套测试文字宽度测试",
+                                                    self.font_id,
+                                                )
+                                                .with_font_size(Pt::from(16.0))
+                                                .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
+
+                                                spottedcat::text::draw(ctx7, &text, text_opts);
+                                            },
+                                        );
+                                    },
+                                );
+                            },
+                        );
                     });
                 });
             });

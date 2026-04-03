@@ -145,12 +145,12 @@ impl Context {
         ctx.register_defaults();
         ctx
     }
-    
+
     pub(crate) fn set_delta_time(&mut self, dt: std::time::Duration) {
         self.runtime.delta_time = dt;
         self.runtime.total_elapsed = self.runtime.total_elapsed.saturating_add(dt);
     }
-    
+
     pub(crate) fn delta_time(&self) -> std::time::Duration {
         self.runtime.delta_time
     }
@@ -165,7 +165,7 @@ impl Context {
 
     fn register_defaults(&mut self) {
         self.register_image(Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]); // ID 1
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[0, 0, 0, 255]);       // ID 2
+        self.register_image(Pt::from(1.0), Pt::from(1.0), &[0, 0, 0, 255]); // ID 2
         #[cfg(feature = "model-3d")]
         self.register_image(Pt::from(1.0), Pt::from(1.0), &[128, 128, 255, 255]); // ID 3 (Normal)
 

@@ -606,7 +606,11 @@ pub struct MeshDataPersistent {
 }
 
 /// Creates a model from vertex/index data.
-pub fn create(ctx: &mut crate::Context, vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<Model> {
+pub fn create(
+    ctx: &mut crate::Context,
+    vertices: &[Vertex],
+    indices: &[u32],
+) -> anyhow::Result<Model> {
     Model::new(ctx, vertices, indices)
 }
 

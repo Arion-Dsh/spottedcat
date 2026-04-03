@@ -21,16 +21,21 @@ impl Spot for ModelTest {
             0, 0, 255, 255, // Blue
             255, 255, 0, 255, // Yellow
         ];
-        let texture = spottedcat::create_image(ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
+        let texture = spottedcat::image::create(ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
         let axis_x_tex =
-            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 64, 64, 255]).unwrap();
+            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 64, 64, 255])
+                .unwrap();
         let axis_y_tex =
-            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 255, 64, 255]).unwrap();
+            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 255, 64, 255])
+                .unwrap();
         let axis_z_tex =
-            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 128, 255, 255]).unwrap();
+            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 128, 255, 255])
+                .unwrap();
 
         // Create a 3D cube model and apply the texture
-        let cube = spottedcat::model::create_cube(ctx, 1.0).unwrap().with_material(texture);
+        let cube = spottedcat::model::create_cube(ctx, 1.0)
+            .unwrap()
+            .with_material(texture);
         let axis_x = spottedcat::model::create_cube(ctx, 1.0)
             .unwrap()
             .with_material(axis_x_tex);

@@ -11,7 +11,7 @@
 //! impl Spot for MyApp {
 //!     fn initialize(_ctx: &mut Context) -> Self {
 //!         let rgba = vec![255u8; 256 * 256 * 4];
-//!         let image = spottedcat::create_image(_ctx, 256u32.into(), 256u32.into(), &rgba).unwrap();
+//!         let image = spottedcat::image::create(_ctx, 256u32.into(), 256u32.into(), &rgba).unwrap();
 //!         Self { image }
 //!     }
 //!
@@ -97,11 +97,6 @@ pub use touch::{TouchInfo, TouchPhase};
 
 // --- Functional API ---
 
-/// Creates a new image from RGBA8 data.
-pub fn create_image(ctx: &mut Context, width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Image> {
-    Image::new_from_rgba8(ctx, width, height, rgba)
-}
-
 /// Registers a TTF/OTF font for text rendering.
 pub fn register_font(ctx: &mut Context, font_data: Vec<u8>) -> u32 {
     ctx.register_font(font_data)
@@ -139,16 +134,6 @@ pub fn set_ambient(ctx: &mut Context, color: [f32; 4]) {
 /// Sets a PBR light (up to 4 lights).
 pub fn set_light(ctx: &mut Context, index: usize, position: [f32; 4], color: [f32; 4]) {
     ctx.set_light(index, position, color);
-}
-
-#[cfg(feature = "model-3d")]
-/// Registers a model from vertex/index buffers.
-pub fn register_model(
-    ctx: &mut Context,
-    vertices: &[crate::model::Vertex],
-    indices: &[u32],
-) -> anyhow::Result<Model> {
-    crate::model::create(ctx, vertices, indices)
 }
 
 #[cfg(all(feature = "model-3d", feature = "effects"))]

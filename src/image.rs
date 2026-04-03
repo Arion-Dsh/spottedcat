@@ -319,8 +319,12 @@ impl Image {
         ctx.pop_state();
     }
 
-    pub(crate) fn with_clip_scope<F>(self, ctx: &mut crate::Context, options: crate::DrawOption, f: F)
-    where
+    pub(crate) fn with_clip_scope<F>(
+        self,
+        ctx: &mut crate::Context,
+        options: crate::DrawOption,
+        f: F,
+    ) where
         F: FnOnce(&mut crate::Context),
     {
         self.with_clip_scope_draw(ctx, options, |img, ctx, opts| img.draw(ctx, opts), f);

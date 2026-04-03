@@ -24,7 +24,7 @@ impl Spot for CenteredTextTestSpot {
             outer_rgba[i * 4 + 3] = 255; // A
         }
 
-        let outer_image = spottedcat::create_image(
+        let outer_image = spottedcat::image::create(
             ctx,
             Pt::from(outer_width),
             Pt::from(outer_height),
@@ -45,7 +45,7 @@ impl Spot for CenteredTextTestSpot {
         }
 
         let inner_image =
-            spottedcat::create_image(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
+            spottedcat::image::create(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
 
         Self {
             font_id,
@@ -76,7 +76,8 @@ impl Spot for CenteredTextTestSpot {
                     .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
 
                 // Get text dimensions and baseline offset
-                let (text_width, text_height, _) = spottedcat::text::measure_with_y_offset(ctx2, &text);
+                let (text_width, text_height, _) =
+                    spottedcat::text::measure_with_y_offset(ctx2, &text);
 
                 // Calculate centered position within the inner image
                 let centered_x = (width - text_width) / 2.0;

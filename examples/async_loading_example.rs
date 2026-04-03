@@ -19,7 +19,7 @@ impl Spot for AsyncLoadingExample {
         // Image 1: Normal initialization (starts as Pending)
         let rgba1 = vec![255u8; 100 * 100 * 4];
         example.image1 =
-            Some(spottedcat::create_image(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
+            Some(spottedcat::image::create(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
 
         example
     }
@@ -31,8 +31,9 @@ impl Spot for AsyncLoadingExample {
         if self.loading_timer > 3.0 && self.image2.is_none() {
             println!("Context: Registering second image late...");
             let rgba2 = vec![100u8; 100 * 100 * 4];
-            self.image2 =
-                Some(spottedcat::create_image(ctx, Pt::from(100.0), Pt::from(100.0), &rgba2).unwrap());
+            self.image2 = Some(
+                spottedcat::image::create(ctx, Pt::from(100.0), Pt::from(100.0), &rgba2).unwrap(),
+            );
         }
     }
 

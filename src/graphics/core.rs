@@ -255,8 +255,9 @@ impl Graphics {
             if let std::collections::hash_map::Entry::Vacant(entry) =
                 self.font_cache.entry(id as u64)
             {
-                let font = FontArc::try_from_vec(data.clone())
-                    .unwrap_or_else(|e| panic!("[spot][graphics] Failed to sync font with ID {}: {}", id, e));
+                let font = FontArc::try_from_vec(data.clone()).unwrap_or_else(|e| {
+                    panic!("[spot][graphics] Failed to sync font with ID {}: {}", id, e)
+                });
                 entry.insert(font);
             }
         }
@@ -315,8 +316,12 @@ impl Graphics {
 
         // 2. Restore Fonts
         for (&id, data) in &ctx.registry.fonts {
-            let font = ab_glyph::FontArc::try_from_vec(data.clone())
-                .unwrap_or_else(|e| panic!("[spot][graphics] Failed to restore font with ID {}: {}", id, e));
+            let font = ab_glyph::FontArc::try_from_vec(data.clone()).unwrap_or_else(|e| {
+                panic!(
+                    "[spot][graphics] Failed to restore font with ID {}: {}",
+                    id, e
+                )
+            });
             self.font_cache.insert(id as u64, font);
         }
 

@@ -128,7 +128,7 @@ impl Graphics {
         rpass: &mut wgpu::RenderPass<'a>,
         config: RenderConfig<'a>,
     ) {
-        // Sort by layer first, then atlas and shader to maximize batching, 
+        // Sort by layer first, then atlas and shader to maximize batching,
         // finally by draw_index to preserve submission order within the same state.
         resolved_draws.sort_by(|a, b| {
             a.layer

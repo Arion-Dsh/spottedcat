@@ -11,13 +11,8 @@ struct FlipTest {
 impl Spot for FlipTest {
     fn initialize(ctx: &mut Context) -> Self {
         let img_raw = vec![255u8; 64 * 64 * 4];
-        let image = spottedcat::create_image(
-            ctx,
-            Pt::from(64.0),
-            Pt::from(64.0),
-            &img_raw,
-        )
-        .unwrap();
+        let image =
+            spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &img_raw).unwrap();
 
         let font_data = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, font_data.to_vec());
@@ -143,7 +138,13 @@ impl Spot for FlipTest {
                 .with_position([Pt::from(x), Pt::from(y)])
                 .with_scale([-s, -s]);
 
-            spottedcat::image::draw_with_shader(ctx, self.image, self.yellow_shader_id, opts, yellow_opts);
+            spottedcat::image::draw_with_shader(
+                ctx,
+                self.image,
+                self.yellow_shader_id,
+                opts,
+                yellow_opts,
+            );
         };
         yellow_draw(ctx, fsw - 100.0, fsh - 100.0);
 

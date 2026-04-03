@@ -67,36 +67,44 @@ pub(crate) struct Model3dRegistry;
 
 #[cfg(feature = "model-3d")]
 impl Context {
+    /// Sets the 3D camera eye, target, and up vectors in one call.
     pub fn set_camera(&mut self, eye: [f32; 3], target: [f32; 3], up: [f32; 3]) {
         self.runtime.model_3d.camera.eye = eye;
         self.runtime.model_3d.camera.target = target;
         self.runtime.model_3d.camera.up = up;
     }
 
+    /// Sets the camera eye position.
     pub fn set_camera_pos(&mut self, pos: [f32; 3]) {
         self.runtime.model_3d.camera.eye = pos;
     }
 
+    /// Returns the current camera eye position.
     pub fn camera_position(&self) -> [f32; 3] {
         self.runtime.model_3d.camera.eye
     }
 
+    /// Sets the camera target vector.
     pub fn set_camera_target(&mut self, x: f32, y: f32, z: f32) {
         self.runtime.model_3d.camera.target = [x, y, z];
     }
 
+    /// Sets the camera up vector.
     pub fn set_camera_up(&mut self, x: f32, y: f32, z: f32) {
         self.runtime.model_3d.camera.up = [x, y, z];
     }
 
+    /// Sets the camera field of view in degrees.
     pub fn set_camera_fov(&mut self, fov: f32) {
         self.runtime.model_3d.camera.fovy = fov;
     }
 
+    /// Sets the camera aspect ratio.
     pub fn set_camera_aspect(&mut self, aspect: f32) {
         self.runtime.model_3d.camera.aspect = aspect;
     }
 
+    /// Registers a 3D mesh and returns its stable mesh id.
     pub fn register_mesh(&mut self, vertices: &[crate::model::Vertex], indices: &[u32]) -> u32 {
         let id = self.registry.model_3d.next_mesh_id;
         self.registry.model_3d.next_mesh_id += 1;
@@ -113,6 +121,7 @@ impl Context {
         id
     }
 
+    /// Registers a custom WGSL shader block for 3D model rendering.
     pub fn register_model_shader(&mut self, user_functions: &str) -> u32 {
         let id = self.registry.model_3d.next_model_shader_id;
         self.registry.model_3d.next_model_shader_id += 1;
@@ -124,16 +133,19 @@ impl Context {
         id
     }
 
+    /// Sets the ambient light color for the active 3D scene.
     pub fn set_ambient_light(&mut self, color: [f32; 4]) {
         if let Some(g) = self.runtime.graphics.as_mut() {
             g.ensure_model_3d().scene_globals.ambient_color = color;
         }
     }
 
+    /// Alias for [`Context::set_ambient_light`].
     pub fn set_ambient(&mut self, color: [f32; 4]) {
         self.set_ambient_light(color);
     }
 
+    /// Sets one of the scene lights. Indexes outside `0..4` are ignored.
     pub fn set_light(&mut self, index: usize, position: [f32; 4], color: [f32; 4]) {
         if let Some(g) = self.runtime.graphics.as_mut()
             && index < 4
@@ -144,6 +156,7 @@ impl Context {
     }
 
     #[cfg(feature = "effects")]
+    /// Applies global fog parameters to the active 3D scene.
     pub fn set_fog(&mut self, fog: FogSettings) {
         if let Some(g) = self.runtime.graphics.as_mut() {
             let scene_globals = &mut g.ensure_model_3d().scene_globals;
@@ -206,10 +219,14 @@ impl Context {
     }
 
     #[cfg(feature = "effects")]
+    /// Resets global fog to the default disabled state.
     pub fn clear_fog(&mut self) {
         self.set_fog(FogSettings::default());
     }
 
+    /// Creates a skin with the provided bones and bind-pose matrices.
+    ///
+    /// Returns `0` when 3D rendering is unavailable.
     pub fn create_skin(
         &mut self,
         bones: Vec<crate::graphics::Bone>,
@@ -224,6 +241,7 @@ impl Context {
         }
     }
 
+    /// Updates the bone matrices for a previously created skin.
     pub fn update_bone_matrices(&mut self, skin_id: u32, matrices: &[[[f32; 4]; 4]]) {
         if let Some(mut g) = self.runtime.graphics.take() {
             g.update_bone_matrices(self, skin_id, matrices);

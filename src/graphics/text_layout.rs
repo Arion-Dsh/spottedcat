@@ -38,8 +38,12 @@ impl Graphics {
         let font = if let Some(cached_font) = self.get_cached_font(font_id as u64) {
             cached_font
         } else {
-            let font = FontArc::try_from_vec(font_data.clone())
-                .unwrap_or_else(|e| panic!("[spot][graphics] Failed to parse font with ID {}: {}", font_id, e));
+            let font = FontArc::try_from_vec(font_data.clone()).unwrap_or_else(|e| {
+                panic!(
+                    "[spot][graphics] Failed to parse font with ID {}: {}",
+                    font_id, e
+                )
+            });
             self.cache_font(font_id as u64, font.clone());
             font
         };

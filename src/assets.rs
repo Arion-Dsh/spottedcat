@@ -1,22 +1,27 @@
 use crate::Context;
 
+/// Registers an image shader and returns its shader id.
 pub fn register_image_shader(ctx: &mut Context, wgsl_source: &str) -> u32 {
     ctx.register_image_shader(wgsl_source)
 }
 
 #[cfg(feature = "model-3d")]
+/// Registers a 3D model shader and returns its shader id.
 pub fn register_model_shader(ctx: &mut Context, wgsl_source: &str) -> u32 {
     ctx.register_model_shader(wgsl_source)
 }
 
+/// Registers font bytes and returns the font id.
 pub fn register_font(ctx: &mut Context, font_data: Vec<u8>) -> u32 {
     ctx.register_font(font_data)
 }
 
+/// Returns a copy of the raw bytes for a registered font.
 pub fn get_registered_font(ctx: &Context, font_id: u32) -> Option<Vec<u8>> {
     ctx.registry.fonts.get(&font_id).cloned()
 }
 
+/// Unregisters a font and clears any cached GPU state for it.
 pub fn unregister_font(ctx: &mut Context, font_id: u32) {
     ctx.registry.fonts.remove(&font_id);
     if let Some(g) = ctx.runtime.graphics.as_mut() {
@@ -25,6 +30,7 @@ pub fn unregister_font(ctx: &mut Context, font_id: u32) {
     }
 }
 
+/// Forces pending asset compression work to run immediately.
 pub fn compress_assets(ctx: &mut Context) {
     if let Some(mut g) = ctx.runtime.graphics.take() {
         let _ = g.compress_assets(ctx);
@@ -32,6 +38,7 @@ pub fn compress_assets(ctx: &mut Context) {
     }
 }
 
+/// Loads an asset from disk or from the platform-specific bundle.
 pub fn load_asset(path: &str) -> anyhow::Result<Vec<u8>> {
     #[cfg(target_os = "android")]
     {
@@ -56,12 +63,14 @@ pub fn load_asset(path: &str) -> anyhow::Result<Vec<u8>> {
     Ok(std::fs::read(path)?)
 }
 
+/// Sets whether the current window background should be transparent.
 pub fn set_background_transparent(ctx: &mut Context, transparent: bool) {
     if let Some(g) = ctx.runtime.graphics.as_mut() {
         g.set_transparent(transparent);
     }
 }
 
+/// Returns whether the current window background is transparent.
 pub fn is_background_transparent(ctx: &Context) -> bool {
     ctx.runtime
         .graphics

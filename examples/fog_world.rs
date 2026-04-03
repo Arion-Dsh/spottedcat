@@ -24,7 +24,7 @@ impl Spot for FogWorld {
         ctx.set_camera_up(0.0, 1.0, 0.0);
         ctx.set_ambient_light([0.16, 0.18, 0.17, 1.0]);
 
-        let floor_tex = spottedcat::create_image(
+        let floor_tex = spottedcat::image::create(
             ctx,
             Pt::from(2.0),
             Pt::from(2.0),
@@ -34,21 +34,27 @@ impl Spot for FogWorld {
         )
         .unwrap();
         let cube_tex =
-            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[152, 162, 156, 255])
+            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[152, 162, 156, 255])
                 .unwrap();
         let sphere_tex =
-            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[225, 232, 228, 255])
+            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[225, 232, 228, 255])
                 .unwrap();
         let bg_tex =
-            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[104, 113, 116, 255])
+            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[104, 113, 116, 255])
                 .unwrap();
 
         let floor = spottedcat::model::create_plane(ctx, 1.0, 1.0)
             .unwrap()
             .with_material(floor_tex);
-        let cube = spottedcat::model::create_cube(ctx, 1.0).unwrap().with_material(cube_tex);
-        let sphere = spottedcat::model::create_sphere(ctx, 1.0).unwrap().with_material(sphere_tex);
-        let giant_bg = spottedcat::model::create_sphere(ctx, 1.0).unwrap().with_material(bg_tex);
+        let cube = spottedcat::model::create_cube(ctx, 1.0)
+            .unwrap()
+            .with_material(cube_tex);
+        let sphere = spottedcat::model::create_sphere(ctx, 1.0)
+            .unwrap()
+            .with_material(sphere_tex);
+        let giant_bg = spottedcat::model::create_sphere(ctx, 1.0)
+            .unwrap()
+            .with_material(bg_tex);
 
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, FONT.to_vec());

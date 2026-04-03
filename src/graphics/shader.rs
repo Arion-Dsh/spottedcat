@@ -73,16 +73,17 @@ impl Graphics {
                 .instanced_model_pipeline = instanced_model_pipeline;
             #[cfg(feature = "effects")]
             {
-                self.model_3d_mut().expect("checked Some").fog_background_pipeline =
-                    Self::create_fog_background_pipeline(
-                        &self.device,
-                        self.config.format,
-                        &self
-                            .model_3d()
-                            .expect("checked Some")
-                            .fog_background_bind_group_layout,
-                        self.adapter.get_info().backend,
-                    );
+                self.model_3d_mut()
+                    .expect("checked Some")
+                    .fog_background_pipeline = Self::create_fog_background_pipeline(
+                    &self.device,
+                    self.config.format,
+                    &self
+                        .model_3d()
+                        .expect("checked Some")
+                        .fog_background_bind_group_layout,
+                    self.adapter.get_info().backend,
+                );
             }
         }
 

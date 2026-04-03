@@ -15,7 +15,7 @@ fn checker_texture(ctx: &mut Context, a: [u8; 4], b: [u8; 4]) -> Image {
         a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3], b[0], b[1], b[2], b[3], a[0], a[1], a[2],
         a[3],
     ];
-    spottedcat::create_image(ctx, Pt::from(2.0), Pt::from(2.0), &rgba)
+    spottedcat::image::create(ctx, Pt::from(2.0), Pt::from(2.0), &rgba)
         .expect("checker texture should be created")
 }
 
@@ -27,14 +27,24 @@ impl Spot for RenderStateStress {
         let gold = checker_texture(ctx, [255, 220, 96, 255], [160, 120, 24, 255]);
         let glass = checker_texture(ctx, [180, 220, 255, 180], [80, 120, 180, 120]);
 
-        let cube_red = spottedcat::model::create_cube(ctx, 0.9).unwrap().with_material(red);
-        let cube_green = spottedcat::model::create_cube(ctx, 0.9).unwrap().with_material(green);
-        let sphere_blue = spottedcat::model::create_sphere(ctx, 0.55).unwrap().with_material(blue);
-        let sphere_gold = spottedcat::model::create_sphere(ctx, 0.55).unwrap().with_material(gold);
+        let cube_red = spottedcat::model::create_cube(ctx, 0.9)
+            .unwrap()
+            .with_material(red);
+        let cube_green = spottedcat::model::create_cube(ctx, 0.9)
+            .unwrap()
+            .with_material(green);
+        let sphere_blue = spottedcat::model::create_sphere(ctx, 0.55)
+            .unwrap()
+            .with_material(blue);
+        let sphere_gold = spottedcat::model::create_sphere(ctx, 0.55)
+            .unwrap()
+            .with_material(gold);
         let transparent_plane = spottedcat::model::create_plane(ctx, 1.8, 1.8)
             .unwrap()
             .with_material(glass);
-        let instanced_cube = spottedcat::model::create_cube(ctx, 0.35).unwrap().with_material(gold);
+        let instanced_cube = spottedcat::model::create_cube(ctx, 0.35)
+            .unwrap()
+            .with_material(gold);
 
         let mut instanced_transforms = Vec::with_capacity(80 * 40);
         for z in 0..40 {

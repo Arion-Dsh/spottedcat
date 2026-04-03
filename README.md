@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.7.0"
+spottedcat = "0.7.1"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.7.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.7.1", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
@@ -65,7 +65,7 @@ impl Spot for MyApp {
     fn initialize(ctx: &mut Context) -> Self {
         // Create an image from raw RGBA8 data
         let rgba = vec![255u8; 64 * 64 * 4]; // Red square
-        let image = spottedcat::create_image(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
+        let image = spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
             .expect("Failed to create image");
         Self { image }
     }
@@ -106,15 +106,15 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 
 - **`Context`**: Central state for managing draw commands, input, audio, and resources. Hides internal methods to ensure consistency.
 - **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for 2D drawing. Created via `spottedcat::create_image(ctx, ...)` and rendered via `spottedcat::image::draw(ctx, ...)`.
-- **`Model`**: 3D model handle created and rendered via `spottedcat::model::*`.
+- **`Image`**: GPU texture handle for 2D drawing. Created via `spottedcat::image::create(ctx, ...)` and rendered via `spottedcat::image::draw(ctx, ...)`.
+- **`Model`**: 3D model handle created via `spottedcat::model::create(...)` and rendered via `spottedcat::model::*`.
 - **`Text`**: High-level text structure for 2D layout.
 - **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
 - **`DrawOption3D`**: Configuration for 3D model placement (position, rotation, scale).
 
 ### API Style
 
-- **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `create_image`, `register_font`, `set_window_size`, `key_down`, `play_sound`).
+- **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `register_font`, `set_window_size`, `key_down`, `play_sound`), while image creation lives at `spottedcat::image::create` and model creation lives at `spottedcat::model::create`.
 - **Resource operations** stay inside their domains:
   - `spottedcat::image::*` for image draw/scope/ready checks.
   - `spottedcat::model::*` for model create/draw/instancing/shader draw.

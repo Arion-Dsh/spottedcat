@@ -14,7 +14,7 @@ impl Spot for BillboardExample {
         let wall_pixels = vec![
             180, 180, 180, 255, 200, 200, 200, 255, 200, 200, 200, 255, 180, 180, 180, 255,
         ];
-        let wall_tex = spottedcat::create_image(ctx, 2.into(), 2.into(), &wall_pixels).unwrap();
+        let wall_tex = spottedcat::image::create(ctx, 2.into(), 2.into(), &wall_pixels).unwrap();
         // A wall is just a stretched cube
         let wall = spottedcat::model::create_cube(ctx, 1.0)
             .unwrap()
@@ -24,7 +24,7 @@ impl Spot for BillboardExample {
         let char_pixels = vec![
             50, 50, 255, 255, 100, 100, 255, 255, 100, 100, 255, 255, 50, 50, 255, 255,
         ];
-        let char_tex = spottedcat::create_image(ctx, 2.into(), 2.into(), &char_pixels).unwrap();
+        let char_tex = spottedcat::image::create(ctx, 2.into(), 2.into(), &char_pixels).unwrap();
         let character = spottedcat::model::create_cube(ctx, 0.5)
             .unwrap()
             .with_material(char_tex);
@@ -50,7 +50,7 @@ impl Spot for BillboardExample {
                 }
             }
         }
-        let bb_tex = spottedcat::create_image(ctx, 64.into(), 16.into(), &bb_pixels).unwrap();
+        let bb_tex = spottedcat::image::create(ctx, 64.into(), 16.into(), &bb_pixels).unwrap();
 
         // 1.0 wide, 0.25 tall
         let billboard_plane = spottedcat::model::create_plane(ctx, 1.0, 0.25)

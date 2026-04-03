@@ -60,12 +60,12 @@ fn main() {
 ## 2. Drawing 2D (Images & Text)
 
 ### Images
-Images are registered via the `Context`. Use `Pt` for logical units.
+Images are created via `spottedcat::image::create(...)`. Use `Pt` for logical units.
 ```rust
 use spottedcat::{Image, DrawOption, Pt};
 
 // Registering requires the ctx to synchronize with the GPU
-let image = spottedcat::create_image(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
+let image = spottedcat::image::create(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
 
 spottedcat::image::draw(ctx, image, DrawOption::default()
     .with_position([Pt(100.0), Pt(100.0)])
@@ -159,9 +159,9 @@ if let Some(res) = spottedcat::get_resource::<MyResourceType>(ctx) { ... }
 ```
 
 ### Asset Registration Persistence
-Shaders, fonts, and images registered in the `Context` are persistent. When the GPU device is lost (Android lifecycle), the engine automatically restores these registration-based assets using high-level metadata stored in the `Context`.
+Shaders, fonts, and images created or registered through the `Context` are persistent. When the GPU device is lost (Android lifecycle), the engine automatically restores these registration-based assets using high-level metadata stored in the `Context`.
 
-## 7. Custom Shaders
+## 8. Custom Shaders
 
 Inject custom WGSL hooks into the rendering pipeline.
 ```rust
@@ -172,7 +172,7 @@ spottedcat::register_image_shader(ctx, shader_source_str);
 spottedcat::register_model_shader(ctx, shader_source_str);
 ```
 
-## 8. Development Tips
+## 9. Development Tips
 
 - **The Context Rule**: **ALWAYS** use the passed-in `Context` (usually named `ctx`). 
 - **Coordinate System**: 2D origin (0,0) is **TOP-LEFT**. 3D uses RHS (X: right, Y: up, Z: back).
