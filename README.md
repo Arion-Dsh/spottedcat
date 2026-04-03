@@ -1,6 +1,8 @@
 # spottedcat
 
-A simple, clean 2D/3D game engine using Rust and wgpu.
+Spottedcat is a lightweight cross-platform 2D/3D game engine built with Rust and wgpu.
+It provides a simple API for rendering, input, audio, text, and scene management across desktop, web, iOS, and Android.
+Designed for fast prototyping and creative interactive projects, it aims to stay small, practical, and easy to use.
 
 > [!WARNING]
 > **ALPHA VERSION**: This library is currently in an alpha state. The API is subject to frequent breaking changes and significant refactoring. Use with caution in production environments.
