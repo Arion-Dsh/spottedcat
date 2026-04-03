@@ -65,9 +65,9 @@ Images are registered via the `Context`. Use `Pt` for logical units.
 use spottedcat::{Image, DrawOption, Pt};
 
 // Registering requires the ctx to synchronize with the GPU
-let image = Image::new_from_rgba8(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
+let image = spottedcat::create_image(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
 
-image.draw(ctx, DrawOption::default()
+spottedcat::image::draw(ctx, image, DrawOption::default()
     .with_position([Pt(100.0), Pt(100.0)])
     .with_scale([2.0, 2.0])
     .with_rotation(45.0f32.to_radians())
@@ -85,7 +85,7 @@ let font_id = spottedcat::register_font(ctx, font_data_vec);
 
 // 2. Create the Text object with content and font_id
 let text = Text::new("Hello World", font_id).with_font_size(Pt(24.0));
-text.draw(ctx, DrawOption::default().with_position([Pt(50.0), Pt(50.0)]));
+spottedcat::text::draw(ctx, &text, DrawOption::default().with_position([Pt(50.0), Pt(50.0)]));
 ```
 
 ## 3. Drawing 3D (Models & Instancing)
@@ -94,8 +94,9 @@ text.draw(ctx, DrawOption::default().with_position([Pt(50.0), Pt(50.0)]));
 ```rust
 use spottedcat::{Model, DrawOption3D};
 
-let cube = Model::cube(1.0).unwrap();
-cube.draw(ctx, DrawOption3D::default()
+let cube = spottedcat::model::create_cube(ctx, 1.0).unwrap();
+// 3D drawing example (if model-3d feature enabled)
+spottedcat::model::draw(ctx, &cube, DrawOption3D::default()
     .with_position([0.0, 0.0, -5.0])
     .with_rotation([0.0, 1.0, 0.0])); // rotation as [x, y, z] axis
 ```
@@ -104,7 +105,7 @@ cube.draw(ctx, DrawOption3D::default()
 Use this for drawing many copies of the same model efficiently.
 ```rust
 let transforms: Vec<[[f32; 4]; 4]> = vec![...]; // Array of 4x4 matrices
-model.draw_instanced(ctx, DrawOption3D::default(), &transforms);
+spottedcat::model::draw_instanced(ctx, &model, DrawOption3D::default(), &transforms);
 ```
 
 ## 4. Input Management
@@ -115,8 +116,8 @@ Access input via helper functions or trait methods using the `ctx`.
 if spottedcat::key_down(ctx, spottedcat::Key::Space) { ... }
 
 // Mouse
-if let Some((x, y)) = spottedcat::cursor_position(ctx) { ... }
-if spottedcat::mouse_button_pressed(ctx, spottedcat::MouseButton::Left) { ... }
+if let Some((x, y)) = spottedcat::mouse_pos(ctx) { ... }
+if spottedcat::mouse_down(ctx, spottedcat::MouseButton::Left) { ... }
 
 // Touch (Mobile)
 for touch in spottedcat::touches(ctx) {
@@ -131,8 +132,8 @@ for touch in spottedcat::touches(ctx) {
 
 Use `Pt` for resolution-independent units.
 - `spottedcat::window_size(ctx)` -> Returns `(Pt(width), Pt(height))`.
-- `ctx.vw(100.0)` -> 100% of window width in `Pt`.
-- `ctx.vh(100.0)` -> 100% of window height in `Pt`.
+- `spottedcat::vw(ctx, 100.0)` -> 100% of window width in `Pt`.
+- `spottedcat::vh(ctx, 100.0)` -> 100% of window height in `Pt`.
 
 ## 6. Audio System
 
@@ -153,8 +154,8 @@ spottedcat::play_sine(ctx, 440.0, 0.5);
 ### Resource Storage
 Store shared objects in the `Context`. The `Context` is persistent across app pauses/resumes.
 ```rust
-ctx.insert_resource(Rc::new(my_resource));
-if let Some(res) = ctx.get_resource::<MyResourceType>() { ... }
+spottedcat::insert_resource(ctx, Rc::new(my_resource));
+if let Some(res) = spottedcat::get_resource::<MyResourceType>(ctx) { ... }
 ```
 
 ### Asset Registration Persistence
@@ -165,10 +166,10 @@ Shaders, fonts, and images registered in the `Context` are persistent. When the 
 Inject custom WGSL hooks into the rendering pipeline.
 ```rust
 // 2D Shader
-ctx.register_image_shader(shader_source_str);
+spottedcat::register_image_shader(ctx, shader_source_str);
 
 // 3D Shader
-ctx.register_model_shader(shader_source_str);
+spottedcat::register_model_shader(ctx, shader_source_str);
 ```
 
 ## 8. Development Tips
