@@ -316,6 +316,16 @@ fn fetch_health_history_from_rust() -> Result<String, String> {
 }
 
 #[cfg(target_os = "android")]
+fn draw_text_block(ctx: &mut Context, text: &Text, x: f32, y: &mut f32, gap_after: f32) {
+    text.draw(
+        ctx,
+        DrawOption::default().with_position([Pt::from(x), Pt::from(*y)]),
+    );
+    let (_, height) = text.measure(ctx);
+    *y += height.max(1.0) + gap_after;
+}
+
+#[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     struct AndroidFfiSpot {
@@ -608,10 +618,70 @@ pub fn android_main(app: AndroidApp) {
                 self.update_count = 0;
             }
 
+            let (window_w, window_h) = spottedcat::window_size(ctx);
+            let width = window_w.as_f32().max(320.0);
+            let height = window_h.as_f32().max(320.0);
+            let compact_layout = width < 520.0 || height < 760.0;
+            let narrow_layout = width < 420.0;
+            let landscape = width > height;
+
+            let side_padding = (width * 0.05).clamp(18.0, 40.0);
+            let top_padding = (height * 0.07).clamp(28.0, 64.0);
+            let content_width = if landscape {
+                (width * 0.36).clamp(280.0, 460.0)
+            } else {
+                (width - side_padding * 2.0).clamp(240.0, 560.0)
+            };
+            let content_width_pt = Pt::from(content_width);
+            let panel_x = side_padding;
+
+            self.text
+                .set_font_size(Pt::from(if narrow_layout { 24.0 } else if compact_layout { 28.0 } else { 32.0 }));
+            self.fps_text
+                .set_font_size(Pt::from(if narrow_layout { 16.0 } else if compact_layout { 18.0 } else { 22.0 }));
+            self.gyro_text
+                .set_font_size(Pt::from(if narrow_layout { 14.0 } else if compact_layout { 16.0 } else { 18.0 }));
+            self.accel_text
+                .set_font_size(Pt::from(if narrow_layout { 14.0 } else if compact_layout { 16.0 } else { 18.0 }));
+            self.mag_text
+                .set_font_size(Pt::from(if narrow_layout { 14.0 } else if compact_layout { 16.0 } else { 18.0 }));
+            self.rot_text
+                .set_font_size(Pt::from(if narrow_layout { 14.0 } else if compact_layout { 16.0 } else { 18.0 }));
+            self.step_text
+                .set_font_size(Pt::from(if narrow_layout { 17.0 } else { 20.0 }));
+            self.yesterday_step_text
+                .set_font_size(Pt::from(if narrow_layout { 17.0 } else { 20.0 }));
+            self.health_status_text
+                .set_font_size(Pt::from(if narrow_layout { 15.0 } else if compact_layout { 17.0 } else { 18.0 }));
+            self.history_text
+                .set_font_size(Pt::from(if narrow_layout { 14.0 } else { 16.0 }));
+            self.bridge_text
+                .set_font_size(Pt::from(if narrow_layout { 14.0 } else { 16.0 }));
+
+            self.text.set_max_width(Some(content_width_pt));
+            self.fps_text.set_max_width(Some(content_width_pt));
+            self.gyro_text.set_max_width(Some(content_width_pt));
+            self.accel_text.set_max_width(Some(content_width_pt));
+            self.mag_text.set_max_width(Some(content_width_pt));
+            self.rot_text.set_max_width(Some(content_width_pt));
+            self.step_text.set_max_width(Some(content_width_pt));
+            self.yesterday_step_text.set_max_width(Some(content_width_pt));
+            self.health_status_text.set_max_width(Some(content_width_pt));
+            self.history_text.set_max_width(Some(content_width_pt));
+            self.bridge_text.set_max_width(Some(content_width_pt));
+
             // Draw 3D model with gyroscope tilt
-            // We use gyro X and Y to nudge the rotation
             let opts_3d = DrawOption3D::default()
-                .with_position([0.0, 0.0, 0.0])
+                .with_position([
+                    if landscape { 0.9 } else { 0.0 },
+                    if landscape { 0.0 } else { 0.25 },
+                    0.0,
+                ])
+                .with_scale([
+                    if compact_layout { 0.9 } else { 1.0 },
+                    if compact_layout { 0.9 } else { 1.0 },
+                    if compact_layout { 0.9 } else { 1.0 },
+                ])
                 .with_rotation([
                     self.gyro_data[0] * 0.5, 
                     self.rotation_anim + self.gyro_data[1] * 0.5, 
@@ -619,70 +689,87 @@ pub fn android_main(app: AndroidApp) {
                 ]);
             self.model.draw(ctx, opts_3d);
 
-            // Draw UI
-            let text_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(100.0)]);
-            self.text.draw(ctx, text_opts);
+            let mut cursor_y = top_padding;
+            let section_gap = if compact_layout { 8.0 } else { 10.0 };
+            let block_gap = if compact_layout { 12.0 } else { 16.0 };
 
-            self.fps_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(150.0)]),
-            );
-            
-            self.gyro_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(190.0)]),
-            );
+            draw_text_block(ctx, &self.text, panel_x, &mut cursor_y, block_gap);
+            draw_text_block(ctx, &self.fps_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.step_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.yesterday_step_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.health_status_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.history_text, panel_x, &mut cursor_y, block_gap);
+            draw_text_block(ctx, &self.gyro_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.accel_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.mag_text, panel_x, &mut cursor_y, section_gap);
+            draw_text_block(ctx, &self.rot_text, panel_x, &mut cursor_y, section_gap);
 
-            self.accel_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(220.0)]),
-            );
-
-            self.mag_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(250.0)]),
-            );
-
-            self.rot_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(280.0)]),
-            );
-            
-            self.step_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(310.0)]),
-            );
-
-            self.yesterday_step_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(340.0)]),
-            );
-
-            self.health_status_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(370.0)]),
-            );
-
-            self.history_text.draw(
-                ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(400.0)]),
-            );
-
+            let (_, bridge_height) = self.bridge_text.measure(ctx);
+            let bridge_y = if cursor_y + bridge_height + section_gap <= height - side_padding {
+                cursor_y
+            } else {
+                (height - side_padding - bridge_height).max(top_padding)
+            };
             self.bridge_text.draw(
                 ctx,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(550.0)]),
+                DrawOption::default().with_position([Pt::from(panel_x), Pt::from(bridge_y)]),
             );
 
-            // Draw image at touch position or center
-            let pos = self.touch_pos.unwrap_or_else(|| {
-                let (w, h) = spottedcat::window_size(ctx);
-                (w / 2.0, h / 2.0)
-            });
+            let hud_bottom = if bridge_y >= cursor_y {
+                bridge_y + bridge_height
+            } else {
+                cursor_y
+            }
+            .max(top_padding);
+            let image_left = if landscape {
+                panel_x + content_width + side_padding
+            } else {
+                side_padding
+            };
+            let image_top = if landscape {
+                top_padding
+            } else {
+                (hud_bottom + block_gap).min(height - 120.0)
+            };
+            let image_right = (width - side_padding).max(image_left + 120.0);
+            let image_bottom = (height - side_padding).max(image_top + 120.0);
+            let available_width = (image_right - image_left).max(120.0);
+            let available_height = (image_bottom - image_top).max(120.0);
 
-            let img_opts = DrawOption::default().with_position([
-                pos.0 - self.happy_tree.width() / 2.0,
-                pos.1 - self.happy_tree.height() / 2.0,
-            ]);
+            let image_width = self.happy_tree.width().as_f32().max(1.0);
+            let image_height = self.happy_tree.height().as_f32().max(1.0);
+            let image_scale = (available_width / image_width)
+                .min(available_height / image_height)
+                .clamp(0.35, 1.0);
+            let scaled_width = image_width * image_scale;
+            let scaled_height = image_height * image_scale;
+
+            let default_center_x = if landscape {
+                image_left + available_width * 0.5
+            } else {
+                width * 0.5
+            };
+            let default_center_y = image_top + available_height * 0.5;
+            let (desired_x, desired_y) = self
+                .touch_pos
+                .map(|(x, y)| (x.as_f32(), y.as_f32()))
+                .unwrap_or((default_center_x, default_center_y));
+
+            let center_x = desired_x.clamp(
+                image_left + scaled_width * 0.5,
+                image_right - scaled_width * 0.5,
+            );
+            let center_y = desired_y.clamp(
+                image_top + scaled_height * 0.5,
+                image_bottom - scaled_height * 0.5,
+            );
+
+            let img_opts = DrawOption::default()
+                .with_position([
+                    Pt::from(center_x - scaled_width * 0.5),
+                    Pt::from(center_y - scaled_height * 0.5),
+                ])
+                .with_scale([image_scale, image_scale]);
             self.happy_tree.draw(ctx, img_opts);
         }
 

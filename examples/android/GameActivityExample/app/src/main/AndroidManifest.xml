@@ -20,13 +20,13 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.MyApplication">
+        android:theme="@style/Theme.GameActivityExample">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|density|uiMode"
-            android:theme="@style/Theme.MyApplication"
+            android:theme="@style/Theme.GameActivityExample"
             android:label="@string/app_name"
             android:focusable="true"
             android:focusableInTouchMode="true"

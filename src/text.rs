@@ -111,6 +111,20 @@ impl Text {
         }
     }
 
+    pub fn set_font_size(&mut self, font_size: crate::Pt) {
+        if self.font_size != font_size {
+            self.font_size = font_size;
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    pub fn set_max_width(&mut self, max_width: Option<crate::Pt>) {
+        if self.max_width != max_width {
+            self.max_width = max_width;
+            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
     pub fn with_font_size(mut self, font_size: crate::Pt) -> Self {
         if self.font_size != font_size {
             self.font_size = font_size;
