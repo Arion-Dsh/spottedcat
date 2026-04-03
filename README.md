@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.6.0"
+spottedcat = "0.6.3"
 ```
 
 `model-3d` is enabled by default. If you want a 2D-only build surface, disable default features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.6.0", default-features = false }
+spottedcat = { version = "0.6.3", default-features = false }
 ```
 
 ### Basic Example

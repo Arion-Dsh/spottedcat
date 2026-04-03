@@ -39,8 +39,10 @@ pub mod android;
 mod assets;
 mod audio;
 mod context;
+mod context_3d;
 mod controls;
 mod drawable;
+mod drawable_3d;
 mod fog;
 mod glyph_cache;
 pub mod graphics;
@@ -71,10 +73,9 @@ pub use assets::*;
 pub use context::Context;
 pub(crate) use context::DrawState;
 pub use controls::*;
-#[cfg(not(feature = "model-3d"))]
 pub use drawable::DrawOption;
 #[cfg(feature = "model-3d")]
-pub use drawable::{DrawOption, DrawOption3D};
+pub use drawable_3d::DrawOption3D;
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
 pub use image::{Bounds, Image};
 pub use input::InputManager;

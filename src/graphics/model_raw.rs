@@ -79,7 +79,7 @@ pub struct ModelRenderer {
     pub(crate) max_instances: u32,
 
     pub(crate) meshes: HashMap<u32, MeshData>,
-    pub(crate) skins: HashMap<u32, crate::graphics::core::SkinData>,
+    pub(crate) skins: HashMap<u32, crate::graphics::SkinData>,
     pub(crate) texture_bind_groups: HashMap<MaterialBindGroupKey, wgpu::BindGroup>,
     pub(crate) skin_bone_offsets: HashMap<u32, u32>,
 }

@@ -1,10 +1,7 @@
 use crate::DrawOption;
-#[cfg(feature = "model-3d")]
-use crate::FogSettings;
 use crate::audio::AudioSystem;
+use crate::context_3d::{Model3dRegistry, Model3dRuntime};
 use crate::drawable::DrawCommand;
-#[cfg(feature = "model-3d")]
-use crate::drawable::DrawCommand3D;
 use crate::graphics::Graphics;
 use crate::input::InputManager;
 use crate::pt::Pt;
@@ -55,16 +52,14 @@ impl std::fmt::Debug for ResourceMap {
 #[derive(Debug)]
 pub(crate) struct ContextRuntime {
     pub(crate) draw_list: Vec<DrawCommand>,
-    #[cfg(feature = "model-3d")]
-    pub(crate) draw_list_3d: Vec<DrawCommand3D>,
+    #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
+    pub(crate) model_3d: Model3dRuntime,
     pub(crate) input: InputManager,
     pub(crate) scale_factor: f64,
     pub(crate) window_logical_size: (Pt, Pt),
     pub(crate) state_stack: Vec<DrawState>,
     pub(crate) current_state: DrawState,
     pub(crate) last_image_opts: HashMap<u32, LastImageDrawInfo>,
-    #[cfg(feature = "model-3d")]
-    pub(crate) camera: crate::graphics::Camera,
     pub(crate) graphics: Option<Graphics>,
     pub(crate) audio: Option<AudioSystem>,
 }
@@ -73,16 +68,13 @@ impl ContextRuntime {
     fn new() -> Self {
         Self {
             draw_list: Vec::new(),
-            #[cfg(feature = "model-3d")]
-            draw_list_3d: Vec::new(),
+            model_3d: Model3dRuntime::default(),
             input: InputManager::new(),
             scale_factor: 1.0,
             window_logical_size: (Pt(0.0), Pt(0.0)),
             state_stack: Vec::new(),
             current_state: DrawState::default(),
             last_image_opts: HashMap::new(),
-            #[cfg(feature = "model-3d")]
-            camera: crate::graphics::Camera::default(),
             graphics: None,
             audio: None,
         }
@@ -93,23 +85,13 @@ impl ContextRuntime {
 pub(crate) struct ResourceRegistry {
     resources: ResourceMap,
     pub(crate) images: Vec<Option<crate::image::ImageEntry>>,
-    #[cfg(feature = "model-3d")]
-    pub(crate) models: Vec<Option<crate::model::MeshDataPersistent>>,
-    #[cfg(feature = "model-3d")]
-    pub(crate) skins: Vec<Option<crate::graphics::SkinData>>,
+    #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
+    pub(crate) model_3d: Model3dRegistry,
     pub(crate) fonts: HashMap<u32, Vec<u8>>,
     pub(crate) image_shaders: HashMap<u32, String>,
-    #[cfg(feature = "model-3d")]
-    pub(crate) model_shaders: HashMap<u32, String>,
     pub(crate) next_image_id: u32,
-    #[cfg(feature = "model-3d")]
-    pub(crate) next_mesh_id: u32,
-    #[cfg(feature = "model-3d")]
-    pub(crate) next_skin_id: u32,
     pub(crate) next_font_id: u32,
     pub(crate) next_image_shader_id: u32,
-    #[cfg(feature = "model-3d")]
-    pub(crate) next_model_shader_id: u32,
     pub(crate) gpu_generation: u32,
     pub(crate) dirty_assets: bool,
 }
@@ -119,23 +101,12 @@ impl ResourceRegistry {
         Self {
             resources: ResourceMap::default(),
             images: Vec::new(),
-            #[cfg(feature = "model-3d")]
-            models: Vec::new(),
-            #[cfg(feature = "model-3d")]
-            skins: Vec::new(),
+            model_3d: Model3dRegistry::default(),
             fonts: HashMap::new(),
             image_shaders: HashMap::new(),
-            #[cfg(feature = "model-3d")]
-            model_shaders: HashMap::new(),
             next_image_id: 1,
-            #[cfg(feature = "model-3d")]
-            next_mesh_id: 1,
-            #[cfg(feature = "model-3d")]
-            next_skin_id: 1,
             next_font_id: 1,
             next_image_shader_id: 1,
-            #[cfg(feature = "model-3d")]
-            next_model_shader_id: 1,
             gpu_generation: 1,
             dirty_assets: true,
         }
@@ -179,31 +150,6 @@ impl Context {
             }
         "#;
         self.register_image_shader(text_shader_src);
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_camera_pos(&mut self, pos: [f32; 3]) {
-        self.runtime.camera.eye = pos;
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_camera_target(&mut self, x: f32, y: f32, z: f32) {
-        self.runtime.camera.target = [x, y, z];
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_camera_up(&mut self, x: f32, y: f32, z: f32) {
-        self.runtime.camera.up = [x, y, z];
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_camera_fov(&mut self, fov: f32) {
-        self.runtime.camera.fovy = fov;
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_camera_aspect(&mut self, aspect: f32) {
-        self.runtime.camera.aspect = aspect;
     }
 
     pub fn set_window_logical_size(&mut self, width: Pt, height: Pt) {
@@ -298,23 +244,6 @@ impl Context {
         Ok(id)
     }
 
-    #[cfg(feature = "model-3d")]
-    pub fn register_mesh(&mut self, vertices: &[crate::model::Vertex], indices: &[u32]) -> u32 {
-        let id = self.registry.next_mesh_id;
-        self.registry.next_mesh_id += 1;
-        let mesh_data = crate::model::MeshDataPersistent {
-            vertices: vertices.to_vec(),
-            indices: indices.to_vec(),
-        };
-
-        while self.registry.models.len() <= id as usize {
-            self.registry.models.push(None);
-        }
-        self.registry.models[id as usize] = Some(mesh_data);
-        self.registry.dirty_assets = true;
-        id
-    }
-
     pub fn register_font(&mut self, font_data: Vec<u8>) -> u32 {
         let id = self.registry.next_font_id;
         self.registry.next_font_id += 1;
@@ -333,101 +262,6 @@ impl Context {
         id
     }
 
-    #[cfg(feature = "model-3d")]
-    pub fn register_model_shader(&mut self, user_functions: &str) -> u32 {
-        let id = self.registry.next_model_shader_id;
-        self.registry.next_model_shader_id += 1;
-        self.registry
-            .model_shaders
-            .insert(id, user_functions.to_string());
-        self.registry.dirty_assets = true;
-        id
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_ambient_light(&mut self, color: [f32; 4]) {
-        if let Some(g) = self.runtime.graphics.as_mut() {
-            g.ensure_model_3d().scene_globals.ambient_color = color;
-        }
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_light(&mut self, index: usize, position: [f32; 4], color: [f32; 4]) {
-        if let Some(g) = self.runtime.graphics.as_mut()
-            && index < 4
-        {
-            g.ensure_model_3d().scene_globals.lights[index] =
-                crate::graphics::Light { position, color };
-        }
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn set_fog(&mut self, fog: FogSettings) {
-        if let Some(g) = self.runtime.graphics.as_mut() {
-            let scene_globals = &mut g.ensure_model_3d().scene_globals;
-            scene_globals.fog_color = fog.color;
-            scene_globals.fog_distance = [
-                fog.distance_start,
-                fog.distance_end,
-                fog.distance_exponent,
-                fog.distance_density,
-            ];
-            scene_globals.fog_height = [
-                fog.height_base,
-                fog.height_falloff,
-                fog.height_exponent,
-                fog.height_density,
-            ];
-            scene_globals.fog_params = [
-                if fog.is_enabled() {
-                    fog.effective_strength()
-                } else {
-                    0.0
-                },
-                0.0,
-                0.0,
-                0.0,
-            ];
-            scene_globals.fog_background_zenith = [
-                fog.background.zenith_color[0],
-                fog.background.zenith_color[1],
-                fog.background.zenith_color[2],
-                fog.background.zenith_mix,
-            ];
-            scene_globals.fog_background_horizon = [
-                fog.background.horizon_color[0],
-                fog.background.horizon_color[1],
-                fog.background.horizon_color[2],
-                fog.background.horizon_mix,
-            ];
-            scene_globals.fog_background_nadir = [
-                fog.background.nadir_color[0],
-                fog.background.nadir_color[1],
-                fog.background.nadir_color[2],
-                fog.background.nadir_mix,
-            ];
-            scene_globals.fog_background_params = [
-                fog.background.horizon_glow_strength,
-                fog.background.sky_fog_blend,
-                fog.background.geometry_fog_blend,
-                0.0,
-            ];
-            scene_globals.fog_sampling = [
-                fog.sampling.min_height_samples.max(1) as f32,
-                fog.sampling
-                    .max_height_samples
-                    .max(fog.sampling.min_height_samples.max(1)) as f32,
-                fog.sampling.height_sample_scale.max(0.05),
-                0.0,
-            ];
-        }
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn clear_fog(&mut self) {
-        self.set_fog(FogSettings::default());
-    }
-
     pub(crate) fn insert_resource_dyn(&mut self, type_id: TypeId, value: Rc<dyn Any>) {
         self.registry.resources.inner.insert(type_id, value);
     }
@@ -436,33 +270,9 @@ impl Context {
         self.registry.resources.inner.remove(&type_id);
     }
 
-    #[cfg(feature = "model-3d")]
-    pub fn create_skin(
-        &mut self,
-        bones: Vec<crate::graphics::Bone>,
-        matrices: Vec<[[f32; 4]; 4]>,
-    ) -> u32 {
-        if let Some(mut g) = self.runtime.graphics.take() {
-            let id = g.create_skin(self, bones, matrices);
-            self.runtime.graphics = Some(g);
-            id
-        } else {
-            0
-        }
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub fn update_bone_matrices(&mut self, skin_id: u32, matrices: &[[[f32; 4]; 4]]) {
-        if let Some(mut g) = self.runtime.graphics.take() {
-            g.update_bone_matrices(self, skin_id, matrices);
-            self.runtime.graphics = Some(g);
-        }
-    }
-
     pub(crate) fn begin_frame(&mut self) {
         self.runtime.draw_list.clear();
-        #[cfg(feature = "model-3d")]
-        self.runtime.draw_list_3d.clear();
+        self.runtime.model_3d.begin_frame();
         self.runtime.state_stack.clear();
         self.runtime.current_state = DrawState::default();
         self.runtime.last_image_opts.clear();
@@ -596,11 +406,6 @@ impl Context {
         }
 
         self.runtime.draw_list.push(drawable);
-    }
-
-    #[cfg(feature = "model-3d")]
-    pub(crate) fn push_3d(&mut self, drawable: DrawCommand3D) {
-        self.runtime.draw_list_3d.push(drawable);
     }
 
     pub(crate) fn current_draw_state(&self) -> DrawState {
