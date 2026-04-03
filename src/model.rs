@@ -1,7 +1,119 @@
 use std::sync::Arc;
 
-pub use crate::graphics::core_3d::{Bone, Camera, SkinData};
-pub use crate::graphics::model_raw::{Light, SceneGlobals};
+/// Structure representing skeletal animation skin data.
+#[derive(Debug, Clone)]
+pub struct SkinData {
+    /// List of bones in the skin.
+    pub bones: Vec<Bone>,
+    /// Pre-calculated bone matrices for the current frame.
+    pub bone_matrices: Vec<[[f32; 4]; 4]>,
+}
+
+/// A single bone in a skeleton.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bone {
+    /// Index of the parent bone, or None if this is the root.
+    pub parent_index: Option<usize>,
+    /// Inverse bind matrix for skinning.
+    pub inverse_bind_matrix: [[f32; 4]; 4],
+}
+
+/// A 3D camera with perspective projection settings.
+#[derive(Debug, Clone, Copy)]
+pub struct Camera {
+    /// Eye position of the camera.
+    pub eye: [f32; 3],
+    /// Target point the camera is looking at.
+    pub target: [f32; 3],
+    /// Up vector of the camera.
+    pub up: [f32; 3],
+    /// Aspect ratio of the viewport (width / height).
+    pub aspect: f32,
+    /// Vertical field of view in degrees.
+    pub fovy: f32,
+    /// Near clipping plane distance.
+    pub znear: f32,
+    /// Far clipping plane distance.
+    pub zfar: f32,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            eye: [0.0, 0.0, 5.0],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            aspect: 1.0,
+            fovy: 45.0,
+            znear: 0.1,
+            zfar: 1000.0,
+        }
+    }
+}
+
+impl Camera {
+    /// Returns the view matrix (eye -> target).
+    pub fn view_matrix(&self) -> [[f32; 4]; 4] {
+        crate::math::mat4::look_at(self.eye, self.target, self.up)
+    }
+
+    /// Returns the perspective projection matrix for this camera.
+    pub fn projection_matrix(&self) -> [[f32; 4]; 4] {
+        crate::math::projection::perspective_degrees(self.fovy, self.aspect, self.znear, self.zfar)
+    }
+}
+
+/// A 3D light source (Point or Directional).
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default, Debug)]
+pub struct Light {
+    /// Position or direction of the light. W component: 1.0 = point, 0.0 = directional.
+    pub position: [f32; 4],
+    /// Color and intensity. [R, G, B, Intensity].
+    pub color: [f32; 4],
+}
+
+/// Global scene-level environment settings.
+///
+/// This structure matches the GPU uniform buffer layout for scene globals.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, Default, Debug)]
+pub struct SceneGlobals {
+    /// Camera position for lighting calculations.
+    pub camera_pos: [f32; 4],
+    /// View-space right vector.
+    pub camera_right: [f32; 4],
+    /// View-space up vector.
+    pub camera_up: [f32; 4],
+    /// View-space forward vector.
+    pub camera_forward: [f32; 4],
+    /// Projection parameters: [proj_x, proj_y, znear, zfar].
+    pub projection_params: [f32; 4],
+    /// Ambient light color.
+    pub ambient_color: [f32; 4],
+    /// Fog color.
+    pub fog_color: [f32; 4],
+    /// Fog distance settings: [start, end, exponent, density].
+    pub fog_distance: [f32; 4],
+    /// Fog height settings: [base, falloff, exponent, density].
+    pub fog_height: [f32; 4],
+    /// Fog general parameters.
+    pub fog_params: [f32; 4],
+    /// Sky-based fog zenith color.
+    pub fog_background_zenith: [f32; 4],
+    /// Sky-based fog horizon color.
+    pub fog_background_horizon: [f32; 4],
+    /// Sky-based fog nadir color.
+    pub fog_background_nadir: [f32; 4],
+    /// Sky-based fog general parameters.
+    pub fog_background_params: [f32; 4],
+    /// Fog sampling parameters.
+    pub fog_sampling: [f32; 4],
+    /// Scene lights (up to 4 supported).
+    pub lights: [Light; 4],
+    /// Light view-projection matrix for shadow mapping.
+    pub light_view_proj: [[f32; 4]; 4],
+}
 
 /// Handle to a 3D model resource.
 ///

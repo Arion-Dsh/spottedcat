@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -82,7 +82,7 @@ path = "examples/text_performance_test.rs"
 [[example]]
 name = "gltf_loader"
 path = "examples/gltf_loader.rs"
-required-features = ["model-3d"]
+required-features = ["gltf"]
 
 [[example]]
 name = "billboard"

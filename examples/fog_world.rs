@@ -1,6 +1,6 @@
 use spottedcat::{
     Context, DrawOption, DrawOption3D, FogBackgroundSettings, FogSamplingSettings, FogSettings,
-    Image, Model, Pt, Spot, Text, WindowConfig,
+    Model, Pt, Spot, Text, WindowConfig,
 };
 use std::time::Duration;
 
@@ -19,10 +19,10 @@ struct FogWorld {
 
 impl Spot for FogWorld {
     fn initialize(ctx: &mut Context) -> Self {
-        ctx.set_camera_pos([0.0, 3.6, 14.0]);
-        ctx.set_camera_target(0.0, 1.2, -12.0);
-        ctx.set_camera_up(0.0, 1.0, 0.0);
-        ctx.set_ambient_light([0.16, 0.18, 0.17, 1.0]);
+        spottedcat::set_camera_pos(ctx, [0.0, 3.6, 14.0]);
+        spottedcat::set_camera_target(ctx, 0.0, 1.2, -12.0);
+        spottedcat::set_camera_up(ctx, 0.0, 1.0, 0.0);
+        spottedcat::set_ambient_light(ctx, [0.16, 0.18, 0.17, 1.0]);
 
         let floor_tex = spottedcat::image::create(
             ctx,
@@ -102,7 +102,7 @@ impl Spot for FogWorld {
             .with_sampling(FogSamplingSettings::default().with_height_samples(4, 8))
             .with_distance(14.0, 48.0, 0.22, 1.0)
             .with_height(-1.0, 9.0, 0.16, 1.0);
-        ctx.set_fog(fog);
+        spottedcat::set_fog(ctx, fog);
 
         spottedcat::model::draw(
             ctx,
@@ -158,7 +158,7 @@ impl Spot for FogWorld {
             );
         }
 
-        ctx.clear_fog();
+        spottedcat::clear_fog(ctx);
 
         // Draw FPS
         spottedcat::text::draw(
@@ -169,7 +169,7 @@ impl Spot for FogWorld {
     }
 
     fn remove(&mut self, ctx: &mut Context) {
-        ctx.clear_fog();
+        spottedcat::clear_fog(ctx);
     }
 }
 

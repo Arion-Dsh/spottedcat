@@ -11,11 +11,11 @@ struct GltfApp {
 impl Spot for GltfApp {
     fn initialize(ctx: &mut Context) -> Self {
         // 1. Setup scene-wide PBR lighting
-        ctx.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
+        spottedcat::set_ambient_light(ctx, [0.2, 0.2, 0.2, 1.0]);
         // A bright directional light from the top-right
-        ctx.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
+        spottedcat::set_light(ctx, 0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
         // Set camera position (matching the hardcoded view matrix in render.rs)
-        ctx.set_camera_pos([0.0, 0.0, 5.0]);
+        spottedcat::set_camera_pos(ctx, [0.0, 0.0, 5.0]);
 
         // 2. Create a model (using a sphere for PBR demonstration)
         let model = spottedcat::model::create_sphere(ctx, 1.0).unwrap();

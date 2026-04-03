@@ -1,4 +1,4 @@
-use crate::model::Vertex;
+use crate::model::{SceneGlobals, Vertex};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 
@@ -20,34 +20,6 @@ pub struct ModelGlobals {
     pub emissive_uv: [f32; 4],
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable, Default)]
-pub struct Light {
-    pub position: [f32; 4], // [x, y, z, 1.0 = point, 0.0 = directional]
-    pub color: [f32; 4],    // [r, g, b, intensity]
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable, Default)]
-pub struct SceneGlobals {
-    pub camera_pos: [f32; 4],
-    pub camera_right: [f32; 4],
-    pub camera_up: [f32; 4],
-    pub camera_forward: [f32; 4],
-    pub projection_params: [f32; 4], // [proj_x, proj_y, znear, zfar]
-    pub ambient_color: [f32; 4],
-    pub fog_color: [f32; 4],
-    pub fog_distance: [f32; 4],          // [start, end, exponent, density]
-    pub fog_height: [f32; 4],            // [base, falloff, exponent, density]
-    pub fog_params: [f32; 4],            // [strength, reserved, reserved, reserved]
-    pub fog_background_zenith: [f32; 4], // [rgb, mix]
-    pub fog_background_horizon: [f32; 4], // [rgb, mix]
-    pub fog_background_nadir: [f32; 4],  // [rgb, mix]
-    pub fog_background_params: [f32; 4], // [horizon_glow, sky_fog_blend, geometry_fog_blend, reserved]
-    pub fog_sampling: [f32; 4], // [min_height_samples, max_height_samples, height_sample_scale, reserved]
-    pub lights: [Light; 4],
-    pub light_view_proj: [[f32; 4]; 4],
-}
 
 pub struct ModelRenderer {
     pub(crate) globals_bind_group_layout: wgpu::BindGroupLayout, // Group 0: [Model, Scene, UserOpts]
@@ -698,8 +670,8 @@ mod tests {
     #[test]
     fn test_projection_aspect_ratio() {
         let aspect = 2.0;
-        let fovy = std::f32::consts::PI / 2.0; // 90 deg
-        let proj = crate::math::projection::perspective(fovy, aspect, 0.1, 100.0);
+        let fovy = 90.0; // 90 deg
+        let proj = crate::math::projection::perspective_degrees(fovy, aspect, 0.1, 100.0);
 
         // f = 1 / tan(45 deg) = 1.0
         // x_scale = f / aspect = 0.5
@@ -727,7 +699,7 @@ mod tests {
     fn test_square_stays_square_on_wide_viewport() {
         let width = 800.0;
         let height = 600.0;
-        let proj = crate::math::projection::perspective(std::f32::consts::PI / 4.0, width / height, 0.1, 1000.0);
+        let proj = crate::math::projection::perspective_degrees(45.0, width / height, 0.1, 1000.0);
 
         let corners = [
             [-1.0, -1.0, -5.0],

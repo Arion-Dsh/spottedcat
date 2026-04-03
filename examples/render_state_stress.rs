@@ -72,8 +72,8 @@ impl Spot for RenderStateStress {
 
     fn update(&mut self, ctx: &mut Context, dt: Duration) {
         self.time += dt.as_secs_f32();
-        ctx.set_camera_pos([0.0, 14.0, 26.0]);
-        ctx.set_camera_target(0.0, 0.0, -28.0);
+        spottedcat::set_camera_pos(ctx, [0.0, 14.0, 26.0]);
+        spottedcat::set_camera_target(ctx, 0.0, 0.0, -28.0);
     }
 
     fn draw(&mut self, ctx: &mut Context) {

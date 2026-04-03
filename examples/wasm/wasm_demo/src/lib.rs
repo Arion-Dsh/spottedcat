@@ -40,10 +40,10 @@ impl Spot for WasmDemo {
             .with_color([0.7, 0.9, 1.0, 1.0]);
 
         // Setup 3D scene
-        ctx.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
-        ctx.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
-        ctx.set_camera([3.6, 2.8, 6.2], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
-        ctx.set_camera_fov(std::f32::consts::PI / 5.5);
+        spottedcat::set_ambient_light(ctx, [0.2, 0.2, 0.2, 1.0]);
+        spottedcat::set_light(ctx, 0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
+        spottedcat::set_camera(ctx, [3.6, 2.8, 6.2], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+        spottedcat::set_camera_fovy(ctx, 32.7);
 
         let model = spottedcat::model::create_cube(ctx, 1.0).unwrap();
 

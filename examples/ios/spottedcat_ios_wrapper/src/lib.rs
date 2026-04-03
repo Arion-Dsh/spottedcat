@@ -227,9 +227,9 @@ pub extern "C" fn spottedcat_ios_start() {
                 .with_font_size(Pt::from(16.0))
                 .with_color([0.8, 0.9, 1.0, 1.0]);
 
-            ctx.set_ambient_light([0.2, 0.2, 0.2, 1.0]);
-            ctx.set_light(0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
-            ctx.set_camera_pos([0.0, 0.0, 5.0]);
+            spottedcat::set_ambient_light(ctx, [0.2, 0.2, 0.2, 1.0]);
+            spottedcat::set_light(ctx, 0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
+            spottedcat::set_camera_pos(ctx, [0.0, 0.0, 5.0]);
 
             let model = spottedcat::model::create_cube(ctx, 1.0).unwrap();
             let history_state = IosPedometerHistory::new();

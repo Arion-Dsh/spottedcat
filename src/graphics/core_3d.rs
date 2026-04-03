@@ -3,56 +3,10 @@ use std::collections::HashMap;
 use crate::drawable::DrawCommand3D;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
-use crate::model::Vertex;
+use crate::model::{Bone, SkinData, Vertex};
 
 use super::core::{AtlasSlot, Graphics};
 
-#[derive(Debug, Clone)]
-pub struct SkinData {
-    pub bones: Vec<Bone>,
-    pub bone_matrices: Vec<[[f32; 4]; 4]>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Bone {
-    pub parent_index: Option<usize>,
-    pub inverse_bind_matrix: [[f32; 4]; 4],
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Camera {
-    pub eye: [f32; 3],
-    pub target: [f32; 3],
-    pub up: [f32; 3],
-    pub aspect: f32,
-    pub fovy: f32,
-    pub znear: f32,
-    pub zfar: f32,
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Self {
-            eye: [0.0, 0.0, 5.0],
-            target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
-            aspect: 1.0,
-            fovy: std::f32::consts::PI / 4.0,
-            znear: 0.1,
-            zfar: 1000.0,
-        }
-    }
-}
-
-impl Camera {
-    pub fn view_matrix(&self) -> [[f32; 4]; 4] {
-        crate::math::mat4::look_at(self.eye, self.target, self.up)
-    }
-
-    pub fn projection_matrix(&self) -> [[f32; 4]; 4] {
-        crate::math::projection::perspective(self.fovy, self.aspect, self.znear, self.zfar)
-    }
-}
 
 type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
 type MaterialTextureSet<'a> = (
@@ -154,7 +108,7 @@ pub(crate) struct Graphics3D {
     #[allow(dead_code)]
     pub(crate) brdf_lut_texture: wgpu::Texture,
     pub(crate) environment_bind_group: wgpu::BindGroup,
-    pub(crate) scene_globals: crate::graphics::model_raw::SceneGlobals,
+    pub(crate) scene_globals: crate::model::SceneGlobals,
 }
 
 impl Graphics {
@@ -198,7 +152,7 @@ impl Graphics {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: std::num::NonZeroU64::new(std::mem::size_of::<
-                            crate::graphics::model_raw::SceneGlobals,
+                            crate::model::SceneGlobals,
                         >()
                             as u64),
                     },
@@ -235,7 +189,7 @@ impl Graphics {
                         buffer: scene_globals_buffer,
                         offset: 0,
                         size: std::num::NonZeroU64::new(std::mem::size_of::<
-                            crate::graphics::model_raw::SceneGlobals,
+                            crate::model::SceneGlobals,
                         >() as u64),
                     }),
                 },
@@ -681,7 +635,7 @@ impl Graphics {
             white_image_id: 1,
             black_image_id: 2,
             normal_image_id: 3,
-            scene_globals: crate::graphics::model_raw::SceneGlobals {
+            scene_globals: crate::model::SceneGlobals {
                 camera_pos: [0.0, 0.0, 0.0, 0.0],
                 camera_right: [1.0, 0.0, 0.0, 0.0],
                 camera_up: [0.0, 1.0, 0.0, 0.0],
@@ -697,7 +651,7 @@ impl Graphics {
                 fog_background_nadir: [0.52, 0.56, 0.55, 0.18],
                 fog_background_params: [0.05, 0.72, 0.55, 0.0],
                 fog_sampling: [4.0, 10.0, 0.6, 0.0],
-                lights: [crate::graphics::model_raw::Light {
+                lights: [crate::model::Light {
                     position: [1.0, 1.0, 1.0, 0.0],
                     color: [1.0, 1.0, 1.0, 1.0],
                 }; 4],

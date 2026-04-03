@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption3D, Image, Model, Spot, WindowConfig};
+use spottedcat::{Context, DrawOption3D, Model, Spot, WindowConfig};
 use std::time::Duration;
 
 struct BillboardExample {

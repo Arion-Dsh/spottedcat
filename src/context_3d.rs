@@ -94,9 +94,14 @@ impl Context {
         self.runtime.model_3d.camera.up = [x, y, z];
     }
 
-    /// Sets the camera field of view in radians.
-    pub fn set_camera_fov(&mut self, fov: f32) {
-        self.runtime.model_3d.camera.fovy = fov;
+    /// Sets the vertical camera field of view in degrees.
+    pub fn set_camera_fov_degrees(&mut self, fovy_degrees: f32) {
+        self.runtime.model_3d.camera.fovy = fovy_degrees;
+    }
+
+    /// Alias for [`Context::set_camera_fov_degrees`].
+    pub fn set_camera_fovy(&mut self, fovy_degrees: f32) {
+        self.set_camera_fov_degrees(fovy_degrees);
     }
 
     /// Sets the camera aspect ratio.

@@ -144,6 +144,30 @@ pub fn camera_position(ctx: &Context) -> [f32; 3] {
 }
 
 #[cfg(feature = "model-3d")]
+/// Sets camera eye position.
+pub fn set_camera_pos(ctx: &mut Context, pos: [f32; 3]) {
+    ctx.set_camera_pos(pos);
+}
+
+#[cfg(feature = "model-3d")]
+/// Sets camera target vector.
+pub fn set_camera_target(ctx: &mut Context, x: f32, y: f32, z: f32) {
+    ctx.set_camera_target(x, y, z);
+}
+
+#[cfg(feature = "model-3d")]
+/// Sets camera up vector.
+pub fn set_camera_up(ctx: &mut Context, x: f32, y: f32, z: f32) {
+    ctx.set_camera_up(x, y, z);
+}
+
+#[cfg(feature = "model-3d")]
+/// Sets camera vertical field of view in degrees.
+pub fn set_camera_fovy(ctx: &mut Context, fovy_degrees: f32) {
+    ctx.set_camera_fovy(fovy_degrees);
+}
+
+#[cfg(feature = "model-3d")]
 /// Sets ambient light color.
 pub fn set_ambient(ctx: &mut Context, color: [f32; 4]) {
     ctx.set_ambient(color);
@@ -159,6 +183,18 @@ pub fn set_light(ctx: &mut Context, index: usize, position: [f32; 4], color: [f3
 /// Sets global fog settings.
 pub fn set_fog(ctx: &mut Context, settings: FogSettings) {
     ctx.set_fog(settings);
+}
+
+#[cfg(all(feature = "model-3d", feature = "effects"))]
+/// Resets global fog to the default disabled state.
+pub fn clear_fog(ctx: &mut Context) {
+    ctx.clear_fog();
+}
+
+#[cfg(feature = "model-3d")]
+/// Sets the ambient light color for the active 3D scene.
+pub fn set_ambient_light(ctx: &mut Context, color: [f32; 4]) {
+    ctx.set_ambient_light(color);
 }
 
 /// Sets the window's logical size.

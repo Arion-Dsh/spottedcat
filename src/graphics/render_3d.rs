@@ -6,7 +6,7 @@ use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
 
 use super::core::{AtlasSlot, Graphics};
-use super::core_3d::SkinData;
+use crate::model::SkinData;
 
 pub(super) struct Render3DConfig<'a> {
     pub model_pipeline: &'a wgpu::RenderPipeline,
@@ -325,7 +325,7 @@ impl Graphics {
         model_renderer: &mut ModelRenderer,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
-        scene_globals: &mut crate::graphics::model_raw::SceneGlobals,
+        scene_globals: &mut crate::model::SceneGlobals,
         models: &[Option<MeshData>],
         skins: &[Option<SkinData>],
         images: &[Option<ImageEntry>],

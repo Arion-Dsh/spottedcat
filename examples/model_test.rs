@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption3D, Image, Model, Pt, Spot, WindowConfig};
+use spottedcat::{Context, DrawOption3D, Model, Pt, Spot, WindowConfig};
 
 struct ModelTest {
     cube: Model,
@@ -10,9 +10,10 @@ struct ModelTest {
 
 impl Spot for ModelTest {
     fn initialize(ctx: &mut Context) -> Self {
-        ctx.set_camera_pos([2.6, 2.2, 4.6]);
-        ctx.set_camera_target(0.0, 0.0, 0.0);
-        ctx.set_camera_up(0.0, 1.0, 0.0);
+        spottedcat::set_camera_pos(ctx, [0.0, 2.0, 8.0]);
+        spottedcat::set_camera_target(ctx, 0.0, 0.0, 0.0);
+        spottedcat::set_camera_up(ctx, 0.0, 1.0, 0.0);
+        spottedcat::set_camera_fovy(ctx, 45.0);
 
         // Create a simple 2x2 texture
         let rgba = vec![
@@ -55,8 +56,38 @@ impl Spot for ModelTest {
         }
     }
 
-    fn update(&mut self, _ctx: &mut Context, dt: std::time::Duration) {
-        self.rotation += dt.as_secs_f32();
+    fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) {
+        let dt_secs = dt.as_secs_f32();
+        self.rotation += dt_secs;
+
+        // Camera control demo
+        let mut pos = spottedcat::camera_position(ctx);
+        if spottedcat::key_down(ctx, spottedcat::Key::W) {
+            pos[2] -= 5.0 * dt_secs;
+        }
+        if spottedcat::key_down(ctx, spottedcat::Key::S) {
+            pos[2] += 5.0 * dt_secs;
+        }
+        if spottedcat::key_down(ctx, spottedcat::Key::A) {
+            pos[0] -= 5.0 * dt_secs;
+        }
+        if spottedcat::key_down(ctx, spottedcat::Key::D) {
+            pos[0] += 5.0 * dt_secs;
+        }
+        spottedcat::set_camera_pos(ctx, pos);
+
+        // FOV control demo (using Q/E)
+        static mut CURRENT_FOV: f32 = 45.0;
+        unsafe {
+            if spottedcat::key_down(ctx, spottedcat::Key::Q) {
+                CURRENT_FOV = (CURRENT_FOV - 30.0 * dt_secs).max(10.0);
+                spottedcat::set_camera_fovy(ctx, CURRENT_FOV);
+            }
+            if spottedcat::key_down(ctx, spottedcat::Key::E) {
+                CURRENT_FOV = (CURRENT_FOV + 30.0 * dt_secs).min(120.0);
+                spottedcat::set_camera_fovy(ctx, CURRENT_FOV);
+            }
+        }
     }
 
     fn draw(&mut self, ctx: &mut Context) {
