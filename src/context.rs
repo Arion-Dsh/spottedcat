@@ -1,4 +1,5 @@
 use crate::DrawOption;
+use crate::FogSettings;
 use crate::audio::AudioSystem;
 use crate::drawable::{DrawCommand, DrawCommand3D};
 use crate::graphics::Graphics;
@@ -329,6 +330,68 @@ impl Context {
         {
             g.scene_globals.lights[index] = crate::graphics::Light { position, color };
         }
+    }
+
+    pub fn set_fog(&mut self, fog: FogSettings) {
+        if let Some(g) = self.runtime.graphics.as_mut() {
+            g.scene_globals.fog_color = fog.color;
+            g.scene_globals.fog_distance = [
+                fog.distance_start,
+                fog.distance_end,
+                fog.distance_exponent,
+                fog.distance_density,
+            ];
+            g.scene_globals.fog_height = [
+                fog.height_base,
+                fog.height_falloff,
+                fog.height_exponent,
+                fog.height_density,
+            ];
+            g.scene_globals.fog_params = [
+                if fog.is_enabled() {
+                    fog.effective_strength()
+                } else {
+                    0.0
+                },
+                0.0,
+                0.0,
+                0.0,
+            ];
+            g.scene_globals.fog_background_zenith = [
+                fog.background.zenith_color[0],
+                fog.background.zenith_color[1],
+                fog.background.zenith_color[2],
+                fog.background.zenith_mix,
+            ];
+            g.scene_globals.fog_background_horizon = [
+                fog.background.horizon_color[0],
+                fog.background.horizon_color[1],
+                fog.background.horizon_color[2],
+                fog.background.horizon_mix,
+            ];
+            g.scene_globals.fog_background_nadir = [
+                fog.background.nadir_color[0],
+                fog.background.nadir_color[1],
+                fog.background.nadir_color[2],
+                fog.background.nadir_mix,
+            ];
+            g.scene_globals.fog_background_params = [
+                fog.background.horizon_glow_strength,
+                fog.background.sky_fog_blend,
+                fog.background.geometry_fog_blend,
+                0.0,
+            ];
+            g.scene_globals.fog_sampling = [
+                fog.sampling.min_height_samples.max(1) as f32,
+                fog.sampling.max_height_samples.max(fog.sampling.min_height_samples.max(1)) as f32,
+                fog.sampling.height_sample_scale.max(0.05),
+                0.0,
+            ];
+        }
+    }
+
+    pub fn clear_fog(&mut self) {
+        self.set_fog(FogSettings::default());
     }
 
     pub(crate) fn insert_resource_dyn(&mut self, type_id: TypeId, value: Rc<dyn Any>) {

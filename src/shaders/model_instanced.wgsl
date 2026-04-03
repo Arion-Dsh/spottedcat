@@ -16,7 +16,20 @@ struct Light {
 
 struct SceneGlobals {
     camera_pos: vec4<f32>,
+    camera_right: vec4<f32>,
+    camera_up: vec4<f32>,
+    camera_forward: vec4<f32>,
+    projection_params: vec4<f32>,
     ambient_color: vec4<f32>,
+    fog_color: vec4<f32>,
+    fog_distance: vec4<f32>,
+    fog_height: vec4<f32>,
+    fog_params: vec4<f32>,
+    fog_background_zenith: vec4<f32>,
+    fog_background_horizon: vec4<f32>,
+    fog_background_nadir: vec4<f32>,
+    fog_background_params: vec4<f32>,
+    fog_sampling: vec4<f32>,
     lights: array<Light, 4>,
     light_view_proj: mat4x4<f32>,
 };
@@ -240,7 +253,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     ambient = ambient + (kD_ibl * diffuse_ibl + specular_ibl) * ao;
 
     var color = ambient + Lo + emissive;
-    
     // Simple HDR tone mapping
     color = color / (color + vec3<f32>(1.0));
     // Linear to Srgb

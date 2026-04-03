@@ -87,13 +87,7 @@ impl Graphics {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Always,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
+                depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
@@ -254,6 +248,11 @@ impl Graphics {
         let (model_pipeline, instanced_model_pipeline) = self.create_default_model_pipelines();
         self.model_pipeline = model_pipeline;
         self.instanced_model_pipeline = instanced_model_pipeline;
+        self.fog_background_pipeline = Self::create_fog_background_pipeline(
+            &self.device,
+            self.config.format,
+            &self.fog_background_bind_group_layout,
+        );
 
         self.image_pipelines.clear();
         self.model_pipelines.clear();
@@ -396,13 +395,7 @@ impl Graphics {
                     unclipped_depth: false,
                     conservative: false,
                 },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Always,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
+                depth_stencil: None,
 
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
@@ -511,13 +504,7 @@ impl Graphics {
                     topology: wgpu::PrimitiveTopology::TriangleStrip,
                     ..Default::default()
                 },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Always,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
+                depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,

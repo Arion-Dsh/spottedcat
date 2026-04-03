@@ -215,6 +215,9 @@ pub struct Graphics {
     pub(crate) model_renderer: ModelRenderer,
     pub(crate) model_pipeline: wgpu::RenderPipeline,
     pub(crate) instanced_model_pipeline: wgpu::RenderPipeline,
+    pub(crate) fog_background_bind_group_layout: wgpu::BindGroupLayout,
+    pub(crate) fog_background_bind_group: wgpu::BindGroup,
+    pub(crate) fog_background_pipeline: wgpu::RenderPipeline,
     pub(crate) gpu_models: Vec<Option<MeshData>>,
     pub(crate) gpu_skins: Vec<Option<SkinData>>,
     pub(crate) depth_texture: wgpu::Texture,
@@ -248,6 +251,114 @@ impl std::fmt::Debug for Graphics {
 }
 
 impl Graphics {
+    pub(crate) fn create_fog_background_bind_group_layout(
+        device: &wgpu::Device,
+    ) -> wgpu::BindGroupLayout {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("fog_background_bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: std::num::NonZeroU64::new(
+                            std::mem::size_of::<crate::graphics::model_raw::SceneGlobals>() as u64,
+                        ),
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Depth,
+                    },
+                    count: None,
+                },
+            ],
+        })
+    }
+
+    pub(crate) fn create_fog_background_bind_group(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        scene_globals_buffer: &wgpu::Buffer,
+        depth_view: &wgpu::TextureView,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fog_background_bg"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: scene_globals_buffer,
+                        offset: 0,
+                        size: std::num::NonZeroU64::new(
+                            std::mem::size_of::<crate::graphics::model_raw::SceneGlobals>() as u64,
+                        ),
+                    }),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(depth_view),
+                },
+            ],
+        })
+    }
+
+    pub(crate) fn create_fog_background_pipeline(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> wgpu::RenderPipeline {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("fog_background_shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("../shaders/fog_background.wgsl").into(),
+            ),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("fog_background_pipeline_layout"),
+            bind_group_layouts: &[bind_group_layout],
+            immediate_size: 0,
+        });
+
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("fog_background_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        })
+    }
+
     pub async fn new(
         instance: &wgpu::Instance,
         surface: &wgpu::Surface<'_>,
@@ -355,13 +466,7 @@ impl Graphics {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Always,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
+            depth_stencil: None,
 
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
@@ -409,7 +514,7 @@ impl Graphics {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth24Plus,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         let depth_view = depth_texture.create_view(&Default::default());
@@ -600,7 +705,21 @@ impl Graphics {
                 }),
                 multiview_mask: None,
                 cache: None,
-            });
+                });
+
+        let fog_background_bind_group_layout =
+            Self::create_fog_background_bind_group_layout(&device);
+        let fog_background_bind_group = Self::create_fog_background_bind_group(
+            &device,
+            &fog_background_bind_group_layout,
+            &model_renderer.scene_globals_buffer,
+            &depth_view,
+        );
+        let fog_background_pipeline = Self::create_fog_background_pipeline(
+            &device,
+            config.format,
+            &fog_background_bind_group_layout,
+        );
 
         let shadow_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -727,6 +846,9 @@ impl Graphics {
             model_renderer,
             model_pipeline,
             instanced_model_pipeline,
+            fog_background_bind_group_layout,
+            fog_background_bind_group,
+            fog_background_pipeline,
             gpu_models: Vec::new(),
             gpu_skins: Vec::new(),
             depth_texture,
@@ -745,7 +867,20 @@ impl Graphics {
             normal_image_id: 3,
             scene_globals: crate::graphics::model_raw::SceneGlobals {
                 camera_pos: [0.0, 0.0, 0.0, 0.0],
+                camera_right: [1.0, 0.0, 0.0, 0.0],
+                camera_up: [0.0, 1.0, 0.0, 0.0],
+                camera_forward: [0.0, 0.0, -1.0, 0.0],
+                projection_params: [1.0, 1.0, 0.1, 1000.0],
                 ambient_color: [0.1, 0.1, 0.1, 1.0],
+                fog_color: [0.0, 0.0, 0.0, 0.0],
+                fog_distance: [0.0, 1.0, 1.0, 0.0],
+                fog_height: [0.0, 1.0, 1.0, 0.0],
+                fog_params: [0.0, 0.0, 0.0, 0.0],
+                fog_background_zenith: [0.27, 0.38, 0.52, 0.38],
+                fog_background_horizon: [0.75, 0.79, 0.80, 0.32],
+                fog_background_nadir: [0.52, 0.56, 0.55, 0.18],
+                fog_background_params: [0.05, 0.72, 0.55, 0.0],
+                fog_sampling: [4.0, 10.0, 0.6, 0.0],
                 lights: [crate::graphics::model_raw::Light {
                     position: [1.0, 1.0, 1.0, 0.0],
                     color: [1.0, 1.0, 1.0, 1.0],
@@ -985,7 +1120,6 @@ impl Graphics {
         self.config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
         self.config.usage = crate::platform::surface_usage(&caps);
         self.config.alpha_mode = pick_alpha_mode(&caps, self.transparent);
-
         surface.configure(&self.device, &self.config);
 
         // Only recreate depth texture if size changed.
@@ -1002,13 +1136,18 @@ impl Graphics {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Depth24Plus,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
             self.depth_view = self
                 .depth_texture
                 .create_view(&wgpu::TextureViewDescriptor::default());
+            self.fog_background_bind_group = Self::create_fog_background_bind_group(
+                &self.device,
+                &self.fog_background_bind_group_layout,
+                &self.model_renderer.scene_globals_buffer,
+                &self.depth_view,
+            );
         }
     }
 

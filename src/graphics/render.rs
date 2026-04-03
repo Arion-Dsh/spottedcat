@@ -14,6 +14,19 @@ use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
 use crate::image_raw::ImageRenderer;
 
+fn normalize3(v: [f32; 3]) -> [f32; 3] {
+    let len = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(0.0001);
+    [v[0] / len, v[1] / len, v[2] / len]
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
 pub(crate) struct RenderConfig<'a> {
     pub screen_size_data: [f32; 4],
     pub width: u32,
@@ -495,8 +508,19 @@ impl Graphics {
         camera.aspect = config.width as f32 / config.height as f32;
         let proj = camera.projection_matrix();
         let view_mat = camera.view_matrix();
+        let forward = normalize3([
+            camera.target[0] - camera.eye[0],
+            camera.target[1] - camera.eye[1],
+            camera.target[2] - camera.eye[2],
+        ]);
+        let right = normalize3(cross3(camera.up, forward));
+        let up = cross3(forward, right);
 
         scene_globals.camera_pos = [camera.eye[0], camera.eye[1], camera.eye[2], 1.0];
+        scene_globals.camera_right = [right[0], right[1], right[2], 0.0];
+        scene_globals.camera_up = [up[0], up[1], up[2], 0.0];
+        scene_globals.camera_forward = [forward[0], forward[1], forward[2], 0.0];
+        scene_globals.projection_params = [proj[0][0], proj[1][1], camera.znear, camera.zfar];
 
         scene_globals.light_view_proj = [
             [0.1, 0.0, 0.0, 0.0],
@@ -994,14 +1018,13 @@ impl Graphics {
             self.queue.submit(std::iter::once(shadow_encoder.finish()));
         }
 
-        // 2. Main Color Pass
-        {
-            if let Some(ref mut ctx) = ctx {
-                self.resolve_drawables(ctx, drawables, width, height);
-            }
+        if let Some(ref mut ctx) = ctx {
+            self.resolve_drawables(ctx, drawables, width, height);
+        }
 
+        {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("main_render_pass"),
+                label: Some("main_3d_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
@@ -1029,7 +1052,6 @@ impl Graphics {
                 multiview_mask: None,
             });
 
-            // Draw 3D
             if let Some(ref mut ctx) = ctx {
                 Self::render_3d_internal(
                     &mut self.model_renderer,
@@ -1061,8 +1083,32 @@ impl Graphics {
                     false,
                 );
             }
+        }
 
-            // Draw 2D
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("main_overlay_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            if !self.transparent && self.scene_globals.fog_params[0] > 0.0 {
+                rpass.set_pipeline(&self.fog_background_pipeline);
+                rpass.set_bind_group(0, &self.fog_background_bind_group, &[]);
+                rpass.draw(0..3, 0..1);
+            }
+
             let lw = width as f32 / scale_factor as f32;
             let lh = height as f32 / scale_factor as f32;
             let screen_size_data = [2.0 / lw, 2.0 / lh, 1.0 / lw, 1.0 / lh];

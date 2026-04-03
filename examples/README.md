@@ -73,3 +73,12 @@ Notes:
 - The sample shows sensor-driven "today's steps", not a historical or lifetime total.
 - On Android 10 and above, the sample requests `ACTIVITY_RECOGNITION` at runtime before step data becomes available.
 - Recent step history is requested from Rust via JNI after Health Connect permission is granted by the Android host app.
+
+Desktop graphics example to validate the new fog system:
+
+- Run `cargo run --example fog_world` from the repo root to verify distance fog plus height fog on a simple 3D scene before testing the same shaders on Android.
+- Fog parameters are grouped by intent:
+  - Physical controls: `with_strength`, `with_distance`, `with_height`
+  - Style controls: `with_color`, `with_background`
+  - Quality controls: `with_sampling`
+- Fog is off by default and only activates when strength is greater than `0.0` and at least one fog density term is non-zero.
