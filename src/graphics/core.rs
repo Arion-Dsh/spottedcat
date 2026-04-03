@@ -28,6 +28,7 @@ pub(crate) struct ResolvedDraw {
     pub shader_id: u32,
     pub shader_opts: ShaderOpts,
     pub layer: i32,
+    pub draw_index: u64,
 }
 
 #[cfg(feature = "model-3d")]
@@ -56,6 +57,7 @@ pub struct Graphics {
     #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
     pub(crate) model_3d: GraphicsModel3dState,
     pub(crate) transparent: bool,
+    pub(crate) draw_index_counter: u64,
 }
 
 impl std::fmt::Debug for Graphics {
@@ -234,6 +236,7 @@ impl Graphics {
             gpu_generation: 0, // This will be set by the platform/app
             model_3d: GraphicsModel3dState::default(),
             transparent,
+            draw_index_counter: 0,
         };
 
         // Default resources will be registered via the Context in App initialization
@@ -252,14 +255,9 @@ impl Graphics {
             if let std::collections::hash_map::Entry::Vacant(entry) =
                 self.font_cache.entry(id as u64)
             {
-                if let Ok(font) = FontArc::try_from_vec(data.clone()) {
-                    entry.insert(font);
-                } else {
-                    eprintln!(
-                        "[spot][graphics] Warning: Failed to sync font with ID {}",
-                        id
-                    );
-                }
+                let font = FontArc::try_from_vec(data.clone())
+                    .unwrap_or_else(|e| panic!("[spot][graphics] Failed to sync font with ID {}: {}", id, e));
+                entry.insert(font);
             }
         }
 
@@ -317,14 +315,9 @@ impl Graphics {
 
         // 2. Restore Fonts
         for (&id, data) in &ctx.registry.fonts {
-            if let Ok(font) = ab_glyph::FontArc::try_from_vec(data.clone()) {
-                self.font_cache.insert(id as u64, font);
-            } else {
-                eprintln!(
-                    "[spot][graphics] Warning: Failed to restore font with ID {}",
-                    id
-                );
-            }
+            let font = ab_glyph::FontArc::try_from_vec(data.clone())
+                .unwrap_or_else(|e| panic!("[spot][graphics] Failed to restore font with ID {}: {}", id, e));
+            self.font_cache.insert(id as u64, font);
         }
 
         // 3. Restore Images (Atlases)

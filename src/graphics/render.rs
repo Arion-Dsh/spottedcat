@@ -4,7 +4,6 @@ use crate::Context;
 use crate::ShaderOpts;
 use crate::drawable::DrawCommand;
 use crate::image_raw::InstanceData;
-use crate::pt::Pt;
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -13,9 +12,7 @@ use crate::image_raw::ImageRenderer;
 
 pub(crate) struct RenderConfig<'a> {
     pub screen_size_data: [f32; 4],
-    pub width: u32,
-    pub height: u32,
-    pub sf: f64,
+    pub scale_factor: f32,
     pub atlases: &'a [AtlasSlot],
     pub image_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
     pub default_pipeline: &'a wgpu::RenderPipeline,
@@ -80,6 +77,7 @@ impl Graphics {
         logical_h: u32,
     ) {
         self.resolved_draws.clear();
+        self.draw_index_counter = 0;
         let viewport_rect = [0.0, 0.0, logical_w as f32, logical_h as f32];
 
         for drawable in drawables {
@@ -97,6 +95,9 @@ impl Graphics {
                             continue;
                         };
 
+                        let draw_index = self.draw_index_counter;
+                        self.draw_index_counter += 1;
+
                         self.resolved_draws.push(ResolvedDraw {
                             atlas_index,
                             bounds: entry.bounds,
@@ -105,6 +106,7 @@ impl Graphics {
                             shader_id: cmd.shader_id,
                             shader_opts: cmd.shader_opts,
                             layer: cmd.opts.layer(),
+                            draw_index,
                         });
                     }
                 }
@@ -126,12 +128,14 @@ impl Graphics {
         rpass: &mut wgpu::RenderPass<'a>,
         config: RenderConfig<'a>,
     ) {
-        // Sort by layer first, then atlas and shader to maximize batching
+        // Sort by layer first, then atlas and shader to maximize batching, 
+        // finally by draw_index to preserve submission order within the same state.
         resolved_draws.sort_by(|a, b| {
             a.layer
                 .cmp(&b.layer)
                 .then(a.atlas_index.cmp(&b.atlas_index))
                 .then(a.shader_id.cmp(&b.shader_id))
+                .then(a.draw_index.cmp(&b.draw_index))
         });
 
         let mut current_opacity = 1.0f32;
@@ -141,7 +145,8 @@ impl Graphics {
             screen: config.screen_size_data,
             opacity: current_opacity,
             shader_opacity: 1.0,
-            _padding: [0.0; 2],
+            scale_factor: config.scale_factor,
+            _padding: [0.0; 1],
         };
         let mut current_engine_globals_offset = image_renderer
             .upload_engine_globals(queue, &engine_globals)
@@ -156,10 +161,6 @@ impl Graphics {
         let mut current_atlas_index: Option<u32> = None;
         let mut current_shader_id: u32 = 0;
         let mut current_user_globals = ShaderOpts::default();
-        let mut current_clip: Option<[Pt; 4]> = None;
-
-        rpass.set_scissor_rect(0, 0, config.width.max(1), config.height.max(1));
-        let mut last_set_scissor: Option<(u32, u32, u32, u32)> = None;
 
         for resolved in resolved_draws.iter() {
             let opts = resolved.opts;
@@ -172,7 +173,6 @@ impl Graphics {
             let state_changed = current_atlas_index != Some(resolved.atlas_index)
                 || current_shader_id != shader_id
                 || current_user_globals != effective_user_globals
-                || current_clip != opts.get_clip()
                 || current_opacity != draw_opacity;
 
             if state_changed && !batch.is_empty() {
@@ -203,7 +203,8 @@ impl Graphics {
                     screen: config.screen_size_data,
                     opacity: current_opacity,
                     shader_opacity: resolved.shader_opts.opacity,
-                    _padding: [0.0; 2],
+                    scale_factor: config.scale_factor,
+                    _padding: [0.0; 1],
                 };
                 current_engine_globals_offset = image_renderer
                     .upload_engine_globals(queue, &eg)
@@ -219,34 +220,21 @@ impl Graphics {
                     .unwrap_or(current_user_globals_offset);
             }
 
-            if current_clip != opts.get_clip() {
-                current_clip = opts.get_clip();
-                let (sx, sy, sw, sh) = if let Some(clip) = current_clip {
-                    let x0 = (clip[0].as_f32() * config.sf as f32).clamp(0.0, config.width as f32);
-                    let y0 = (clip[1].as_f32() * config.sf as f32).clamp(0.0, config.height as f32);
-                    let x1 = ((clip[0].as_f32() + clip[2].as_f32()) * config.sf as f32)
-                        .clamp(0.0, config.width as f32);
-                    let y1 = ((clip[1].as_f32() + clip[3].as_f32()) * config.sf as f32)
-                        .clamp(0.0, config.height as f32);
-                    let fw = (x1 - x0).max(0.0) as u32;
-                    let fh = (y1 - y0).max(0.0) as u32;
-                    if fw > 0 && fh > 0 {
-                        (x0 as u32, y0 as u32, fw, fh)
-                    } else {
-                        (0, 0, 1, 1)
-                    }
-                } else {
-                    (0, 0, config.width, config.height)
-                };
-
-                if last_set_scissor != Some((sx, sy, sw, sh)) {
-                    rpass.set_scissor_rect(sx, sy, sw, sh);
-                    last_set_scissor = Some((sx, sy, sw, sh));
-                }
-            }
-
             current_atlas_index = Some(resolved.atlas_index);
             current_shader_id = shader_id;
+
+            // Encode clip rect into instance data
+            // clip_rect[2] (width) < 0 means no clipping
+            let clip_rect = if let Some(clip) = opts.get_clip() {
+                [
+                    clip[0].as_f32(),
+                    clip[1].as_f32(),
+                    clip[2].as_f32(),
+                    clip[3].as_f32(),
+                ]
+            } else {
+                [0.0, 0.0, -1.0, 0.0]
+            };
 
             batch.push(InstanceData {
                 pos: [opts.position()[0].as_f32(), opts.position()[1].as_f32()],
@@ -256,6 +244,7 @@ impl Graphics {
                     resolved.bounds.height.as_f32() * opts.scale()[1],
                 ],
                 uv_rect: resolved.uv_rect,
+                clip_rect,
             });
         }
 
@@ -460,9 +449,7 @@ impl Graphics {
                 &mut rpass,
                 RenderConfig {
                     screen_size_data,
-                    width,
-                    height,
-                    sf: scale_factor,
+                    scale_factor: scale_factor as f32,
                     atlases: &self.atlases,
                     image_pipelines: &self.image_pipelines,
                     default_pipeline: &self.default_pipeline,

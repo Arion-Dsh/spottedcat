@@ -39,7 +39,7 @@ impl Graphics {
             cached_font
         } else {
             let font = FontArc::try_from_vec(font_data.clone())
-                .map_err(|e| anyhow::anyhow!("Failed to parse font: {}", e))?;
+                .unwrap_or_else(|e| panic!("[spot][graphics] Failed to parse font with ID {}: {}", font_id, e));
             self.cache_font(font_id as u64, font.clone());
             font
         };
@@ -138,6 +138,7 @@ impl Graphics {
                         rotation: 0.0,
                         size: [w, h],
                         uv_rect: img_entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]),
+                        clip_rect: [-1.0, -1.0, -1.0, -1.0],
                     },
                     image_id: img_id,
                 });
@@ -196,6 +197,9 @@ impl Graphics {
                 let mut glyph_opts = *opts;
                 glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
 
+                let draw_index = self.draw_index_counter;
+                self.draw_index_counter += 1;
+
                 self.resolved_draws.push(ResolvedDraw {
                     atlas_index,
                     bounds: img_entry.bounds,
@@ -204,6 +208,7 @@ impl Graphics {
                     shader_id: self.text_shader_id,
                     shader_opts,
                     layer: opts.layer(),
+                    draw_index,
                 });
             }
         }

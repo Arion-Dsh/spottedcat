@@ -35,6 +35,9 @@ pub struct InstanceData {
     pub rotation: f32,
     pub size: [f32; 2],
     pub uv_rect: [f32; 4],
+    /// Clip rect in logical screen coords [x, y, w, h].
+    /// [-1, -1, -1, -1] means no clipping.
+    pub clip_rect: [f32; 4],
 }
 
 #[repr(C)]
@@ -45,15 +48,17 @@ pub struct EngineGlobals {
     pub screen: [f32; 4],
     pub opacity: f32,
     pub shader_opacity: f32,
-    pub _padding: [f32; 2],
+    pub scale_factor: f32,
+    pub _padding: [f32; 1],
 }
 
 impl InstanceData {
-    const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
+    const ATTRS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
         0 => Float32x2, // pos
         1 => Float32,   // rotation
         2 => Float32x2, // size
         3 => Float32x4, // uv_rect
+        4 => Float32x4, // clip_rect
     ];
 
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
