@@ -1,37 +1,52 @@
-//! Spot - A simple 2D graphics library for drawing images.
+//! # spottedcat
 //!
-//! # Example
-//! ```no_run
-//! use spottedcat::{Context, DrawOption, Image, Spot, switch_scene};
+//! Spottedcat is a lightweight cross-platform 2D/3D game engine built with Rust and wgpu.
+//! It provides a simple API for rendering, input, audio, text, and scene management across desktop, web, iOS, and Android.
+//! Designed for fast prototyping and creative interactive projects, it aims to stay small, practical, and easy to use.
+//!
+//! ## Basic Example
+//!
+//! ```rust,no_run
+//! use spottedcat::{Context, Spot, Image, DrawOption, Pt, WindowConfig};
+//! use std::time::Duration;
 //!
 //! struct MyApp {
 //!     image: Image,
 //! }
 //!
 //! impl Spot for MyApp {
-//!     fn initialize(_ctx: &mut Context) -> Self {
-//!         let rgba = vec![255u8; 256 * 256 * 4];
-//!         let image = spottedcat::image::create(_ctx, 256u32.into(), 256u32.into(), &rgba).unwrap();
+//!     fn initialize(ctx: &mut Context) -> Self {
+//!         // Create an image from raw RGBA8 data
+//!         let rgba = vec![255u8; 64 * 64 * 4]; // Red square
+//!         let image = spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
+//!             .expect("Failed to create image");
 //!         Self { image }
 //!     }
 //!
+//!     fn update(&mut self, _ctx: &mut Context, _dt: Duration) {
+//!         // Handle logic here
+//!     }
+//!
 //!     fn draw(&mut self, ctx: &mut Context) {
+//!         let (w, h) = spottedcat::window_size(ctx);
+//!         
+//!         // Draw image at center
 //!         let opts = DrawOption::default()
-//!             .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)])
-//!             .with_scale([0.78125, 0.78125]);
+//!             .with_position([w / 2.0, h / 2.0])
+//!             .with_scale([2.0, 2.0]);
+//!             
 //!         spottedcat::image::draw(ctx, self.image, opts);
 //!     }
 //!
-//!     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
 //!     fn remove(&mut self, _ctx: &mut Context) {}
 //! }
 //!
 //! fn main() {
-//!     spottedcat::run::<MyApp>(spottedcat::WindowConfig::default());
+//!     spottedcat::run::<MyApp>(WindowConfig {
+//!         title: "SpottedCat Example".to_string(),
+//!         ..Default::default()
+//!     });
 //! }
-//!
-//! // Scene switching example:
-//! // switch_scene::<NewScene>();  // Switches to NewScene
 //! ```
 
 #[cfg(target_os = "android")]
@@ -46,7 +61,7 @@ mod drawable_3d;
 #[cfg(feature = "effects")]
 mod fog;
 mod glyph_cache;
-pub mod graphics;
+mod graphics;
 pub mod image;
 mod image_raw;
 mod input;
@@ -80,7 +95,7 @@ pub use drawable::DrawOption;
 pub use drawable_3d::DrawOption3D;
 #[cfg(feature = "effects")]
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
-pub use graphics::core::Graphics;
+
 pub use image::{Bounds, Image};
 pub use input::InputManager;
 pub use key::Key;
@@ -98,17 +113,19 @@ pub use touch::{TouchInfo, TouchPhase};
 
 // --- Functional API ---
 
-/// Registers a TTF/OTF font for text rendering.
+/// Registers a TTF/OTF font for text rendering and returns a unique font ID.
 pub fn register_font(ctx: &mut Context, font_data: Vec<u8>) -> u32 {
     ctx.register_font(font_data)
 }
 
-/// Registers a custom WGSL shader for image rendering.
+/// Registers a custom WGSL fragment shader extension for image rendering.
+///
+/// The shader should define a `user_fs_hook()` function to modify the output color.
 pub fn register_shader(ctx: &mut Context, user_functions: &str) -> u32 {
     ctx.register_image_shader(user_functions)
 }
 
-/// Creates a point value from a scalar.
+/// Creates a logical point value ([`Pt`][crate::Pt]) from a scalar.
 pub fn pt(x: f32) -> Pt {
     Pt::from(x)
 }
@@ -148,7 +165,7 @@ pub fn set_window_size(ctx: &mut Context, width: Pt, height: Pt) {
     ctx.set_window_logical_size(width, height);
 }
 
-/// Returns the window's logical size.
+/// Returns the window's logical size as a tuple of `(width, height)`.
 pub fn window_size(ctx: &Context) -> (Pt, Pt) {
     ctx.window_logical_size()
 }
@@ -231,6 +248,8 @@ pub fn delta_time(ctx: &Context) -> std::time::Duration {
 }
 
 /// Returns the time elapsed since the last frame in seconds.
+///
+/// This is a convenience for `delta_time(ctx).as_secs_f32()`.
 pub fn dt(ctx: &Context) -> f32 {
     ctx.delta_time().as_secs_f32()
 }

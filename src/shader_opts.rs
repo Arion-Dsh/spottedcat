@@ -1,6 +1,12 @@
 use bytemuck::Pod;
 
+/// Uniform options passed to the fragment shader during rendering.
+///
+/// These options allow for dynamic control over how an image or text is rendered,
+/// including standard properties like opacity and UV transformation, as well as
+/// custom user-defined parameters.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
 pub struct ShaderOpts {
     pub(crate) bytes: [u8; crate::image_raw::ImageRenderer::GLOBALS_SIZE_BYTES],
     pub(crate) opacity: f32,
@@ -8,10 +14,17 @@ pub struct ShaderOpts {
 
 impl Default for ShaderOpts {
     fn default() -> Self {
-        Self {
+        let mut out = Self {
             bytes: [0u8; crate::image_raw::ImageRenderer::GLOBALS_SIZE_BYTES],
             opacity: 1.0,
-        }
+        };
+        // Initialize with standard defaults:
+        // Tint = [1, 1, 1, 1]
+        out.set_vec4(0, [1.0, 1.0, 1.0, 1.0]);
+        // UV Offset = [0, 0]
+        // UV Scale = [1, 1]
+        out.set_vec4(1, [0.0, 0.0, 1.0, 1.0]);
+        out
     }
 }
 

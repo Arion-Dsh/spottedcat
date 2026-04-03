@@ -1,3 +1,4 @@
+/// Represents a button on a mouse or similar pointing device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MouseButton {
     Left,

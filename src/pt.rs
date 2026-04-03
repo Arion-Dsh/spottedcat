@@ -2,6 +2,11 @@ use std::fmt::Display;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+/// A single dimension unit for logical screen positions and sizes.
+///
+/// `Pt` is the primary unit used throughout the library to define layout and drawing
+/// coordinates. It abstractly represents a "logical pixel" that remains consistent regardless
+/// of the physical screen resolution or DPI scale.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Pt(pub(crate) f32);
 
@@ -38,10 +43,12 @@ impl Ord for Pt {
 }
 
 impl Pt {
+    /// Returns the underlying float value as logical coordinate.
     pub fn as_f32(self) -> f32 {
         self.0
     }
 
+    /// Returns the rounded value as an integer, typically for pixel-perfect alignment.
     pub fn as_i32(self) -> i32 {
         let v = if self.0.is_finite() { self.0 } else { 0.0 };
         v.round() as i32

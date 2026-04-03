@@ -37,7 +37,7 @@ type GraphicsModel3dState = Option<Graphics3D>;
 #[derive(Debug, Default)]
 pub(crate) struct GraphicsModel3dState;
 
-pub struct Graphics {
+pub(crate) struct Graphics {
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
     pub(crate) adapter: wgpu::Adapter,
@@ -406,6 +406,7 @@ impl Graphics {
 }
 
 // Basic math helpers
+
 pub fn identity() -> [[f32; 4]; 4] {
     [
         [1.0, 0.0, 0.0, 0.0],
@@ -425,22 +426,18 @@ pub fn create_scale(s: [f32; 3]) -> [[f32; 4]; 4] {
 }
 
 pub fn create_rotation_from_quat(q: [f32; 4]) -> [[f32; 4]; 4] {
-    let x = q[0];
-    let y = q[1];
-    let z = q[2];
-    let w = q[3];
-    let x2 = x + x;
-    let y2 = y + y;
-    let z2 = z + z;
-    let xx = x * x2;
-    let xy = x * y2;
-    let xz = x * z2;
-    let yy = y * y2;
-    let yz = y * z2;
-    let zz = z * z2;
-    let wx = w * x2;
-    let wy = w * y2;
-    let wz = w * z2;
+    let x2 = q[0] + q[0];
+    let y2 = q[1] + q[1];
+    let z2 = q[2] + q[2];
+    let xx = q[0] * x2;
+    let xy = q[0] * y2;
+    let xz = q[0] * z2;
+    let yy = q[1] * y2;
+    let yz = q[1] * z2;
+    let zz = q[2] * z2;
+    let wx = q[3] * x2;
+    let wy = q[3] * y2;
+    let wz = q[3] * z2;
 
     [
         [1.0 - (yy + zz), xy + wz, xz - wy, 0.0],

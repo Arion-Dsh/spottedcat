@@ -53,6 +53,7 @@ impl Default for DrawOption {
 }
 
 impl DrawOption {
+    /// Creates a new DrawOption with position, rotation, and scale.
     pub fn new(position: [Pt; 2], rotation: f32, scale: [f32; 2], layer: i32) -> Self {
         Self {
             position,
@@ -68,6 +69,7 @@ impl DrawOption {
         self.position
     }
 
+    /// Sets the drawing position. Coordinates are logical Pt relative to parent or window.
     pub fn with_position(mut self, position: [Pt; 2]) -> Self {
         self.position = position;
         self
@@ -81,6 +83,7 @@ impl DrawOption {
         self.rotation
     }
 
+    /// Sets the rotation in radians.
     pub fn with_rotation(mut self, rotation: f32) -> Self {
         self.rotation = rotation;
         self
@@ -90,6 +93,7 @@ impl DrawOption {
         self.scale
     }
 
+    /// Sets the scale multiplier (e.g., [2.0, 2.0] for double size).
     pub fn with_scale(mut self, scale: [f32; 2]) -> Self {
         self.scale = scale;
         self
@@ -99,6 +103,7 @@ impl DrawOption {
         self.opacity
     }
 
+    /// Sets the opacity (alpha multiplier), from 0.0 to 1.0.
     pub fn with_opacity(mut self, opacity: f32) -> Self {
         self.opacity = opacity.clamp(0.0, 1.0);
         self
@@ -108,11 +113,13 @@ impl DrawOption {
         self.layer
     }
 
+    /// Sets the rendering layer (sorting index). Higher values are drawn later.
     pub fn with_layer(mut self, layer: i32) -> Self {
         self.layer = layer;
         self
     }
 
+    /// Sets an optional clipping rectangle [x, y, width, height] in logical coordinates.
     pub fn with_clip(mut self, clip: Option<[Pt; 4]>) -> Self {
         self.clip = clip;
         self

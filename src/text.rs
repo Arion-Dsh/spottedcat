@@ -104,13 +104,14 @@ impl Text {
         }
     }
 
+    /// Sets the color of the text (RGBA, 0.0 to 1.0).
     pub fn set_color(&mut self, color: [f32; 4]) {
         if self.color != color {
             self.color = color;
-            // self.dirty = true; // Color change does not need re-layout if using tinting
         }
     }
 
+    /// Sets the font size in logical pixels (Pt).
     pub fn set_font_size(&mut self, font_size: crate::Pt) {
         if self.font_size != font_size {
             self.font_size = font_size;
@@ -118,6 +119,7 @@ impl Text {
         }
     }
 
+    /// Sets the maximum width for text wrapping. Use `None` to disable wrapping.
     pub fn set_max_width(&mut self, max_width: Option<crate::Pt>) {
         if self.max_width != max_width {
             self.max_width = max_width;
@@ -125,6 +127,7 @@ impl Text {
         }
     }
 
+    /// Builder method to set the font size.
     pub fn with_font_size(mut self, font_size: crate::Pt) -> Self {
         if self.font_size != font_size {
             self.font_size = font_size;
@@ -133,12 +136,13 @@ impl Text {
         self
     }
 
+    /// Builder method to set the text color.
     pub fn with_color(mut self, color: [f32; 4]) -> Self {
         self.color = color;
-        // self.dirty.store(true, Ordering::SeqCst);
         self
     }
 
+    /// Builder method to set the stroke (outline) width.
     pub fn with_stroke_width(mut self, stroke_width: crate::Pt) -> Self {
         if self.stroke_width != stroke_width {
             self.stroke_width = stroke_width;
@@ -147,6 +151,7 @@ impl Text {
         self
     }
 
+    /// Builder method to set the stroke (outline) color.
     pub fn with_stroke_color(mut self, stroke_color: [f32; 4]) -> Self {
         if self.stroke_color != stroke_color {
             self.stroke_color = stroke_color;
@@ -155,6 +160,7 @@ impl Text {
         self
     }
 
+    /// Builder method to set the maximum width for text wrapping.
     pub fn with_max_width(mut self, max_width: crate::Pt) -> Self {
         if self.max_width != Some(max_width) {
             self.max_width = Some(max_width);
@@ -180,10 +186,12 @@ impl Text {
         self.font_size
     }
 
+    /// Returns the font ID associated with this text.
     pub fn font_id(&self) -> u32 {
         self.font_id
     }
 
+    /// Returns the maximum width for text wrapping, if set.
     pub fn max_width(&self) -> Option<crate::Pt> {
         self.max_width
     }

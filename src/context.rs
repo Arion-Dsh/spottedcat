@@ -2,7 +2,7 @@ use crate::DrawOption;
 use crate::audio::AudioSystem;
 use crate::context_3d::{Model3dRegistry, Model3dRuntime};
 use crate::drawable::DrawCommand;
-use crate::Graphics;
+use crate::graphics::core::Graphics;
 use crate::input::InputManager;
 use crate::pt::Pt;
 use crate::shader_opts::ShaderOpts;
@@ -151,10 +151,12 @@ impl Context {
         self.runtime.total_elapsed = self.runtime.total_elapsed.saturating_add(dt);
     }
 
+    /// Returns the time elapsed since the last frame.
     pub(crate) fn delta_time(&self) -> std::time::Duration {
         self.runtime.delta_time
     }
 
+    /// Returns the total time elapsed since the engine started.
     pub(crate) fn total_elapsed(&self) -> std::time::Duration {
         self.runtime.total_elapsed
     }
@@ -208,16 +210,19 @@ impl Context {
         self.runtime.pending_fullscreen.take()
     }
 
+    /// Returns the logical size of the window in Pt.
     pub(crate) fn window_logical_size(&self) -> (Pt, Pt) {
         self.runtime.window_logical_size
     }
 
+    /// Returns a horizontal length equivalent to `percent` of the window width.
     pub(crate) fn vw(&self, percent: f32) -> Pt {
         let (w, _) = self.runtime.window_logical_size;
         let p = if percent.is_finite() { percent } else { 0.0 };
         Pt::from(w.as_f32() * (p / 100.0))
     }
 
+    /// Returns a vertical length equivalent to `percent` of the window height.
     pub(crate) fn vh(&self, percent: f32) -> Pt {
         let (_, h) = self.runtime.window_logical_size;
         let p = if percent.is_finite() { percent } else { 0.0 };
@@ -341,6 +346,7 @@ impl Context {
         self.runtime.scale_factor = scale_factor;
     }
 
+    /// Returns the window's scale factor (DPI).
     pub(crate) fn scale_factor(&self) -> f64 {
         self.runtime.scale_factor
     }

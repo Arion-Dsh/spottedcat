@@ -15,15 +15,19 @@ pub struct Bounds {
     pub(crate) height: Pt,
 }
 impl Bounds {
+    /// Returns the width of the bounds.
     pub fn width(&self) -> Pt {
         self.width
     }
+    /// Returns the height of the bounds.
     pub fn height(&self) -> Pt {
         self.height
     }
+    /// Returns the X coordinate of the top-left corner.
     pub fn x(&self) -> Pt {
         self.x
     }
+    /// Returns the Y coordinate of the top-left corner.
     pub fn y(&self) -> Pt {
         self.y
     }
@@ -55,12 +59,15 @@ pub struct Image {
 }
 
 impl Image {
+    /// Returns the logical width of the image.
     pub fn width(&self) -> Pt {
         self.width
     }
+    /// Returns the logical height of the image.
     pub fn height(&self) -> Pt {
         self.height
     }
+    /// Returns the internal unique identifier for this image.
     pub fn id(&self) -> u32 {
         self.id
     }
@@ -236,6 +243,9 @@ impl Image {
         Ok(())
     }
 
+    /// Returns the source-texture bounds of this image.
+    ///
+    /// For sub-images, this represents the region relative to the parent atlas.
     pub fn bounds(self) -> anyhow::Result<Bounds> {
         Ok(Bounds {
             x: self.x,

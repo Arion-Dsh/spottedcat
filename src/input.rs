@@ -11,6 +11,10 @@ use crate::Pt;
 use crate::touch::{TouchInfo, TouchPhase};
 
 #[derive(Debug, Clone)]
+/// Manages the state of all input devices (keyboard, mouse, touch, sensors).
+///
+/// `InputManager` tracks which keys and buttons are currently held down, which ones
+/// were just pressed or released in the current frame, and aggregates touch/sensor data.
 pub struct InputManager {
     keys_down: [u64; Key::WORDS],
     keys_pressed: [u64; Key::WORDS],
@@ -97,14 +101,17 @@ fn key_word_bit(key: Key) -> (usize, u64) {
 }
 
 impl InputManager {
+    /// Creates a new InputManager with default state.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Returns true if text input (IME) is currently enabled.
     pub fn text_input_enabled(&self) -> bool {
         self.text_input_enabled
     }
 
+    /// Enables or disables text input (IME). When disabled, text events are ignored.
     pub fn set_text_input_enabled(&mut self, enabled: bool) {
         self.text_input_enabled = enabled;
         if !enabled {
@@ -113,26 +120,32 @@ impl InputManager {
         }
     }
 
+    /// Returns true if the window currently has input focus.
     pub fn is_focused(&self) -> bool {
         self.focused
     }
 
+    /// Returns the current hardware cursor position in logical coordinates.
     pub fn cursor_position(&self) -> Option<(Pt, Pt)> {
         self.cursor_position
     }
 
+    /// Returns the scroll wheel delta since the last frame.
     pub fn scroll_delta(&self) -> (f32, f32) {
         self.scroll_delta
     }
 
+    /// Returns the accumulated text input string for the current frame.
     pub fn text_input(&self) -> &str {
         &self.text_input
     }
 
+    /// Returns the current IME pre-edit string (uncommitted text).
     pub fn ime_preedit(&self) -> Option<&str> {
         self.ime_preedit.as_deref()
     }
 
+    /// Returns a slice of active touch points.
     pub fn touches(&self) -> &[TouchInfo] {
         &self.touches
     }
@@ -177,21 +190,25 @@ impl InputManager {
         self.step_detected
     }
 
+    /// Returns true if the specified key is currently held down.
     pub fn key_down(&self, key: Key) -> bool {
         let (w, m) = key_word_bit(key);
         (self.keys_down[w] & m) != 0
     }
 
+    /// Returns true if the specified key was just pressed this frame.
     pub fn key_pressed(&self, key: Key) -> bool {
         let (w, m) = key_word_bit(key);
         (self.keys_pressed[w] & m) != 0
     }
 
+    /// Returns true if the specified key was just released this frame.
     pub fn key_released(&self, key: Key) -> bool {
         let (w, m) = key_word_bit(key);
         (self.keys_released[w] & m) != 0
     }
 
+    /// Returns true if the specified mouse button is currently held down.
     pub fn mouse_down(&self, button: SpotMouseButton) -> bool {
         match button.bit_index() {
             Some(i) => (self.mouse_down & (1u8 << i)) != 0,
@@ -204,6 +221,7 @@ impl InputManager {
         }
     }
 
+    /// Returns true if the specified mouse button was just pressed this frame.
     pub fn mouse_pressed(&self, button: SpotMouseButton) -> bool {
         match button.bit_index() {
             Some(i) => (self.mouse_pressed & (1u8 << i)) != 0,
@@ -216,6 +234,7 @@ impl InputManager {
         }
     }
 
+    /// Returns true if the specified mouse button was just released this frame.
     pub fn mouse_released(&self, button: SpotMouseButton) -> bool {
         match button.bit_index() {
             Some(i) => (self.mouse_released & (1u8 << i)) != 0,

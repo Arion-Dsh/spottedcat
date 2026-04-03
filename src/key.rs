@@ -1,3 +1,7 @@
+/// Represents a physical key on a keyboard.
+///
+/// This enum covers standard US-layout keys and is used by the [`InputManager`]
+/// to track key states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]
 pub enum Key {
