@@ -63,9 +63,9 @@ struct MyApp {
 
 impl Spot for MyApp {
     fn initialize(ctx: &mut Context) -> Self {
-        // Create an image from raw RGBA8 data (or use the 'image' crate to load pixels)
+        // Create an image from raw RGBA8 data
         let rgba = vec![255u8; 64 * 64 * 4]; // Red square
-        let image = Image::new_from_rgba8(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
+        let image = spottedcat::create_image(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
             .expect("Failed to create image");
         Self { image }
     }
@@ -81,7 +81,8 @@ impl Spot for MyApp {
         let opts = DrawOption::default()
             .with_position([w / 2.0, h / 2.0])
             .with_scale([2.0, 2.0]);
-        self.image.draw(ctx, opts);
+            
+        spottedcat::image::draw(ctx, self.image, opts);
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
@@ -103,20 +104,28 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 
 ### Core Components
 
-- **`Context`**: Central state for managing draw commands, input, audio, and resources.
+- **`Context`**: Central state for managing draw commands, input, audio, and resources. Hides internal methods to ensure consistency.
 - **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for 2D drawing. Supports sub-images and raw data creation.
-- **`Model`**: 3D model handle for rendering meshes, PBR materials, and skeletal animations. Supports extreme performance Instanced Rendering (`draw_instanced`).
-- **`Text`**: High-level text rendering with font registration and layout.
+- **`Image`**: GPU texture handle for 2D drawing. Created via `spottedcat::create_image(ctx, ...)` and rendered via `spottedcat::image::draw(ctx, ...)`.
+- **`Model`**: 3D model handle created and rendered via `spottedcat::model::*`.
+- **`Text`**: High-level text structure for 2D layout.
 - **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
 - **`DrawOption3D`**: Configuration for 3D model placement (position, rotation, scale).
 
+### API Style
+
+- **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `create_image`, `register_font`, `set_window_size`, `key_down`, `play_sound`).
+- **Resource operations** stay inside their domains:
+  - `spottedcat::image::*` for image draw/scope/ready checks.
+  - `spottedcat::model::*` for model create/draw/instancing/shader draw.
+  - `spottedcat::text::*` for text draw/measure.
+
 ### Key Systems
 
-- **Input**: Check keys with `key_down(ctx, ...)`, mouse with `mouse_button_pressed(ctx, ...)`, or get `touches(ctx)`.
-- **Audio**: Load and play sounds with `play_sound(ctx, ...)`, or generate tones with `play_sine(ctx, ...)`.
-- **Scenes**: Transition between states using `switch_scene::<NewScene>()`.
-- **Resources**: Share data between systems via `ctx.get_resource::<T>()`.
+- **Input**: Check keys with `spottedcat::key_down(ctx, ...)`, mouse with `spottedcat::mouse_down(ctx, ...)`, or get `spottedcat::mouse_pos(ctx)`.
+- **Audio**: Play sounds with `spottedcat::play_sound(ctx, ...)`.
+- **Scenes**: Transition between states using `spottedcat::switch_scene::<NewScene>()`.
+- **Resources**: Share data between systems via `spottedcat::get_resource::<T>(ctx)`.
 
 ### Sensors
 

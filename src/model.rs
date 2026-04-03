@@ -52,7 +52,7 @@ impl Model {
     }
 
     /// Creates a new model from vertex and index data.
-    pub fn new(
+    pub(crate) fn new(
         ctx: &mut crate::Context,
         vertices: &[Vertex],
         indices: &[u32],
@@ -117,7 +117,7 @@ impl Model {
     }
 
     /// Appends a new sub-mesh part to the model.
-    pub fn add_part(
+    pub(crate) fn add_part(
         &mut self,
         ctx: &mut crate::Context,
         vertices: &[Vertex],
@@ -133,7 +133,7 @@ impl Model {
     }
 
     /// Chaining version of add_part.
-    pub fn with_part(
+    pub(crate) fn with_part(
         mut self,
         ctx: &mut crate::Context,
         vertices: &[Vertex],
@@ -145,7 +145,7 @@ impl Model {
     }
 
     /// Creates a simple cube model with the specified size.
-    pub fn cube(ctx: &mut crate::Context, size: f32) -> anyhow::Result<Self> {
+    pub(crate) fn cube(ctx: &mut crate::Context, size: f32) -> anyhow::Result<Self> {
         let s = size / 2.0;
         let vertices = vec![
             // Front face
@@ -356,7 +356,7 @@ impl Model {
     }
 
     /// Creates a 2D plane model in 3D space, facing +Z. Good for billboards or ground planes.
-    pub fn plane(ctx: &mut crate::Context, width: f32, height: f32) -> anyhow::Result<Self> {
+    pub(crate) fn plane(ctx: &mut crate::Context, width: f32, height: f32) -> anyhow::Result<Self> {
         let hw = width / 2.0;
         let hh = height / 2.0;
 
@@ -402,7 +402,7 @@ impl Model {
     }
 
     /// Creates a UV sphere model with the specified radius.
-    pub fn sphere(ctx: &mut crate::Context, radius: f32) -> anyhow::Result<Self> {
+    pub(crate) fn sphere(ctx: &mut crate::Context, radius: f32) -> anyhow::Result<Self> {
         let segments = 32;
         let rings = 16;
         let mut vertices = Vec::new();
@@ -455,7 +455,7 @@ impl Model {
         Self::new(ctx, &vertices, &indices)
     }
 
-    pub fn draw(&self, ctx: &mut crate::Context, options: crate::DrawOption3D) {
+    pub(crate) fn draw(&self, ctx: &mut crate::Context, options: crate::DrawOption3D) {
         ctx.push_3d(crate::drawable::DrawCommand3D::Model(
             self.clone(),
             options,
@@ -465,7 +465,7 @@ impl Model {
         ));
     }
 
-    pub fn draw_skinned(
+    pub(crate) fn draw_skinned(
         &self,
         ctx: &mut crate::Context,
         options: crate::DrawOption3D,
@@ -480,7 +480,7 @@ impl Model {
         ));
     }
 
-    pub fn draw_with_shader(
+    pub(crate) fn draw_with_shader(
         &self,
         ctx: &mut crate::Context,
         shader_id: u32,
@@ -501,7 +501,7 @@ impl Model {
     ///
     /// `transforms` should be an array of 4x4 matrices representing the View/Model transformations
     /// for each instance. This achieves massive performance improvements for identical meshes.
-    pub fn draw_instanced(
+    pub(crate) fn draw_instanced(
         &self,
         ctx: &mut crate::Context,
         options: crate::DrawOption3D,
@@ -514,7 +514,7 @@ impl Model {
     }
 
     /// Renders instances using a caller-owned transform buffer without making an extra copy.
-    pub fn draw_instanced_owned(
+    pub(crate) fn draw_instanced_owned(
         &self,
         ctx: &mut crate::Context,
         options: crate::DrawOption3D,
@@ -527,7 +527,7 @@ impl Model {
     }
 
     /// Renders instances backed by shared transform data.
-    pub fn draw_instanced_shared(
+    pub(crate) fn draw_instanced_shared(
         &self,
         ctx: &mut crate::Context,
         options: crate::DrawOption3D,
@@ -603,4 +603,61 @@ impl Vertex {
 pub struct MeshDataPersistent {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+}
+
+/// Creates a model from vertex/index data.
+pub fn create(ctx: &mut crate::Context, vertices: &[Vertex], indices: &[u32]) -> anyhow::Result<Model> {
+    Model::new(ctx, vertices, indices)
+}
+
+/// Creates a cube model.
+pub fn create_cube(ctx: &mut crate::Context, size: f32) -> anyhow::Result<Model> {
+    Model::cube(ctx, size)
+}
+
+/// Creates a plane model.
+pub fn create_plane(ctx: &mut crate::Context, width: f32, height: f32) -> anyhow::Result<Model> {
+    Model::plane(ctx, width, height)
+}
+
+/// Creates a sphere model.
+pub fn create_sphere(ctx: &mut crate::Context, radius: f32) -> anyhow::Result<Model> {
+    Model::sphere(ctx, radius)
+}
+
+/// Draws a model.
+pub fn draw(ctx: &mut crate::Context, model: &Model, options: crate::DrawOption3D) {
+    model.draw(ctx, options);
+}
+
+/// Draws a model with a custom shader.
+pub fn draw_with_shader(
+    ctx: &mut crate::Context,
+    model: &Model,
+    shader_id: u32,
+    options: crate::DrawOption3D,
+    shader_opts: crate::ShaderOpts,
+    skin_id: Option<u32>,
+) {
+    model.draw_with_shader(ctx, shader_id, options, shader_opts, skin_id);
+}
+
+/// Draws instanced models from borrowed transform data.
+pub fn draw_instanced(
+    ctx: &mut crate::Context,
+    model: &Model,
+    options: crate::DrawOption3D,
+    transforms: &[[[f32; 4]; 4]],
+) {
+    model.draw_instanced(ctx, options, transforms);
+}
+
+/// Draws instanced models from Arc-backed shared transform data.
+pub fn draw_instanced_shared(
+    ctx: &mut crate::Context,
+    model: &Model,
+    options: crate::DrawOption3D,
+    transforms: std::sync::Arc<[[[f32; 4]; 4]]>,
+) {
+    model.draw_instanced_shared(ctx, options, transforms);
 }

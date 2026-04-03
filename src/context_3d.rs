@@ -67,8 +67,18 @@ pub(crate) struct Model3dRegistry;
 
 #[cfg(feature = "model-3d")]
 impl Context {
+    pub fn set_camera(&mut self, eye: [f32; 3], target: [f32; 3], up: [f32; 3]) {
+        self.runtime.model_3d.camera.eye = eye;
+        self.runtime.model_3d.camera.target = target;
+        self.runtime.model_3d.camera.up = up;
+    }
+
     pub fn set_camera_pos(&mut self, pos: [f32; 3]) {
         self.runtime.model_3d.camera.eye = pos;
+    }
+
+    pub fn camera_position(&self) -> [f32; 3] {
+        self.runtime.model_3d.camera.eye
     }
 
     pub fn set_camera_target(&mut self, x: f32, y: f32, z: f32) {
@@ -118,6 +128,10 @@ impl Context {
         if let Some(g) = self.runtime.graphics.as_mut() {
             g.ensure_model_3d().scene_globals.ambient_color = color;
         }
+    }
+
+    pub fn set_ambient(&mut self, color: [f32; 4]) {
+        self.set_ambient_light(color);
     }
 
     pub fn set_light(&mut self, index: usize, position: [f32; 4], color: [f32; 4]) {

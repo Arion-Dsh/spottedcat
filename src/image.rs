@@ -1,4 +1,4 @@
-use crate::Pt;
+use crate::{Context, DrawOption, Pt, ShaderOpts};
 
 use std::sync::Arc;
 
@@ -66,7 +66,7 @@ impl Image {
     }
 
     /// Returns true if the image is ready for rendering.
-    pub fn is_ready(&self, ctx: &crate::Context) -> bool {
+    pub(crate) fn is_ready(&self, ctx: &crate::Context) -> bool {
         ctx.registry
             .images
             .get(self.index())
@@ -99,7 +99,7 @@ impl std::hash::Hash for Image {
 impl Image {
     /// Errors
     /// Returns an error if the data length doesn't match width * height * 4.
-    pub fn new_from_rgba8(
+    pub(crate) fn new_from_rgba8(
         ctx: &mut crate::Context,
         width: Pt,
         height: Pt,
@@ -123,7 +123,7 @@ impl Image {
 
     /// Arguments
     /// * `image` - The source image to copy
-    pub fn new_from_image(ctx: &mut crate::Context, image: Image) -> anyhow::Result<Self> {
+    pub(crate) fn new_from_image(ctx: &mut crate::Context, image: Image) -> anyhow::Result<Self> {
         Self::sub_image(
             ctx,
             image,
@@ -147,7 +147,7 @@ impl Image {
     ///
     /// # Errors
     /// Returns an error if the bounds are out of range.
-    pub fn sub_image(
+    pub(crate) fn sub_image(
         ctx: &mut crate::Context,
         image: Image,
         bounds: Bounds,
@@ -196,7 +196,7 @@ impl Image {
     /// opts = opts.with_scale([2.0, 2.0]);
     /// image.draw(&mut ctx, opts);
     /// ```
-    pub fn draw(self, ctx: &mut crate::Context, options: crate::DrawOption) {
+    pub(crate) fn draw(self, ctx: &mut crate::Context, options: crate::DrawOption) {
         ctx.push(crate::drawable::DrawCommand::Image(Box::new(
             crate::drawable::ImageCommand {
                 id: self.id,
@@ -208,7 +208,7 @@ impl Image {
         )));
     }
 
-    pub fn draw_with_shader(
+    pub(crate) fn draw_with_shader(
         self,
         ctx: &mut crate::Context,
         shader_id: u32,
@@ -226,12 +226,12 @@ impl Image {
         )));
     }
 
-    pub fn clear(self, ctx: &mut crate::Context, color: [f32; 4]) -> anyhow::Result<()> {
+    pub(crate) fn clear(self, ctx: &mut crate::Context, color: [f32; 4]) -> anyhow::Result<()> {
         ctx.push(crate::drawable::DrawCommand::ClearImage(self.id, color));
         Ok(())
     }
 
-    pub fn copy_from(self, ctx: &mut crate::Context, src: Image) -> anyhow::Result<()> {
+    pub(crate) fn copy_from(self, ctx: &mut crate::Context, src: Image) -> anyhow::Result<()> {
         ctx.push(crate::drawable::DrawCommand::CopyImage(self.id, src.id));
         Ok(())
     }
@@ -248,7 +248,7 @@ impl Image {
     /// Destroys the image and frees its GPU resources.
     ///
     /// Returns true if the image was successfully destroyed.
-    pub fn destroy(self, ctx: &mut crate::Context) -> bool {
+    pub(crate) fn destroy(self, ctx: &mut crate::Context) -> bool {
         ctx.registry
             .images
             .get_mut(self.index())
@@ -270,7 +270,7 @@ impl Image {
         [x, y, w, h]
     }
 
-    pub fn with_clip_scope_draw<F, D>(
+    pub(crate) fn with_clip_scope_draw<F, D>(
         self,
         ctx: &mut crate::Context,
         options: crate::DrawOption,
@@ -319,14 +319,14 @@ impl Image {
         ctx.pop_state();
     }
 
-    pub fn with_clip_scope<F>(self, ctx: &mut crate::Context, options: crate::DrawOption, f: F)
+    pub(crate) fn with_clip_scope<F>(self, ctx: &mut crate::Context, options: crate::DrawOption, f: F)
     where
         F: FnOnce(&mut crate::Context),
     {
         self.with_clip_scope_draw(ctx, options, |img, ctx, opts| img.draw(ctx, opts), f);
     }
 
-    pub fn with_shader_scope<F>(
+    pub(crate) fn with_shader_scope<F>(
         self,
         ctx: &mut crate::Context,
         shader_id: u32,
@@ -381,4 +381,56 @@ impl ImageEntry {
     pub(crate) fn is_ready(&self) -> bool {
         self.atlas_index.is_some() && self.uv_rect.is_some()
     }
+}
+
+/// Creates a new image from RGBA8 data.
+pub fn create(ctx: &mut Context, width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Image> {
+    Image::new_from_rgba8(ctx, width, height, rgba)
+}
+
+/// Creates a sub-image from an existing image.
+pub fn create_sub(ctx: &mut Context, image: Image, bounds: Bounds) -> anyhow::Result<Image> {
+    Image::sub_image(ctx, image, bounds)
+}
+
+/// Draws an image to the screen.
+pub fn draw(ctx: &mut Context, image: Image, options: DrawOption) {
+    image.draw(ctx, options);
+}
+
+/// Draws an image with a custom shader.
+pub fn draw_with_shader(
+    ctx: &mut Context,
+    image: Image,
+    shader_id: u32,
+    options: DrawOption,
+    shader_opts: ShaderOpts,
+) {
+    image.draw_with_shader(ctx, shader_id, options, shader_opts);
+}
+
+/// Returns true if the image is ready for rendering.
+pub fn is_ready(ctx: &Context, image: Image) -> bool {
+    image.is_ready(ctx)
+}
+
+/// Draws an image and clips nested drawing inside its bounds.
+pub fn with_clip_scope<F>(ctx: &mut Context, image: Image, options: DrawOption, f: F)
+where
+    F: FnOnce(&mut Context),
+{
+    image.with_clip_scope(ctx, options, f);
+}
+
+/// Applies an image shader scope to nested drawing commands.
+pub fn with_shader_scope<F>(
+    ctx: &mut Context,
+    image: Image,
+    shader_id: u32,
+    shader_opts: ShaderOpts,
+    f: F,
+) where
+    F: FnOnce(&mut Context),
+{
+    image.with_shader_scope(ctx, shader_id, shader_opts, f);
 }

@@ -15,7 +15,7 @@ impl Spot for ShaderScopeApp {
             .cycle()
             .take(64 * 64 * 4)
             .collect::<Vec<u8>>();
-        let image = Image::new_from_rgba8(ctx, 64u32.into(), 64u32.into(), &rgba).unwrap();
+        let image = spottedcat::create_image(ctx, 64u32.into(), 64u32.into(), &rgba).unwrap();
 
         // Create a Red image
         let child_rgba = vec![255, 0, 0, 255]
@@ -24,7 +24,7 @@ impl Spot for ShaderScopeApp {
             .take(32 * 32 * 4)
             .collect::<Vec<u8>>();
         let child_image =
-            Image::new_from_rgba8(ctx, 32u32.into(), 32u32.into(), &child_rgba).unwrap();
+            spottedcat::create_image(ctx, 32u32.into(), 32u32.into(), &child_rgba).unwrap();
 
         // A shader that uses screen coordinates to make a visible wave
         // Note: engine uses hooks. global 'user_globals' is available. available vars: in, color.
@@ -64,10 +64,9 @@ impl Spot for ShaderScopeApp {
         shader_opts.set_vec4(0, [self.time, 0.0, 0.0, 0.0]);
 
         // Draw parent with shader scope
-        self.image
-            .with_shader_scope(ctx, self.shader_id, shader_opts, |ctx| {
+        spottedcat::image::with_shader_scope(ctx, self.image, self.shader_id, shader_opts, |ctx| {
                 // Draw the parent itself (it needs to be drawn explicitly if we want it visible)
-                self.image.draw(ctx, opts);
+                spottedcat::image::draw(ctx, self.image, opts);
 
                 // Draw child relative to parent
                 let child_opts = DrawOption::default().with_position([
@@ -76,13 +75,13 @@ impl Spot for ShaderScopeApp {
                 ]); // Slightly offset
 
                 // This child should INHERIT the shader and the wave should be continuous
-                self.child_image.draw(ctx, child_opts);
+                spottedcat::image::draw(ctx, self.child_image, child_opts);
             });
 
         // Draw another instance WITHOUT scope to compare
         let ref_opts =
             opts.with_position([spottedcat::Pt::from(400.0), spottedcat::Pt::from(200.0)]);
-        self.image.draw(ctx, ref_opts);
+        spottedcat::image::draw(ctx, self.image, ref_opts);
     }
 
     fn update(&mut self, _ctx: &mut Context, dt: std::time::Duration) {

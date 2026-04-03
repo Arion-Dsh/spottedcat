@@ -59,6 +59,13 @@ impl PlatformData {
 }
 
 impl App {
+    fn apply_pending_window_requests(&mut self) {
+        // Android path currently ignores dynamic title/cursor/fullscreen requests.
+        let _ = self.ctx.take_window_title_request();
+        let _ = self.ctx.take_cursor_visible_request();
+        let _ = self.ctx.take_fullscreen_request();
+    }
+
     fn request_redraw(&mut self) {
         self.platform.redraw_requested = true;
     }
@@ -225,6 +232,8 @@ impl App {
         let mut should_exit_run_loop = false;
 
         loop {
+            self.apply_pending_window_requests();
+
             let has_drawable_scene = self.scene.has_active_scene()
                 && self.ctx.runtime.graphics.is_some()
                 && (self.platform.floating_surface.is_some() || self.surface.is_some());
@@ -725,6 +734,7 @@ impl App {
 
             // Fixed update loop
             let updates = self.timing.run_updates(4, |dt| {
+                self.ctx.set_delta_time(dt);
                 if let Some(spot) = self.scene.spot_mut() {
                     spot.update(&mut self.ctx, dt);
                 }

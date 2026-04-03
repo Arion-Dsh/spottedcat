@@ -14,16 +14,20 @@ impl Spot for BillboardExample {
         let wall_pixels = vec![
             180, 180, 180, 255, 200, 200, 200, 255, 200, 200, 200, 255, 180, 180, 180, 255,
         ];
-        let wall_tex = Image::new_from_rgba8(ctx, 2.into(), 2.into(), &wall_pixels).unwrap();
+        let wall_tex = spottedcat::create_image(ctx, 2.into(), 2.into(), &wall_pixels).unwrap();
         // A wall is just a stretched cube
-        let wall = Model::cube(ctx, 1.0).unwrap().with_material(wall_tex);
+        let wall = spottedcat::model::create_cube(ctx, 1.0)
+            .unwrap()
+            .with_material(wall_tex);
 
         // Character (a small cube)
         let char_pixels = vec![
             50, 50, 255, 255, 100, 100, 255, 255, 100, 100, 255, 255, 50, 50, 255, 255,
         ];
-        let char_tex = Image::new_from_rgba8(ctx, 2.into(), 2.into(), &char_pixels).unwrap();
-        let character = Model::cube(ctx, 0.5).unwrap().with_material(char_tex);
+        let char_tex = spottedcat::create_image(ctx, 2.into(), 2.into(), &char_pixels).unwrap();
+        let character = spottedcat::model::create_cube(ctx, 0.5)
+            .unwrap()
+            .with_material(char_tex);
 
         // Create a billboard plane for the name tag/health bar
         let mut bb_pixels = vec![0; 4 * 64 * 16];
@@ -46,10 +50,12 @@ impl Spot for BillboardExample {
                 }
             }
         }
-        let bb_tex = Image::new_from_rgba8(ctx, 64.into(), 16.into(), &bb_pixels).unwrap();
+        let bb_tex = spottedcat::create_image(ctx, 64.into(), 16.into(), &bb_pixels).unwrap();
 
         // 1.0 wide, 0.25 tall
-        let billboard_plane = Model::plane(ctx, 1.0, 0.25).unwrap().with_material(bb_tex);
+        let billboard_plane = spottedcat::model::create_plane(ctx, 1.0, 0.25)
+            .unwrap()
+            .with_material(bb_tex);
 
         Self {
             wall,
@@ -68,7 +74,7 @@ impl Spot for BillboardExample {
         let wall_opts = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0])
             .with_scale([0.2, 2.0, 2.0]);
-        self.wall.draw(ctx, wall_opts);
+        spottedcat::model::draw(ctx, &self.wall, wall_opts);
 
         // Calculate a position orbiting around the wall
         let orb_x = (self.time).cos() * 2.0;
@@ -76,7 +82,7 @@ impl Spot for BillboardExample {
         let char_pos = [orb_x, -0.5, orb_z];
 
         let char_opts = DrawOption3D::default().with_position(char_pos);
-        self.character.draw(ctx, char_opts);
+        spottedcat::model::draw(ctx, &self.character, char_opts);
 
         // -- IMPLEMENTING OPTION 1: 3D BILLBOARD --
         // Now draw the Billboard Plane ABOVE the character!
@@ -91,7 +97,7 @@ impl Spot for BillboardExample {
             .with_rotation([0.0, 0.0, 0.0]); // Always face camera
 
         // The name tag will naturally be occluded by the wall when the character walks behind it!
-        self.billboard_plane.draw(ctx, bb_opts);
+        spottedcat::model::draw(ctx, &self.billboard_plane, bb_opts);
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}

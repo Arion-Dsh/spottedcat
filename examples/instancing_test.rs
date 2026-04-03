@@ -14,7 +14,7 @@ struct InstancingTest {
 
 impl Spot for InstancingTest {
     fn initialize(ctx: &mut Context) -> Self {
-        let cube = Model::cube(ctx, 0.5).unwrap();
+        let cube = spottedcat::model::create_cube(ctx, 0.5).unwrap();
 
         let mut transforms = Vec::with_capacity(10000);
         for x in -50..50 {
@@ -91,8 +91,9 @@ impl Spot for InstancingTest {
 
     fn draw(&mut self, ctx: &mut Context) {
         // Draw 10000 cubes in 1 call!
-        self.cube.draw_instanced(
+        spottedcat::model::draw_instanced(
             ctx,
+            &self.cube,
             DrawOption3D::default()
                 .with_position([0.0, -10.0, -80.0])
                 .with_rotation([1.0, self.time * 0.1, 0.0]),
@@ -100,8 +101,9 @@ impl Spot for InstancingTest {
         );
 
         // Draw FPS
-        self.fps_text.draw(
+        spottedcat::text::draw(
             ctx,
+            &self.fps_text,
             DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
         );
     }
@@ -120,4 +122,3 @@ fn main() {
         ..Default::default()
     });
 }
-

@@ -10,7 +10,7 @@ struct MetalSphere {
 impl Spot for MetalSphere {
     fn initialize(ctx: &mut Context) -> Self {
         // 1. Create a smooth sphere
-        let sphere = Model::sphere(ctx, 1.0).unwrap();
+        let sphere = spottedcat::model::create_sphere(ctx, 1.0).unwrap();
 
         // 2. Register a custom "metallic" shader
         // It uses the normal to calculate specular reflection
@@ -48,8 +48,14 @@ impl Spot for MetalSphere {
             .with_rotation([0.0, self.rotation, 0.0]);
 
         // Draw with our metallic shader
-        self.sphere
-            .draw_with_shader(ctx, self.shader_id, opts, ShaderOpts::default(), None);
+        spottedcat::model::draw_with_shader(
+            ctx,
+            &self.sphere,
+            self.shader_id,
+            opts,
+            ShaderOpts::default(),
+            None,
+        );
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}

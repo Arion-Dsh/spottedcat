@@ -45,30 +45,39 @@ impl Spot for InputExample {
     fn draw(&mut self, ctx: &mut Context) {
         let title_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
-        Text::new("Input Example (Use WASD or Arrow keys)", self.font_id)
-            .with_font_size(spottedcat::Pt::from(24.0))
-            .with_color([1.0, 1.0, 1.0, 1.0])
-            .draw(ctx, title_opts);
+        spottedcat::text::draw(
+            ctx,
+            &Text::new("Input Example (Use WASD or Arrow keys)", self.font_id)
+                .with_font_size(spottedcat::Pt::from(24.0))
+                .with_color([1.0, 1.0, 1.0, 1.0]),
+            title_opts,
+        );
 
         let keys_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
-        Text::new(
-            format!("Position: ({:.1}, {:.1})", self.x, self.y),
-            self.font_id,
-        )
-        .with_font_size(spottedcat::Pt::from(20.0))
-        .with_color([0.7, 0.9, 1.0, 1.0])
-        .draw(ctx, keys_opts);
+        spottedcat::text::draw(
+            ctx,
+            &Text::new(
+                format!("Position: ({:.1}, {:.1})", self.x, self.y),
+                self.font_id,
+            )
+            .with_font_size(spottedcat::Pt::from(20.0))
+            .with_color([0.7, 0.9, 1.0, 1.0]),
+            keys_opts,
+        );
 
         let mouse_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(160.0)]);
-        Text::new(
-            "Tip: hold keys for continuous movement; press ESC to reset.",
-            self.font_id,
-        )
-        .with_font_size(spottedcat::Pt::from(18.0))
-        .with_color([0.9, 0.9, 0.9, 1.0])
-        .draw(ctx, mouse_opts);
+        spottedcat::text::draw(
+            ctx,
+            &Text::new(
+                "Tip: hold keys for continuous movement; press ESC to reset.",
+                self.font_id,
+            )
+            .with_font_size(spottedcat::Pt::from(18.0))
+            .with_color([0.9, 0.9, 0.9, 1.0]),
+            mouse_opts,
+        );
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}

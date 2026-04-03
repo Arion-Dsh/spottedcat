@@ -40,6 +40,29 @@ impl App {
         }
     }
 
+    fn apply_pending_window_requests(&mut self) {
+        let Some(window) = self.platform.window.as_ref() else {
+            let _ = self.ctx.take_window_title_request();
+            let _ = self.ctx.take_cursor_visible_request();
+            let _ = self.ctx.take_fullscreen_request();
+            return;
+        };
+
+        if let Some(title) = self.ctx.take_window_title_request() {
+            window.set_title(&title);
+        }
+        if let Some(visible) = self.ctx.take_cursor_visible_request() {
+            window.set_cursor_visible(visible);
+        }
+        if let Some(enabled) = self.ctx.take_fullscreen_request() {
+            if enabled {
+                window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+            } else {
+                window.set_fullscreen(None);
+            }
+        }
+    }
+
     fn create_window_if_needed(&mut self, event_loop: &ActiveEventLoop) {
         if self.platform.window.is_some() {
             return;
@@ -375,6 +398,8 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.apply_pending_window_requests();
+
         if take_quit_request() {
             event_loop.exit();
             return;
@@ -386,6 +411,7 @@ impl ApplicationHandler for App {
                 state.poll(&mut self.ctx.input_mut());
             }
 
+            self.ctx.set_delta_time(dt);
             if let Some(spot) = self.scene.spot_mut() {
                 spot.update(&mut self.ctx, dt);
             }

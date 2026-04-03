@@ -55,6 +55,10 @@ pub fn stop_sound(ctx: &mut Context, play_id: u64) {
     ctx.with_audio(|a| a.stop_play_id(play_id));
 }
 
+pub fn stop_all_sounds(ctx: &mut Context) {
+    ctx.with_audio(|a| a.stop_all_sounds());
+}
+
 pub fn fade_in_sound(ctx: &mut Context, play_id: u64, duration: Duration) {
     ctx.with_audio(|a| a.fade_in_play_id(play_id, duration));
 }

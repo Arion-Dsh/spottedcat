@@ -15,7 +15,7 @@ fn checker_texture(ctx: &mut Context, a: [u8; 4], b: [u8; 4]) -> Image {
         a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3], b[0], b[1], b[2], b[3], a[0], a[1], a[2],
         a[3],
     ];
-    Image::new_from_rgba8(ctx, Pt::from(2.0), Pt::from(2.0), &rgba)
+    spottedcat::create_image(ctx, Pt::from(2.0), Pt::from(2.0), &rgba)
         .expect("checker texture should be created")
 }
 
@@ -27,12 +27,14 @@ impl Spot for RenderStateStress {
         let gold = checker_texture(ctx, [255, 220, 96, 255], [160, 120, 24, 255]);
         let glass = checker_texture(ctx, [180, 220, 255, 180], [80, 120, 180, 120]);
 
-        let cube_red = Model::cube(ctx, 0.9).unwrap().with_material(red);
-        let cube_green = Model::cube(ctx, 0.9).unwrap().with_material(green);
-        let sphere_blue = Model::sphere(ctx, 0.55).unwrap().with_material(blue);
-        let sphere_gold = Model::sphere(ctx, 0.55).unwrap().with_material(gold);
-        let transparent_plane = Model::plane(ctx, 1.8, 1.8).unwrap().with_material(glass);
-        let instanced_cube = Model::cube(ctx, 0.35).unwrap().with_material(gold);
+        let cube_red = spottedcat::model::create_cube(ctx, 0.9).unwrap().with_material(red);
+        let cube_green = spottedcat::model::create_cube(ctx, 0.9).unwrap().with_material(green);
+        let sphere_blue = spottedcat::model::create_sphere(ctx, 0.55).unwrap().with_material(blue);
+        let sphere_gold = spottedcat::model::create_sphere(ctx, 0.55).unwrap().with_material(gold);
+        let transparent_plane = spottedcat::model::create_plane(ctx, 1.8, 1.8)
+            .unwrap()
+            .with_material(glass);
+        let instanced_cube = spottedcat::model::create_cube(ctx, 0.35).unwrap().with_material(gold);
 
         let mut instanced_transforms = Vec::with_capacity(80 * 40);
         for z in 0..40 {
@@ -80,7 +82,7 @@ impl Spot for RenderStateStress {
                 let opts = DrawOption3D::default()
                     .with_position([x, y, z])
                     .with_rotation([spin * 0.4, spin, 0.0]);
-                self.models[model_index].draw(ctx, opts);
+                spottedcat::model::draw(ctx, &self.models[model_index], opts);
             }
         }
 
@@ -91,11 +93,12 @@ impl Spot for RenderStateStress {
                 .with_position([x, 0.0, z])
                 .with_rotation([0.0, self.time * 0.25 + idx as f32 * 0.1, 0.0])
                 .with_opacity(0.35);
-            self.transparent_plane.draw(ctx, opts);
+            spottedcat::model::draw(ctx, &self.transparent_plane, opts);
         }
 
-        self.instanced_cube.draw_instanced_shared(
+        spottedcat::model::draw_instanced_shared(
             ctx,
+            &self.instanced_cube,
             DrawOption3D::default()
                 .with_position([0.0, -10.0, 0.0])
                 .with_rotation([0.15, self.time * 0.15, 0.0]),

@@ -17,7 +17,7 @@ impl Spot for GltfApp {
         ctx.set_camera_pos([0.0, 0.0, 5.0]);
 
         // 2. Create a model (using a sphere for PBR demonstration)
-        let model = Model::sphere(ctx, 1.0).unwrap();
+        let model = spottedcat::model::create_sphere(ctx, 1.0).unwrap();
 
         Self {
             model,
@@ -34,7 +34,7 @@ impl Spot for GltfApp {
             .with_position([0.0, 0.0, 0.0]) // Already at -5 in view space
             .with_rotation([0.0, self.rotation, 0.0]);
 
-        self.model.draw(ctx, opts);
+        spottedcat::model::draw(ctx, &self.model, opts);
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
@@ -108,7 +108,7 @@ pub fn load_gltf(ctx: &mut Context, path: &str) -> anyhow::Result<(Model, u32)> 
         }
     }
 
-    let model = Model::new(ctx, &all_vertices, &all_indices)?;
+    let model = spottedcat::model::create(ctx, &all_vertices, &all_indices)?;
 
     // 2. Extract Skin Data
     let mut skin_id = 0;

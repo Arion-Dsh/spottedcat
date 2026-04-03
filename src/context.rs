@@ -62,6 +62,11 @@ pub(crate) struct ContextRuntime {
     pub(crate) last_image_opts: HashMap<u32, LastImageDrawInfo>,
     pub(crate) graphics: Option<Graphics>,
     pub(crate) audio: Option<AudioSystem>,
+    pub(crate) delta_time: std::time::Duration,
+    pub(crate) total_elapsed: std::time::Duration,
+    pub(crate) pending_window_title: Option<String>,
+    pub(crate) pending_cursor_visible: Option<bool>,
+    pub(crate) pending_fullscreen: Option<bool>,
 }
 
 impl ContextRuntime {
@@ -78,6 +83,11 @@ impl ContextRuntime {
             last_image_opts: HashMap::new(),
             graphics: None,
             audio: None,
+            delta_time: std::time::Duration::from_secs(0),
+            total_elapsed: std::time::Duration::from_secs(0),
+            pending_window_title: None,
+            pending_cursor_visible: None,
+            pending_fullscreen: None,
         }
     }
 }
@@ -135,8 +145,21 @@ impl Context {
         ctx.register_defaults();
         ctx
     }
+    
+    pub(crate) fn set_delta_time(&mut self, dt: std::time::Duration) {
+        self.runtime.delta_time = dt;
+        self.runtime.total_elapsed = self.runtime.total_elapsed.saturating_add(dt);
+    }
+    
+    pub(crate) fn delta_time(&self) -> std::time::Duration {
+        self.runtime.delta_time
+    }
 
-    pub fn with_audio<R>(&mut self, f: impl FnOnce(&mut AudioSystem) -> R) -> Option<R> {
+    pub(crate) fn total_elapsed(&self) -> std::time::Duration {
+        self.runtime.total_elapsed
+    }
+
+    pub(crate) fn with_audio<R>(&mut self, f: impl FnOnce(&mut AudioSystem) -> R) -> Option<R> {
         self.runtime.audio.as_mut().map(f)
     }
 
@@ -155,36 +178,60 @@ impl Context {
         self.register_image_shader(text_shader_src);
     }
 
-    pub fn set_window_logical_size(&mut self, width: Pt, height: Pt) {
+    pub(crate) fn set_window_logical_size(&mut self, width: Pt, height: Pt) {
         let w = Pt(width.0.max(0.0));
         let h = Pt(height.0.max(0.0));
         self.runtime.window_logical_size = (w, h);
     }
 
-    pub fn window_logical_size(&self) -> (Pt, Pt) {
+    pub(crate) fn set_window_title(&mut self, title: impl Into<String>) {
+        self.runtime.pending_window_title = Some(title.into());
+    }
+
+    pub(crate) fn set_cursor_visible(&mut self, visible: bool) {
+        self.runtime.pending_cursor_visible = Some(visible);
+    }
+
+    pub(crate) fn set_fullscreen(&mut self, enabled: bool) {
+        self.runtime.pending_fullscreen = Some(enabled);
+    }
+
+    pub(crate) fn take_window_title_request(&mut self) -> Option<String> {
+        self.runtime.pending_window_title.take()
+    }
+
+    pub(crate) fn take_cursor_visible_request(&mut self) -> Option<bool> {
+        self.runtime.pending_cursor_visible.take()
+    }
+
+    pub(crate) fn take_fullscreen_request(&mut self) -> Option<bool> {
+        self.runtime.pending_fullscreen.take()
+    }
+
+    pub(crate) fn window_logical_size(&self) -> (Pt, Pt) {
         self.runtime.window_logical_size
     }
 
-    pub fn vw(&self, percent: f32) -> Pt {
+    pub(crate) fn vw(&self, percent: f32) -> Pt {
         let (w, _) = self.runtime.window_logical_size;
         let p = if percent.is_finite() { percent } else { 0.0 };
         Pt::from(w.as_f32() * (p / 100.0))
     }
 
-    pub fn vh(&self, percent: f32) -> Pt {
+    pub(crate) fn vh(&self, percent: f32) -> Pt {
         let (_, h) = self.runtime.window_logical_size;
         let p = if percent.is_finite() { percent } else { 0.0 };
         Pt::from(h.as_f32() * (p / 100.0))
     }
 
-    pub fn insert_resource<T: Any>(&mut self, value: Rc<T>) {
+    pub(crate) fn insert_resource<T: Any>(&mut self, value: Rc<T>) {
         self.registry
             .resources
             .inner
             .insert(TypeId::of::<T>(), value as Rc<dyn Any>);
     }
 
-    pub fn get_resource<T: Any>(&self) -> Option<Rc<T>> {
+    pub(crate) fn get_resource<T: Any>(&self) -> Option<Rc<T>> {
         self.registry
             .resources
             .inner
@@ -193,7 +240,7 @@ impl Context {
             .and_then(|v| Rc::downcast::<T>(v).ok())
     }
 
-    pub fn take_resource<T: Any>(&mut self) -> Option<Rc<T>> {
+    pub(crate) fn take_resource<T: Any>(&mut self) -> Option<Rc<T>> {
         self.registry
             .resources
             .inner
@@ -201,7 +248,7 @@ impl Context {
             .and_then(|v| Rc::downcast::<T>(v).ok())
     }
 
-    pub fn register_image(&mut self, width: Pt, height: Pt, rgba: &[u8]) -> crate::Image {
+    pub(crate) fn register_image(&mut self, width: Pt, height: Pt, rgba: &[u8]) -> crate::Image {
         let id = self.registry.next_image_id;
         self.registry.next_image_id += 1;
         let bounds = crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height);
@@ -228,7 +275,7 @@ impl Context {
         }
     }
 
-    pub fn register_sub_image(
+    pub(crate) fn register_sub_image(
         &mut self,
         image: crate::image::Image,
         bounds: crate::image::Bounds,
@@ -247,7 +294,7 @@ impl Context {
         Ok(id)
     }
 
-    pub fn register_font(&mut self, font_data: Vec<u8>) -> u32 {
+    pub(crate) fn register_font(&mut self, font_data: Vec<u8>) -> u32 {
         let id = self.registry.next_font_id;
         self.registry.next_font_id += 1;
         self.registry.fonts.insert(id, font_data);
@@ -255,7 +302,7 @@ impl Context {
         id
     }
 
-    pub fn register_image_shader(&mut self, user_functions: &str) -> u32 {
+    pub(crate) fn register_image_shader(&mut self, user_functions: &str) -> u32 {
         let id = self.registry.next_image_shader_id;
         self.registry.next_image_shader_id += 1;
         self.registry
@@ -282,11 +329,11 @@ impl Context {
         self.runtime.last_image_opts.clear();
     }
 
-    pub fn input(&self) -> &InputManager {
+    pub(crate) fn input(&self) -> &InputManager {
         &self.runtime.input
     }
 
-    pub fn input_mut(&mut self) -> &mut InputManager {
+    pub(crate) fn input_mut(&mut self) -> &mut InputManager {
         &mut self.runtime.input
     }
 
@@ -294,7 +341,7 @@ impl Context {
         self.runtime.scale_factor = scale_factor;
     }
 
-    pub fn scale_factor(&self) -> f64 {
+    pub(crate) fn scale_factor(&self) -> f64 {
         self.runtime.scale_factor
     }
 

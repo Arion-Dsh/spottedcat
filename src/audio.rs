@@ -125,6 +125,10 @@ impl AudioSystem {
         self.0.stop_play_id(play_id);
     }
 
+    pub(crate) fn stop_all_sounds(&self) {
+        self.0.stop_all_sounds();
+    }
+
     pub(crate) fn fade_in_play_id(&self, play_id: u64, duration: Duration) {
         self.0.fade_in_play_id(play_id, duration);
     }
@@ -350,6 +354,15 @@ impl AudioSystemInner {
 
     fn stop_play_id(&self, play_id: u64) {
         self.update_playing(play_id, |sound| sound.finished = true);
+    }
+
+    fn stop_all_sounds(&self) {
+        let Ok(mut handler) = self.handler.lock() else {
+            return;
+        };
+        for sound in &mut handler.sounds {
+            sound.finished = true;
+        }
     }
 
     fn fade_in_play_id(&self, play_id: u64, duration: Duration) {

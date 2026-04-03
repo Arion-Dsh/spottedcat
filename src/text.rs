@@ -208,7 +208,7 @@ impl Text {
     /// # }
     /// ```
     /// Returns the logical size of the text in pixels.
-    pub fn measure(&self, ctx: &Context) -> (f32, f32) {
+    pub(crate) fn measure(&self, ctx: &Context) -> (f32, f32) {
         let (w, h, _) = self.measure_with_y_offset(ctx);
         (w, h)
     }
@@ -219,7 +219,7 @@ impl Text {
     /// align with the measured box. This helps UI vertical centering look correct.
     ///
     /// If max_width is set, text will be wrapped and height will account for multiple lines.
-    pub fn measure_with_y_offset(&self, ctx: &Context) -> (f32, f32, f32) {
+    pub(crate) fn measure_with_y_offset(&self, ctx: &Context) -> (f32, f32, f32) {
         use ab_glyph::{Font as _, FontArc, Glyph, PxScale, ScaleFont as _};
 
         let font_data = match ctx.registry.fonts.get(&self.font_id) {
@@ -480,7 +480,7 @@ impl Text {
         width
     }
 
-    pub fn draw(&self, ctx: &mut Context, options: DrawOption) {
+    pub(crate) fn draw(&self, ctx: &mut Context, options: DrawOption) {
         // Draw text at the exact position provided by the caller
         // The caller is responsible for handling baseline offset if needed
         ctx.push(crate::drawable::DrawCommand::Text(
@@ -488,6 +488,21 @@ impl Text {
             options,
         ));
     }
+}
+
+/// Draws text to the screen.
+pub fn draw(ctx: &mut Context, text: &Text, options: DrawOption) {
+    text.draw(ctx, options);
+}
+
+/// Returns the measured text size in logical pixels.
+pub fn measure(ctx: &Context, text: &Text) -> (f32, f32) {
+    text.measure(ctx)
+}
+
+/// Returns measured text size and y-offset in logical pixels.
+pub fn measure_with_y_offset(ctx: &Context, text: &Text) -> (f32, f32, f32) {
+    text.measure_with_y_offset(ctx)
 }
 
 #[cfg(test)]

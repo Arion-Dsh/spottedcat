@@ -24,7 +24,7 @@ impl Spot for FogWorld {
         ctx.set_camera_up(0.0, 1.0, 0.0);
         ctx.set_ambient_light([0.16, 0.18, 0.17, 1.0]);
 
-        let floor_tex = Image::new_from_rgba8(
+        let floor_tex = spottedcat::create_image(
             ctx,
             Pt::from(2.0),
             Pt::from(2.0),
@@ -34,21 +34,21 @@ impl Spot for FogWorld {
         )
         .unwrap();
         let cube_tex =
-            Image::new_from_rgba8(ctx, Pt::from(1.0), Pt::from(1.0), &[152, 162, 156, 255])
+            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[152, 162, 156, 255])
                 .unwrap();
         let sphere_tex =
-            Image::new_from_rgba8(ctx, Pt::from(1.0), Pt::from(1.0), &[225, 232, 228, 255])
+            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[225, 232, 228, 255])
                 .unwrap();
         let bg_tex =
-            Image::new_from_rgba8(ctx, Pt::from(1.0), Pt::from(1.0), &[104, 113, 116, 255])
+            spottedcat::create_image(ctx, Pt::from(1.0), Pt::from(1.0), &[104, 113, 116, 255])
                 .unwrap();
 
-        let floor = Model::plane(ctx, 1.0, 1.0)
+        let floor = spottedcat::model::create_plane(ctx, 1.0, 1.0)
             .unwrap()
             .with_material(floor_tex);
-        let cube = Model::cube(ctx, 1.0).unwrap().with_material(cube_tex);
-        let sphere = Model::sphere(ctx, 1.0).unwrap().with_material(sphere_tex);
-        let giant_bg = Model::sphere(ctx, 1.0).unwrap().with_material(bg_tex);
+        let cube = spottedcat::model::create_cube(ctx, 1.0).unwrap().with_material(cube_tex);
+        let sphere = spottedcat::model::create_sphere(ctx, 1.0).unwrap().with_material(sphere_tex);
+        let giant_bg = spottedcat::model::create_sphere(ctx, 1.0).unwrap().with_material(bg_tex);
 
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, FONT.to_vec());
@@ -98,16 +98,18 @@ impl Spot for FogWorld {
             .with_height(-1.0, 9.0, 0.16, 1.0);
         ctx.set_fog(fog);
 
-        self.floor.draw(
+        spottedcat::model::draw(
             ctx,
+            &self.floor,
             DrawOption3D::default()
                 .with_position([0.0, -1.0, -8.0])
                 .with_rotation([-std::f32::consts::FRAC_PI_2, 0.0, 0.0])
                 .with_scale([50.0, 50.0, 1.0]),
         );
 
-        self.giant_bg.draw(
+        spottedcat::model::draw(
             ctx,
+            &self.giant_bg,
             DrawOption3D::default()
                 .with_position([0.0, 6.5 + (self.time * 0.18).sin() * 0.4, -70.0])
                 .with_scale([70.0, 70.0, 70.0])
@@ -119,24 +121,27 @@ impl Spot for FogWorld {
             let sway = (self.time * 0.8 + row as f32 * 0.7).sin() * 0.35;
             let lift = (self.time * 1.1 + row as f32 * 0.5).sin() * 0.12;
 
-            self.cube.draw(
+            spottedcat::model::draw(
                 ctx,
+                &self.cube,
                 DrawOption3D::default()
                     .with_position([-3.0 + sway, -0.1 + lift, z])
                     .with_scale([1.1, 1.7, 1.1])
                     .with_rotation([0.0, self.time * 0.3 + row as f32 * 0.2, 0.0]),
             );
 
-            self.cube.draw(
+            spottedcat::model::draw(
                 ctx,
+                &self.cube,
                 DrawOption3D::default()
                     .with_position([3.0 - sway, 0.2 - lift * 0.5, z - 1.0])
                     .with_scale([1.4, 2.2, 1.4])
                     .with_rotation([0.0, -self.time * 0.25 - row as f32 * 0.18, 0.0]),
             );
 
-            self.sphere.draw(
+            spottedcat::model::draw(
                 ctx,
+                &self.sphere,
                 DrawOption3D::default()
                     .with_position([0.0, 1.0 + row as f32 * 0.18, z - 2.0])
                     .with_scale([
@@ -150,8 +155,9 @@ impl Spot for FogWorld {
         ctx.clear_fog();
 
         // Draw FPS
-        self.fps_text.draw(
+        spottedcat::text::draw(
             ctx,
+            &self.fps_text,
             DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
         );
     }
@@ -167,4 +173,3 @@ fn main() {
         ..Default::default()
     });
 }
-

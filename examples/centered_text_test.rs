@@ -24,7 +24,7 @@ impl Spot for CenteredTextTestSpot {
             outer_rgba[i * 4 + 3] = 255; // A
         }
 
-        let outer_image = Image::new_from_rgba8(
+        let outer_image = spottedcat::create_image(
             ctx,
             Pt::from(outer_width),
             Pt::from(outer_height),
@@ -45,7 +45,7 @@ impl Spot for CenteredTextTestSpot {
         }
 
         let inner_image =
-            Image::new_from_rgba8(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
+            spottedcat::create_image(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
 
         Self {
             font_id,
@@ -61,11 +61,11 @@ impl Spot for CenteredTextTestSpot {
         // Draw outer image at position (50, 50)
         let outer_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]);
 
-        self.outer_image.with_clip_scope(ctx, outer_opts, |ctx1| {
+        spottedcat::image::with_clip_scope(ctx, self.outer_image, outer_opts, |ctx1| {
             // Draw inner image at (10, 10) position within outer image
             let inner_opts = DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
 
-            self.inner_image.with_clip_scope(ctx1, inner_opts, |ctx2| {
+            spottedcat::image::with_clip_scope(ctx1, self.inner_image, inner_opts, |ctx2| {
                 // Calculate centered position for text
                 let text_content = "Centered Text";
                 let font_size = Pt::from(20.0);
@@ -76,7 +76,7 @@ impl Spot for CenteredTextTestSpot {
                     .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
 
                 // Get text dimensions and baseline offset
-                let (text_width, text_height, _) = text.measure_with_y_offset(ctx2);
+                let (text_width, text_height, _) = spottedcat::text::measure_with_y_offset(ctx2, &text);
 
                 // Calculate centered position within the inner image
                 let centered_x = (width - text_width) / 2.0;
@@ -86,7 +86,7 @@ impl Spot for CenteredTextTestSpot {
                 let text_opts = DrawOption::default()
                     .with_position([Pt::from(centered_x), Pt::from(centered_y)]);
 
-                text.draw(ctx2, text_opts);
+                spottedcat::text::draw(ctx2, &text, text_opts);
             });
         });
     }

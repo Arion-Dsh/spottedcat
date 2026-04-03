@@ -19,7 +19,7 @@ impl Spot for AsyncLoadingExample {
         // Image 1: Normal initialization (starts as Pending)
         let rgba1 = vec![255u8; 100 * 100 * 4];
         example.image1 =
-            Some(Image::new_from_rgba8(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
+            Some(spottedcat::create_image(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
 
         example
     }
@@ -32,16 +32,17 @@ impl Spot for AsyncLoadingExample {
             println!("Context: Registering second image late...");
             let rgba2 = vec![100u8; 100 * 100 * 4];
             self.image2 =
-                Some(Image::new_from_rgba8(ctx, Pt::from(100.0), Pt::from(100.0), &rgba2).unwrap());
+                Some(spottedcat::create_image(ctx, Pt::from(100.0), Pt::from(100.0), &rgba2).unwrap());
         }
     }
 
     fn draw(&mut self, ctx: &mut Context) {
         // Draw Image 1
         if let Some(img) = self.image1 {
-            if img.is_ready(ctx) {
-                img.draw(
+            if spottedcat::image::is_ready(ctx, img) {
+                spottedcat::image::draw(
                     ctx,
+                    img,
                     DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]),
                 );
             } else {
@@ -52,9 +53,10 @@ impl Spot for AsyncLoadingExample {
 
         // Draw Image 2
         if let Some(img) = self.image2 {
-            if img.is_ready(ctx) {
-                img.draw(
+            if spottedcat::image::is_ready(ctx, img) {
+                spottedcat::image::draw(
                     ctx,
+                    img,
                     DrawOption::default().with_position([Pt::from(200.0), Pt::from(50.0)]),
                 );
             } else {
