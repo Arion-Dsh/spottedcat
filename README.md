@@ -108,8 +108,7 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 - **`Image`**: GPU texture handle for 2D drawing. Supports sub-images and raw data creation.
 - **`Model`**: 3D model handle for rendering meshes, PBR materials, and skeletal animations. Supports extreme performance Instanced Rendering (`draw_instanced`).
 - **`Text`**: High-level text rendering with font registration and layout.
-- **`DrawOption`**: Unified configuration for position, rotation, scale, and 2D clipping.
-- **`DrawOption::with_layer(i32)`**: Controls rendering order. Higher layers draw on top. Essential for stable Z-indexing and **Y-sorting** (where `layer = y_coordinate`). The engine automatically batches identical atlas states even across different layers for maximum performance.
+- **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
 - **`DrawOption3D`**: Configuration for 3D model placement (position, rotation, scale).
 
 ### Key Systems
