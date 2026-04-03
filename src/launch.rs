@@ -14,6 +14,7 @@ pub struct WindowConfig {
     pub width: Pt,
     pub height: Pt,
     pub resizable: bool,
+    pub fullscreen: bool,
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     pub canvas_id: Option<String>,
     pub transparent: bool,
@@ -26,6 +27,7 @@ impl Default for WindowConfig {
             width: Pt(800.0),
             height: Pt(600.0),
             resizable: true,
+            fullscreen: false,
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             canvas_id: None,
             transparent: false,

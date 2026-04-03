@@ -5,7 +5,7 @@ use crate::scenes::take_quit_request;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
-use winit::window::{Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId};
 
 pub(crate) struct PlatformData {
     pub(crate) window: Option<Window>,
@@ -77,6 +77,9 @@ impl App {
             .create_window(attributes)
             .expect("failed to create window");
         window.set_ime_allowed(true);
+        if self.window_config.fullscreen {
+            window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+        }
 
         self.scale_factor = window.scale_factor();
         let size = window.inner_size();
