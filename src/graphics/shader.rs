@@ -80,6 +80,7 @@ impl Graphics {
                     .model_3d()
                     .expect("checked Some")
                     .fog_background_bind_group_layout,
+                self.adapter.get_info().backend,
             );
         }
 

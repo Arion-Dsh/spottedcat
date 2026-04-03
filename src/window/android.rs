@@ -111,9 +111,16 @@ impl App {
     fn setup_native_window_surface(&mut self, window: &ndk::native_window::NativeWindow) {
         let size = (window.width() as u32, window.height() as u32);
         if size.0 == 0 || size.1 == 0 {
+            crate::android::logcat_warn(
+                "setup_native_window_surface skipped because window size is zero",
+            );
             return;
         }
 
+        crate::android::logcat_info(&format!(
+            "setup_native_window_surface size={}x{}",
+            size.0, size.1
+        ));
         eprintln!(
             "[spot][android] Setting up surface for window: {}x{}",
             size.0, size.1
@@ -153,6 +160,9 @@ impl App {
 
                 g.resize(surface, size.0, size.1);
                 eprintln!("[spot][android] Reusing existing graphics device for new surface.");
+                crate::android::logcat_info(
+                    "reused existing graphics device for resumed/new surface",
+                );
                 // Graphics already initialized and reconfigured, no need for heavy init
                 self.init_state = platform::GraphicsInitState::Ready(Box::new(None));
 
@@ -184,6 +194,7 @@ impl App {
         );
 
         eprintln!("[spot][android] Graphics initialization started for new surface.");
+        crate::android::logcat_info("graphics initialization started for native surface");
         self.request_redraw();
     }
 
@@ -200,10 +211,18 @@ impl App {
             "[spot][android] entering run loop. scale_factor: {}",
             self.scale_factor
         );
+        crate::android::logcat_info(&format!(
+            "entering run loop scale_factor={}",
+            self.scale_factor
+        ));
 
         self.timing.reset();
         self.request_redraw();
         let mut frame_count = 0u64;
+        let mut first_draw_logged = false;
+        let mut first_frame_presented_logged = false;
+        let mut graphics_finalized_logged = false;
+        let mut should_exit_run_loop = false;
 
         loop {
             let has_drawable_scene = self.scene.has_active_scene()
@@ -255,6 +274,7 @@ impl App {
                     } {
                         Ok(s) => {
                             eprintln!("[spot][android][floating] surface created successfully");
+                            crate::android::logcat_info("floating surface created successfully");
                             let surface = unsafe {
                                 std::mem::transmute::<wgpu::Surface<'_>, wgpu::Surface<'static>>(s)
                             };
@@ -272,6 +292,10 @@ impl App {
                             self.request_redraw();
                         }
                         Err(e) => {
+                            crate::android::logcat_warn(&format!(
+                                "floating surface creation failed: {:?}",
+                                e
+                            ));
                             eprintln!("[spot][android][floating] surface creation failed: {:?}", e)
                         }
                     }
@@ -286,6 +310,10 @@ impl App {
                             "[spot][android] Recovering missing surface from current native window: {}x{}",
                             size.0, size.1
                         );
+                        crate::android::logcat_info(&format!(
+                            "recovering missing surface from current native window {}x{}",
+                            size.0, size.1
+                        ));
                         self.platform.native_window = Some(window.clone());
                         self.setup_native_window_surface(&window);
                     }
@@ -299,11 +327,20 @@ impl App {
                         if let Some(window) = self.platform.native_window.clone() {
                             let size = (window.width(), window.height());
                             eprintln!("[spot][android] InitWindow: {}x{}", size.0, size.1);
+                            crate::android::logcat_info(&format!(
+                                "MainEvent::InitWindow size={}x{}",
+                                size.0, size.1
+                            ));
                             self.setup_native_window_surface(&window);
+                        } else {
+                            crate::android::logcat_warn(
+                                "MainEvent::InitWindow received but native_window() returned None",
+                            );
                         }
                     }
                     PollEvent::Main(MainEvent::TerminateWindow { .. }) => {
                         eprintln!("[spot][android] TerminateWindow");
+                        crate::android::logcat_warn("MainEvent::TerminateWindow");
                         self.surface.take();
                         self.platform.native_window.take();
                     }
@@ -311,6 +348,10 @@ impl App {
                         if let (Some(surface), Some(window)) = (self.surface.as_ref(), self.platform.native_window.as_ref()) {
                             let size = (window.width() as u32, window.height() as u32);
                             eprintln!("[spot][android] WindowResized: {}x{}", size.0, size.1);
+                            crate::android::logcat_info(&format!(
+                                "MainEvent::WindowResized size={}x{}",
+                                size.0, size.1
+                            ));
                             if size.0 > 0 && size.1 > 0 {
                                 if let Some(g) = self.ctx.runtime.graphics.as_mut() {
                                     g.resize(surface, size.0, size.1);
@@ -325,6 +366,7 @@ impl App {
                     }
                     PollEvent::Main(MainEvent::Resume { .. }) => {
                         eprintln!("[spot][android] Resume");
+                        crate::android::logcat_info("MainEvent::Resume");
                         self.platform.floating_surface = None;
 
                         // IMPORTANT: On Android, the native window might be same pointer but its 
@@ -337,16 +379,26 @@ impl App {
                             // Recreate the surface to ensure it's fresh and matched to the resumed window state.
                             // This addresses the "occasional blank screen" issue after a few frames.
                             eprintln!("[spot][android] Re-creating surface on resume to ensure stability");
+                            crate::android::logcat_info(
+                                "recreating native surface on resume to ensure stability",
+                            );
                             self.setup_native_window_surface(&window);
 
                             // Reset previous time to avoid huge dt jump after sleep
                             self.timing.reset();
                         } else {
                             eprintln!("[spot][android] Resume: No native window available. Waiting for InitWindow.");
+                            crate::android::logcat_warn(
+                                "MainEvent::Resume without native window; waiting for InitWindow",
+                            );
                         }
 
-                        if let Some(service_class) = crate::android::floating_window_service_class() {
-                            crate::android::stop_service(service_class);
+                        if crate::android::floating_window_enabled() {
+                            if let Some(service_class) =
+                                crate::android::floating_window_service_class()
+                            {
+                                crate::android::stop_service(service_class);
+                            }
                         }
 
                         if self.ctx.runtime.audio.is_none() {
@@ -365,18 +417,24 @@ impl App {
                     }
                     PollEvent::Main(MainEvent::Pause) => {
                         eprintln!("[spot][android] Pause");
+                        crate::android::logcat_warn("MainEvent::Pause");
 
-                        // Switch to floating scene if registered and graphics are ready
-                        if self.ctx.runtime.graphics.is_some() {
-                            if let Some(factory) = crate::android::get_floating_scene_factory() {
-                                self.scene.remove_current(&mut self.ctx);
-                                self.scene.set_active_scene(factory(&mut self.ctx));
-                                self.scene.mark_floating();
+                        if crate::android::floating_window_enabled() {
+                            // Only opt into floating mode when the host app explicitly enables it.
+                            if self.ctx.runtime.graphics.is_some() {
+                                if let Some(factory) = crate::android::get_floating_scene_factory()
+                                {
+                                    self.scene.remove_current(&mut self.ctx);
+                                    self.scene.set_active_scene(factory(&mut self.ctx));
+                                    self.scene.mark_floating();
+                                }
                             }
-                        }
 
-                        if let Some(service_class) = crate::android::floating_window_service_class() {
-                            crate::android::start_service(service_class);
+                            if let Some(service_class) =
+                                crate::android::floating_window_service_class()
+                            {
+                                crate::android::start_service(service_class);
+                            }
                         }
                         if let Some(spot) = self.scene.spot_mut() {
                             spot.suspended(&mut self.ctx);
@@ -388,11 +446,16 @@ impl App {
                         self.scale_factor = app.config().density().unwrap_or(160) as f64 / 160.0;
                         self.ctx.set_scale_factor(self.scale_factor);
                         eprintln!("[spot][android] ConfigChanged scale_factor: {}", self.scale_factor);
+                        crate::android::logcat_info(&format!(
+                            "MainEvent::ConfigChanged scale_factor={}",
+                            self.scale_factor
+                        ));
                         self.request_redraw();
                     }
                     PollEvent::Main(MainEvent::Destroy) => {
                         eprintln!("[spot][android] Destroy");
-                        return;
+                        crate::android::logcat_warn("MainEvent::Destroy");
+                        should_exit_run_loop = true;
                     }
                     PollEvent::Main(MainEvent::InputAvailable) => {
                         if let Ok(mut iter) = app.input_events_iter() {
@@ -430,6 +493,11 @@ impl App {
                 }
             });
 
+            if should_exit_run_loop {
+                crate::android::logcat_warn("breaking Android run loop after MainEvent::Destroy");
+                break;
+            }
+
             // Smart Scene Restoration
             // We recreate the spot IF:
             // a) New graphics device was just created (must reload assets).
@@ -441,6 +509,10 @@ impl App {
                 let was_floating_scene = self.scene.is_floating_scene();
                 if let Some(g) = graphics_opt {
                     self.ctx.runtime.graphics = Some(g);
+                }
+                if graphics_finalized && !graphics_finalized_logged {
+                    crate::android::logcat_info("graphics initialization finalized successfully");
+                    graphics_finalized_logged = true;
                 }
                 if graphics_finalized || was_floating_scene || self.scene.needs_initial_scene() {
                     if self.ctx.runtime.graphics.is_some() {
@@ -664,6 +736,10 @@ impl App {
 
             // Draw
             if self.scene.has_active_scene() && self.platform.redraw_requested {
+                if !first_draw_logged {
+                    crate::android::logcat_info("starting first draw attempt");
+                    first_draw_logged = true;
+                }
                 self.platform.redraw_requested = false;
                 // Initialize frame context
                 self.ctx.begin_frame();
@@ -696,6 +772,7 @@ impl App {
                 self.ctx.runtime.graphics = graphics;
 
                 if let Some(Err(e)) = draw_result {
+                    crate::android::logcat_warn(&format!("draw_context failed with {:?}", e));
                     match e {
                         wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
                             eprintln!(
@@ -723,6 +800,10 @@ impl App {
                         }
                     }
                 } else {
+                    if !first_frame_presented_logged {
+                        crate::android::logcat_info("first frame submitted successfully");
+                        first_frame_presented_logged = true;
+                    }
                     self.request_redraw();
                 }
 
@@ -741,6 +822,9 @@ impl App {
             }
 
             if take_quit_request() {
+                crate::android::logcat_warn(
+                    "take_quit_request returned true; exiting Android run loop",
+                );
                 break;
             }
         }

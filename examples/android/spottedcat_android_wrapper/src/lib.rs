@@ -1,6 +1,7 @@
 #[cfg(target_os = "android")]
 use spottedcat::{
-    Context, DrawOption, DrawOption3D, Image, Model, PlatformEvent, Pt, Spot, Text, WindowConfig,
+    Context, DrawOption, DrawOption3D, Image, Model, PlatformEvent, Pt, Spot, Text, TouchPhase,
+    WindowConfig,
 };
 #[cfg(target_os = "android")]
 use spottedcat::AndroidApp;
@@ -394,12 +395,13 @@ pub fn android_main(app: AndroidApp) {
             let yesterday_step_text =
                 Text::new("Yesterday's Steps: 0", font_id).with_font_size(Pt::from(20.0));
             let history_text = Text::new(
-                "History: waiting for Rust-triggered Health Connect request",
+                "History: tap the screen to request Health Connect history",
                 font_id,
             )
             .with_font_size(Pt::from(16.0))
             .with_color([0.8, 0.9, 1.0, 1.0]);
-            let health_status_text = Text::new("Health: idle", font_id)
+            let health_status_text =
+                Text::new("Health: tap the screen to request permission", font_id)
                 .with_font_size(Pt::from(18.0))
                 .with_color([0.5, 1.0, 0.8, 1.0]);
 
@@ -505,20 +507,6 @@ pub fn android_main(app: AndroidApp) {
                 self.step_text.set_color([1.0, 1.0, 1.0, 1.0]);
             }
 
-            if !self.requested_health_permission {
-                match request_health_permission_from_rust() {
-                    Ok(()) => {
-                        self.health_status_text
-                            .set_content("Health: Rust requested Health Connect permission");
-                        self.requested_health_permission = true;
-                    }
-                    Err(err) => {
-                        self.health_status_text
-                            .set_content(format!("Health: permission request failed: {err}"));
-                    }
-                }
-            }
-
             // --- Platform Bridge Example ---
             for event in spottedcat::poll_platform_events(ctx) {
                 let PlatformEvent::Event(t, d) = event;
@@ -551,7 +539,26 @@ pub fn android_main(app: AndroidApp) {
             }
 
             // Touch to trigger Kotlin method
-            if spottedcat::touch_down(ctx) {
+            let tapped_this_frame = ctx
+                .input()
+                .touches()
+                .iter()
+                .any(|touch| touch.phase == TouchPhase::Started);
+            if tapped_this_frame {
+                if !self.requested_health_permission {
+                    match request_health_permission_from_rust() {
+                        Ok(()) => {
+                            self.health_status_text
+                                .set_content("Health: requesting Health Connect permission");
+                            self.requested_health_permission = true;
+                        }
+                        Err(err) => {
+                            self.health_status_text
+                                .set_content(format!("Health: permission request failed: {err}"));
+                        }
+                    }
+                }
+
                 #[cfg(target_os = "android")]
                 if let (Some(jvm), Some(activity)) =
                     (spottedcat::android::get_jvm(), spottedcat::android::get_activity())

@@ -2,9 +2,13 @@ use crate::scenes::SceneFactory;
 #[cfg(target_os = "android")]
 use android_activity::AndroidApp;
 #[cfg(target_os = "android")]
+use std::ffi::{CStr, CString};
+#[cfg(target_os = "android")]
 use std::sync::Mutex;
 #[cfg(target_os = "android")]
 use std::sync::OnceLock;
+#[cfg(target_os = "android")]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "android")]
 static ANDROID_APP: OnceLock<AndroidApp> = OnceLock::new();
@@ -14,6 +18,9 @@ static ACTIVITY: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
 static FLOATING_SERVICE_CLASS: OnceLock<String> = OnceLock::new();
 static FLOATING_SURFACE: Mutex<Option<jni::objects::GlobalRef>> = Mutex::new(None);
 static FLOATING_SCENE_FACTORY: OnceLock<SceneFactory> = OnceLock::new();
+static FLOATING_WINDOW_ENABLED: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "android")]
+const SPOT_NATIVE_TAG: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(b"SpotNative\0") };
 
 #[cfg(target_os = "android")]
 pub fn get_jvm() -> Option<&'static jni::JavaVM> {
@@ -28,6 +35,31 @@ pub fn get_activity() -> Option<&'static jni::objects::GlobalRef> {
 #[cfg(target_os = "android")]
 pub fn get_app() -> Option<AndroidApp> {
     ANDROID_APP.get().cloned()
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn logcat_info(message: &str) {
+    logcat(ndk_sys::android_LogPriority::ANDROID_LOG_INFO, message);
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn logcat_warn(message: &str) {
+    logcat(ndk_sys::android_LogPriority::ANDROID_LOG_WARN, message);
+}
+
+#[cfg(target_os = "android")]
+fn logcat(priority: ndk_sys::android_LogPriority, message: &str) {
+    let Ok(message) = CString::new(message.replace('\0', " ")) else {
+        return;
+    };
+
+    unsafe {
+        ndk_sys::__android_log_write(
+            priority.0 as i32,
+            SPOT_NATIVE_TAG.as_ptr(),
+            message.as_ptr(),
+        );
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -187,6 +219,11 @@ pub(crate) fn floating_window_service_class() -> Option<&'static str> {
 }
 
 #[cfg(target_os = "android")]
+pub(crate) fn floating_window_enabled() -> bool {
+    FLOATING_WINDOW_ENABLED.load(Ordering::Relaxed)
+}
+
+#[cfg(target_os = "android")]
 pub fn start_service(class_name: &str) {
     let Some(jvm) = JVM.get() else {
         return;
@@ -338,8 +375,8 @@ pub fn current_local_epoch_day() -> Option<u64> {
 }
 
 #[cfg(target_os = "android")]
-pub fn set_floating_window_enabled(_enabled: bool) {
-    // This is now handled by the engine loop checking if service_class is set.
+pub fn set_floating_window_enabled(enabled: bool) {
+    FLOATING_WINDOW_ENABLED.store(enabled, Ordering::Relaxed);
 }
 
 #[cfg(target_os = "android")]

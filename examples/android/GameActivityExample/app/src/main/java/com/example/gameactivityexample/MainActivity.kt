@@ -38,6 +38,7 @@ class MainActivity : GameActivity() {
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(tag, "onCreate")
         checkOverlayPermission()
         checkActivityRecognitionPermission()
     }
@@ -83,11 +84,23 @@ class MainActivity : GameActivity() {
 
     override fun onResume() {
         super.onResume()
+        Log.d(tag, "onResume")
         window.decorView.requestFocus()
         checkActivityRecognitionPermission()
     }
 
+    override fun onPause() {
+        Log.d(tag, "onPause")
+        super.onPause()
+    }
+
+    override fun onStop() {
+        Log.d(tag, "onStop")
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        Log.d(tag, "onDestroy")
         super.onDestroy()
         activityScope.cancel()
     }

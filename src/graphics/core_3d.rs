@@ -214,11 +214,13 @@ impl Graphics {
         if self.model_3d.is_none() {
             let width = self.config.width.max(1);
             let height = self.config.height.max(1);
+            let backend = self.adapter.get_info().backend;
             self.model_3d = Some(Self::build_model_3d(
                 &self.device,
                 &self.config,
                 width,
                 height,
+                backend,
             ));
         }
         self.model_3d
@@ -291,10 +293,19 @@ impl Graphics {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         bind_group_layout: &wgpu::BindGroupLayout,
+        backend: wgpu::Backend,
     ) -> wgpu::RenderPipeline {
+        let shader_source = if backend == wgpu::Backend::Gl {
+            eprintln!(
+                "[spot][3d] Using fog background fallback shader on GL backend because depth textureLoad is unsupported."
+            );
+            include_str!("../shaders/fog_background_fallback.wgsl")
+        } else {
+            include_str!("../shaders/fog_background.wgsl")
+        };
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("fog_background_shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/fog_background.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -338,6 +349,7 @@ impl Graphics {
         config: &wgpu::SurfaceConfiguration,
         width: u32,
         height: u32,
+        backend: wgpu::Backend,
     ) -> Graphics3D {
         let model_renderer = ModelRenderer::new(device);
 
@@ -574,6 +586,7 @@ impl Graphics {
             device,
             config.format,
             &fog_background_bind_group_layout,
+            backend,
         );
 
         let shadow_pipeline_layout =
