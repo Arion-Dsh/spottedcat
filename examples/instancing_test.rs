@@ -1,10 +1,15 @@
-use spottedcat::{Context, DrawOption3D, Model, Spot, WindowConfig};
+use spottedcat::{Context, DrawOption, DrawOption3D, Model, Pt, Spot, Text, WindowConfig};
 use std::time::Duration;
 
 struct InstancingTest {
     cube: Model,
     transforms: Vec<[[f32; 4]; 4]>,
     time: f32,
+
+    fps: f32,
+    frame_count: u32,
+    accumulated_time: f32,
+    fps_text: Text,
 }
 
 impl Spot for InstancingTest {
@@ -28,16 +33,36 @@ impl Spot for InstancingTest {
             }
         }
 
+        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
+        let fps_text = Text::new("FPS: 0", font_id)
+            .with_font_size(Pt::from(24.0))
+            .with_color([0.0, 1.0, 0.0, 1.0]);
+
         Self {
             cube,
             transforms,
             time: 0.0,
+            fps: 0.0,
+            frame_count: 0,
+            accumulated_time: 0.0,
+            fps_text,
         }
     }
 
     fn update(&mut self, _ctx: &mut Context, dt: Duration) {
         let dt_secs = dt.as_secs_f32();
         self.time += dt_secs;
+
+        self.accumulated_time += dt_secs;
+        self.frame_count += 1;
+
+        if self.accumulated_time >= 1.0 {
+            self.fps = self.frame_count as f32 / self.accumulated_time;
+            self.fps_text.set_content(format!("FPS: {:.1}", self.fps));
+            self.accumulated_time = 0.0;
+            self.frame_count = 0;
+        }
 
         // Dynamically update 10,000 matrices on CPU as an extreme test
         let mut idx = 0;
@@ -73,6 +98,12 @@ impl Spot for InstancingTest {
                 .with_rotation([1.0, self.time * 0.1, 0.0]),
             &self.transforms,
         );
+
+        // Draw FPS
+        self.fps_text.draw(
+            ctx,
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
@@ -89,3 +120,4 @@ fn main() {
         ..Default::default()
     });
 }
+

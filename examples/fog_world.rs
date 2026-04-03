@@ -1,6 +1,6 @@
 use spottedcat::{
-    Context, DrawOption3D, FogBackgroundSettings, FogSamplingSettings, FogSettings, Image, Model,
-    Pt, Spot, WindowConfig,
+    Context, DrawOption, DrawOption3D, FogBackgroundSettings, FogSamplingSettings, FogSettings,
+    Image, Model, Pt, Spot, Text, WindowConfig,
 };
 use std::time::Duration;
 
@@ -10,6 +10,11 @@ struct FogWorld {
     floor: Model,
     giant_bg: Model,
     time: f32,
+
+    fps: f32,
+    frame_count: u32,
+    accumulated_time: f32,
+    fps_text: Text,
 }
 
 impl Spot for FogWorld {
@@ -45,17 +50,38 @@ impl Spot for FogWorld {
         let sphere = Model::sphere(ctx, 1.0).unwrap().with_material(sphere_tex);
         let giant_bg = Model::sphere(ctx, 1.0).unwrap().with_material(bg_tex);
 
+        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
+        let fps_text = Text::new("FPS: 0", font_id)
+            .with_font_size(Pt::from(24.0))
+            .with_color([0.0, 1.0, 0.0, 1.0]);
+
         Self {
             cube,
             sphere,
             floor,
             giant_bg,
             time: 0.0,
+            fps: 0.0,
+            frame_count: 0,
+            accumulated_time: 0.0,
+            fps_text,
         }
     }
 
     fn update(&mut self, _ctx: &mut Context, dt: Duration) {
-        self.time += dt.as_secs_f32();
+        let dt_secs = dt.as_secs_f32();
+        self.time += dt_secs;
+
+        self.accumulated_time += dt_secs;
+        self.frame_count += 1;
+
+        if self.accumulated_time >= 1.0 {
+            self.fps = self.frame_count as f32 / self.accumulated_time;
+            self.fps_text.set_content(format!("FPS: {:.1}", self.fps));
+            self.accumulated_time = 0.0;
+            self.frame_count = 0;
+        }
     }
 
     fn draw(&mut self, ctx: &mut Context) {
@@ -122,6 +148,12 @@ impl Spot for FogWorld {
         }
 
         ctx.clear_fog();
+
+        // Draw FPS
+        self.fps_text.draw(
+            ctx,
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
     }
 
     fn remove(&mut self, ctx: &mut Context) {
@@ -135,3 +167,4 @@ fn main() {
         ..Default::default()
     });
 }
+
