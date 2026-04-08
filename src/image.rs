@@ -280,7 +280,7 @@ impl Image {
         [x, y, w, h]
     }
 
-    pub(crate) fn with_clip_scope_draw<F, D>(
+    pub fn with_clip_scope_draw<F, D>(
         self,
         ctx: &mut crate::Context,
         options: crate::DrawOption,
@@ -340,7 +340,7 @@ impl Image {
         self.with_clip_scope_draw(ctx, options, |img, ctx, opts| img.draw(ctx, opts), f);
     }
 
-    pub(crate) fn with_shader_scope<F>(
+    pub fn with_shader_scope<F>(
         self,
         ctx: &mut crate::Context,
         shader_id: u32,
@@ -428,6 +428,11 @@ pub fn is_ready(ctx: &Context, image: Image) -> bool {
     image.is_ready(ctx)
 }
 
+/// Destroys the image and frees its GPU resources.
+pub fn destroy(ctx: &mut Context, image: Image) -> bool {
+    image.destroy(ctx)
+}
+
 /// Draws an image and clips nested drawing inside its bounds.
 pub fn with_clip_scope<F>(ctx: &mut Context, image: Image, options: DrawOption, f: F)
 where
@@ -447,4 +452,18 @@ pub fn with_shader_scope<F>(
     F: FnOnce(&mut Context),
 {
     image.with_shader_scope(ctx, shader_id, shader_opts, f);
+}
+
+/// Draws an image and provides a clipping scope for nested drawing, with a custom draw call.
+pub fn with_clip_scope_draw<F, D>(
+    ctx: &mut Context,
+    image: Image,
+    options: DrawOption,
+    draw: D,
+    f: F,
+) where
+    D: FnOnce(Image, &mut Context, DrawOption),
+    F: FnOnce(&mut Context),
+{
+    image.with_clip_scope_draw(ctx, options, draw, f);
 }

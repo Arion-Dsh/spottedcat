@@ -162,6 +162,12 @@ pub struct Model {
 }
 
 impl Model {
+    /// Creates an empty model with no parts.
+    pub fn empty(_ctx: &mut crate::Context) -> Self {
+        Self {
+            parts: Arc::new(Vec::new()),
+        }
+    }
     pub fn first_id(&self) -> u32 {
         self.parts.first().map(|p| p.id).unwrap_or(0)
     }
@@ -742,6 +748,11 @@ pub fn create_plane(ctx: &mut crate::Context, width: f32, height: f32) -> anyhow
 /// Creates a sphere model.
 pub fn create_sphere(ctx: &mut crate::Context, radius: f32) -> anyhow::Result<Model> {
     Model::sphere(ctx, radius)
+}
+
+/// Creates an empty model.
+pub fn create_empty(ctx: &mut crate::Context) -> Model {
+    Model::empty(ctx)
 }
 
 /// Draws a model.
