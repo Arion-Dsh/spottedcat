@@ -226,9 +226,19 @@ pub fn window_size(ctx: &Context) -> (Pt, Pt) {
     ctx.window_logical_size()
 }
 
+/// Inserts or replaces a resource of type T in the context.
+pub fn insert_resource<T: std::any::Any>(ctx: &mut Context, value: std::rc::Rc<T>) {
+    ctx.insert_resource(value)
+}
+
 /// Returns a resource of type T from the context, if it exists.
 pub fn get_resource<T: std::any::Any>(ctx: &Context) -> Option<std::rc::Rc<T>> {
     ctx.get_resource::<T>()
+}
+
+/// Removes and returns a resource of type T from the context, if it exists.
+pub fn take_resource<T: std::any::Any>(ctx: &mut Context) -> Option<std::rc::Rc<T>> {
+    ctx.take_resource::<T>()
 }
 
 /// Returns the window's scale factor (DPI).

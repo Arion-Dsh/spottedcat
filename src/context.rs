@@ -229,7 +229,7 @@ impl Context {
         Pt::from(h.as_f32() * (p / 100.0))
     }
 
-    pub(crate) fn insert_resource<T: Any>(&mut self, value: Rc<T>) {
+    pub fn insert_resource<T: Any>(&mut self, value: Rc<T>) {
         self.registry
             .resources
             .inner
@@ -245,7 +245,7 @@ impl Context {
             .and_then(|v| Rc::downcast::<T>(v).ok())
     }
 
-    pub(crate) fn take_resource<T: Any>(&mut self) -> Option<Rc<T>> {
+    pub fn take_resource<T: Any>(&mut self) -> Option<Rc<T>> {
         self.registry
             .resources
             .inner

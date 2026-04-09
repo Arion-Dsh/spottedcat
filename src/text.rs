@@ -488,11 +488,27 @@ impl Text {
         width
     }
 
+    fn clone_for_draw(&self) -> Self {
+        Self {
+            content: self.content.clone(),
+            font_size: self.font_size,
+            color: self.color,
+            font_id: self.font_id,
+            stroke_width: self.stroke_width,
+            stroke_color: self.stroke_color,
+            max_width: self.max_width,
+            layout_cache: self.layout_cache.clone(),
+            dirty: std::sync::atomic::AtomicBool::new(
+                self.dirty.load(std::sync::atomic::Ordering::SeqCst),
+            ),
+        }
+    }
+
     pub(crate) fn draw(&self, ctx: &mut Context, options: DrawOption) {
         // Draw text at the exact position provided by the caller
         // The caller is responsible for handling baseline offset if needed
         ctx.push(crate::drawable::DrawCommand::Text(
-            Box::new(self.clone()),
+            Box::new(self.clone_for_draw()),
             options,
         ));
     }
