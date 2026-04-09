@@ -2,7 +2,7 @@
 .DS_Store
 .windsurf
 .cursor
-.Cargo.lock
+Cargo.lock
 
 
 /examples/**/target/
