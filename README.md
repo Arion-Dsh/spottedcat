@@ -41,7 +41,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.7.5"
+spottedcat = "0.7.6"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
