@@ -167,10 +167,10 @@ impl Context {
     }
 
     fn register_defaults(&mut self) {
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]); // ID 1
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[0, 0, 0, 255]); // ID 2
+        self.register_image(1, 1, Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]); // ID 1
+        self.register_image(1, 1, Pt::from(1.0), Pt::from(1.0), &[0, 0, 0, 255]); // ID 2
         #[cfg(feature = "model-3d")]
-        self.register_image(Pt::from(1.0), Pt::from(1.0), &[128, 128, 255, 255]); // ID 3 (Normal)
+        self.register_image(1, 1, Pt::from(1.0), Pt::from(1.0), &[128, 128, 255, 255]); // ID 3 (Normal)
 
         let text_shader_src = r#"
             fn user_fs_hook() {
@@ -254,13 +254,22 @@ impl Context {
             .and_then(|v| Rc::downcast::<T>(v).ok())
     }
 
-    pub(crate) fn register_image(&mut self, width: Pt, height: Pt, rgba: &[u8]) -> crate::Image {
+    pub(crate) fn register_image(
+        &mut self,
+        pixel_width: u32,
+        pixel_height: u32,
+        width: Pt,
+        height: Pt,
+        rgba: &[u8],
+    ) -> crate::Image {
         let id = self.registry.next_image_id;
         self.registry.next_image_id += 1;
         let bounds = crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height);
         let entry = crate::image::ImageEntry::new(
             None,
             bounds,
+            pixel_width,
+            pixel_height,
             None,
             Some(std::sync::Arc::from(rgba)),
             None,
@@ -278,6 +287,8 @@ impl Context {
             y: bounds.y,
             width: bounds.width,
             height: bounds.height,
+            pixel_width,
+            pixel_height,
         }
     }
 
@@ -290,7 +301,30 @@ impl Context {
         let id = self.registry.next_image_id;
         self.registry.next_image_id += 1;
 
-        let entry = crate::image::ImageEntry::new(None, bounds, None, None, Some(parent_id));
+        let width_ratio = if image.width.0 > 0.0 {
+            bounds.width.0 / image.width.0
+        } else {
+            0.0
+        };
+        let height_ratio = if image.height.0 > 0.0 {
+            bounds.height.0 / image.height.0
+        } else {
+            0.0
+        };
+        let pixel_width = ((image.pixel_width as f32) * width_ratio).round().max(1.0) as u32;
+        let pixel_height = ((image.pixel_height as f32) * height_ratio)
+            .round()
+            .max(1.0) as u32;
+
+        let entry = crate::image::ImageEntry::new(
+            None,
+            bounds,
+            pixel_width,
+            pixel_height,
+            None,
+            None,
+            Some(parent_id),
+        );
 
         while self.registry.images.len() <= id as usize {
             self.registry.images.push(None);

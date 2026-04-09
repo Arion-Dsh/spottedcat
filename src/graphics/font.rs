@@ -69,6 +69,8 @@ impl Graphics {
         });
 
         let image = ctx.register_image(
+            glyph_width,
+            glyph_height,
             Pt::from(glyph_width as f32),
             Pt::from(glyph_height as f32),
             &rgba_data,

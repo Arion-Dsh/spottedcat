@@ -40,6 +40,8 @@ Start here for movement, keyboard handling, delta-time motion, and text overlays
 Start here for quick sound proof-of-life.
 - `examples/fog_world.rs`
 Start here for 3D camera setup, fog, lighting, procedural meshes, and FPS text.
+- `examples/happy_tree_desktop.rs`
+Start here when the request involves loading encoded 2D art through the `image` crate and preserving scale-factor-aware default sizing.
 - `examples/instancing_test.rs`
 Start here when many repeated 3D props are needed.
 - `examples/gltf_loader.rs`
@@ -61,6 +63,7 @@ Run from the repo root unless a platform example says otherwise.
 cargo check
 cargo run --example input_example
 cargo run --example audio_test
+cargo run --example happy_tree_desktop --features utils
 cargo run --example fog_world --features model-3d,effects
 cargo run --example gltf_loader --features gltf
 ```

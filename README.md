@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.7.4"
+spottedcat = "0.7.5"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.7.4", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.7.5", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
@@ -135,7 +135,7 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 
 - **`Context`**: Central state for managing draw commands, input, audio, and resources. Hides internal methods to ensure consistency.
 - **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` and rendered via `image.draw(ctx, ...)`.
+- **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` using logical `Pt` sizes and rendered via `image.draw(ctx, ...)`.
 - **`Model`**: 3D model handle created via `spottedcat::model::create(...)` and rendered via `spottedcat::model::*`.
 - **`Text`**: High-level text structure for 2D layout.
 - **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
@@ -149,7 +149,7 @@ For comprehensive guidance on generating games and working with the `spottedcat`
   - `spottedcat::model::*` for model create/draw/instancing/shader draw.
   - `spottedcat::text::*` for text draw/measure.
 
-- Use `Image::from_bytes(ctx, data)` when you want to create an image directly from encoded PNG/JPEG bytes.
+- For encoded PNG/JPEG/WebP bytes, enable the `utils` feature and use `spottedcat::utils::image::from_image(...)` or `from_rgba_image(...)` after decoding with the `image` crate. These helpers preserve pixel dimensions and derive the default logical size from the current `scale_factor`.
 
 ### Key Systems
 

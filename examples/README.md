@@ -51,7 +51,7 @@ Notes:
 
 - The iOS wrapper shows today's steps plus the last 7 days of pedometer history, both queried from Rust.
 - Historical pedometer data is expected to be unavailable in the iOS Simulator.
-- The iOS wrapper loads its sample PNG through `Image::from_bytes(...)`.
+- The iOS wrapper decodes its sample PNG and then creates an `Image` through `spottedcat::utils::image::from_image(...)`.
 
 ## Android
 
@@ -74,11 +74,14 @@ Notes:
 - The sample shows sensor-driven "today's steps", not a historical or lifetime total.
 - On Android 10 and above, the sample requests `ACTIVITY_RECOGNITION` at runtime before step data becomes available.
 - Recent step history is requested from Rust via JNI after Health Connect permission is granted by the Android host app.
-- The Android wrapper loads its sample PNG through `Image::from_bytes(...)`.
+- The Android wrapper decodes its sample PNG and then creates an `Image` through `spottedcat::utils::image::from_image(...)`.
 
-Desktop graphics example to validate the new fog system:
+## Desktop
 
-- Run `cargo run --example fog_world` from the repo root to verify distance fog plus height fog on a simple 3D scene before testing the same shaders on Android.
+Quick local graphics checks:
+
+- Run `cargo run --example happy_tree_desktop --features utils` to verify encoded image loading on desktop, including the scale-factor-derived default logical size shown in the overlay text.
+- Run `cargo run --example fog_world --features model-3d,effects` to verify distance fog plus height fog on a simple 3D scene before testing the same shaders on Android.
 - Fog parameters are grouped by intent:
   - Physical controls: `with_strength`, `with_distance`, `with_height`
   - Style controls: `with_color`, `with_background`

@@ -56,10 +56,20 @@ pub struct Image {
     pub(crate) y: Pt,
     pub(crate) width: Pt,
     pub(crate) height: Pt,
+    pub(crate) pixel_width: u32,
+    pub(crate) pixel_height: u32,
 }
 
 impl Image {
     /// Creates a new image from RGBA8 data.
+    ///
+    /// `width` and `height` are logical sizes in [`Pt`][crate::Pt]. The pixel
+    /// dimensions used for atlas packing are derived from those logical values.
+    ///
+    /// When starting from encoded image bytes, prefer the helpers in
+    /// [`crate::utils::image`] (behind the `utils` feature) so the original
+    /// pixel dimensions are preserved and the logical size is derived from the
+    /// current scale factor.
     pub fn new(
         ctx: &mut crate::Context,
         width: Pt,
@@ -67,17 +77,6 @@ impl Image {
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
         Self::new_from_rgba8(ctx, width, height, rgba)
-    }
-
-    /// Loads an encoded image (PNG, JPEG, etc.) from bytes and creates an `Image`.
-    #[cfg(feature = "utils")]
-    pub fn from_bytes(ctx: &mut crate::Context, data: &[u8]) -> anyhow::Result<Self> {
-        use ::image::GenericImageView;
-
-        let img = ::image::load_from_memory(data)?;
-        let (w, h) = img.dimensions();
-        let rgba = img.to_rgba8();
-        Self::new(ctx, w.into(), h.into(), &rgba)
     }
 
     /// Returns the logical width of the image.
@@ -133,19 +132,41 @@ impl Image {
         height: Pt,
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
-        let w = width.0.max(0.0);
-        let h = height.0.max(0.0);
-        let expected_len = (w * h * 4.0) as usize;
+        let pixel_width = width.to_u32_clamped().max(1);
+        let pixel_height = height.to_u32_clamped().max(1);
+        let expected_len = (pixel_width as usize) * (pixel_height as usize) * 4;
         if rgba.len() != expected_len {
             anyhow::bail!(
                 "RGBA data length mismatch: expected {} ({}x{}x4), got {}",
                 expected_len,
-                w,
-                h,
+                pixel_width,
+                pixel_height,
                 rgba.len()
             );
         }
-        let image = ctx.register_image(width, height, rgba);
+        let image = ctx.register_image(pixel_width, pixel_height, width, height, rgba);
+        Ok(image)
+    }
+
+    pub(crate) fn new_from_rgba8_with_pixels(
+        ctx: &mut crate::Context,
+        pixel_width: u32,
+        pixel_height: u32,
+        width: Pt,
+        height: Pt,
+        rgba: &[u8],
+    ) -> anyhow::Result<Self> {
+        let expected_len = (pixel_width as usize) * (pixel_height as usize) * 4;
+        if rgba.len() != expected_len {
+            anyhow::bail!(
+                "RGBA data length mismatch: expected {} ({}x{}x4), got {}",
+                expected_len,
+                pixel_width,
+                pixel_height,
+                rgba.len()
+            );
+        }
+        let image = ctx.register_image(pixel_width, pixel_height, width, height, rgba);
         Ok(image)
     }
 
@@ -205,6 +226,12 @@ impl Image {
             y: bounds.y,
             width: bounds.width,
             height: bounds.height,
+            pixel_width: ((image.pixel_width as f32) * (bounds.width.0 / image.width.0))
+                .round()
+                .max(1.0) as u32,
+            pixel_height: ((image.pixel_height as f32) * (bounds.height.0 / image.height.0))
+                .round()
+                .max(1.0) as u32,
         })
     }
 
@@ -215,10 +242,11 @@ impl Image {
     /// * `options` - Drawing options (position, rotation, scale)
     ///
     /// # Example
+    /// ```ignore
     /// # use spottedcat::{Context, Image, DrawOption, Pt};
-    /// # let mut context = Context::new();
+    /// # let mut ctx = Context::new();
     /// # let rgba = vec![255u8; 2 * 2 * 4];
-    /// # let image = Image::new_from_rgba8(&mut ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
+    /// # let image = Image::new(&mut ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
     /// let mut opts = DrawOption::default();
     /// opts = opts.with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
     /// opts = opts.with_scale([2.0, 2.0]);
@@ -236,6 +264,7 @@ impl Image {
         )));
     }
 
+    /// Draws this image with a custom image shader registered through the context.
     pub fn draw_with_shader(
         self,
         ctx: &mut crate::Context,
@@ -387,6 +416,8 @@ impl Image {
 pub(crate) struct ImageEntry {
     pub(crate) atlas_index: Option<u32>,
     pub(crate) bounds: Bounds,
+    pub(crate) pixel_width: u32,
+    pub(crate) pixel_height: u32,
     pub(crate) uv_rect: Option<[f32; 4]>, // [u, v, w, h]
     pub(crate) visible: bool,
     pub(crate) raw_data: Option<Arc<[u8]>>,
@@ -397,6 +428,8 @@ impl ImageEntry {
     pub(crate) fn new(
         atlas_index: Option<u32>,
         bounds: Bounds,
+        pixel_width: u32,
+        pixel_height: u32,
         uv_rect: Option<[f32; 4]>,
         raw_data: Option<Arc<[u8]>>,
         parent_id: Option<u32>,
@@ -404,6 +437,8 @@ impl ImageEntry {
         Self {
             atlas_index,
             bounds,
+            pixel_width,
+            pixel_height,
             uv_rect,
             visible: true,
             raw_data,

@@ -372,7 +372,8 @@ pub fn android_main(app: AndroidApp) {
             eprintln!("[spot][android] initialize called");
             // Load an image from assets
             const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../../../../assets/happy-tree.png");
-            let happy_tree = Image::from_bytes(ctx, HAPPY_TREE_BYTES).unwrap();
+            let img = image::load_from_memory(HAPPY_TREE_BYTES).unwrap();
+            let happy_tree = spottedcat::utils::image::from_image(ctx, &img).unwrap();
 
             // Register a font and create text
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");

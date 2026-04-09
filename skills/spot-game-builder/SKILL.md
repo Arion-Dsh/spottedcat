@@ -93,7 +93,7 @@ Honor these rules:
 - Multiply motion and time-based effects by delta time.
 - Treat 2D origin as top-left.
 - Use `Pt` for logical 2D units and viewport-relative helpers when layout should scale.
-- For encoded PNG/JPEG/WebP bytes, use `Image::from_bytes(ctx, data)`.
+- For encoded PNG/JPEG/WebP bytes, prefer `spottedcat::utils::image::from_image(...)` or `from_rgba_image(...)` when the `utils` feature is enabled. Those helpers keep source pixel dimensions and derive the default logical size from the current `scale_factor`.
 - Keep the first implementation simple enough to run immediately.
 
 ### 6. Map common game needs to `spottedcat`

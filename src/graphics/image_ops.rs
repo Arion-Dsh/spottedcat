@@ -92,8 +92,8 @@ impl Graphics {
                 let raw_data = entry.raw_data.clone().unwrap_or_else(|| {
                     panic!("[spot][atlas] image {} lost raw data before upload", i)
                 });
-                let w = entry.bounds.width.to_u32_clamped();
-                let h = entry.bounds.height.to_u32_clamped();
+                let w = entry.pixel_width;
+                let h = entry.pixel_height;
 
                 let (atlas_index, rect) = match self.ensure_atlas_for_image(ctx, w, h) {
                     Ok(v) => v,
@@ -261,8 +261,8 @@ impl Graphics {
                     panic!("[spot][atlas] image {} lost raw data during rebuild", i)
                 });
 
-                let w = entry.bounds.width.to_u32_clamped();
-                let h = entry.bounds.height.to_u32_clamped();
+                let w = entry.pixel_width;
+                let h = entry.pixel_height;
 
                 let (atlas_index, rect) = match self.ensure_atlas_for_image(ctx, w, h) {
                     Ok(v) => v,
@@ -416,8 +416,8 @@ impl Graphics {
                 "copy_image across atlases is not supported"
             ));
         }
-        if dst_entry.bounds.width != src_entry.bounds.width
-            || dst_entry.bounds.height != src_entry.bounds.height
+        if dst_entry.pixel_width != src_entry.pixel_width
+            || dst_entry.pixel_height != src_entry.pixel_height
         {
             return Err(anyhow::anyhow!("size mismatch"));
         }
@@ -438,8 +438,8 @@ impl Graphics {
         let src_y = (src_uv_rect[1] * ah).round() as u32;
         let dst_x = (dst_uv_rect[0] * aw).round() as u32;
         let dst_y = (dst_uv_rect[1] * ah).round() as u32;
-        let w = dst_entry.bounds.width.to_u32_clamped();
-        let h = dst_entry.bounds.height.to_u32_clamped();
+        let w = dst_entry.pixel_width;
+        let h = dst_entry.pixel_height;
 
         let mut encoder = self
             .device

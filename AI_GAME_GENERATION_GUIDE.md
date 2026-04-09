@@ -60,7 +60,7 @@ fn main() {
 ## 2. Drawing 2D (Images & Text)
 
 ### Images
-Images are created via `Image::new(...)`. Use `Pt` for logical units, or `Image::from_bytes(...)` for encoded PNG/JPEG bytes.
+Images are created via `Image::new(...)`. Use `Pt` for logical units. When the source asset is an encoded PNG/JPEG/WebP and the `utils` feature is enabled, prefer `spottedcat::utils::image::from_image(...)` or `from_rgba_image(...)` so the engine keeps the asset's pixel dimensions and derives the default logical size from the current `scale_factor`.
 ```rust
 use spottedcat::{Image, DrawOption, Pt};
 
@@ -73,6 +73,14 @@ image.draw(ctx, DrawOption::default()
     .with_rotation(45.0f32.to_radians())
     .with_layer(1) // Higher layers are drawn on top
 );
+```
+
+```rust
+#[cfg(feature = "utils")]
+{
+    let decoded = image::load_from_memory(encoded_bytes).unwrap();
+    let image = spottedcat::utils::image::from_image(ctx, &decoded).unwrap();
+}
 ```
 
 ### Text

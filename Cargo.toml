@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.7.4"
+version = "0.7.5"
 edition = "2024"
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -78,6 +78,11 @@ path = "examples/seven_level_test.rs"
 [[example]]
 name = "text_performance_test"
 path = "examples/text_performance_test.rs"
+
+[[example]]
+name = "happy_tree_desktop"
+path = "examples/happy_tree_desktop.rs"
+required-features = ["utils"]
 
 [[example]]
 name = "spottedcat_splash"

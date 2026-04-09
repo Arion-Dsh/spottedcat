@@ -176,6 +176,8 @@ impl<TNext: Spot + 'static> SpottedcatSplash<TNext> {
     ) {
         if self.panel_scale_px != panel_scale_px || self.panel.is_none() {
             self.panel = Some(ctx.register_image(
+                (PANEL_WIDTH * panel_scale_px) as u32,
+                (PANEL_HEIGHT * panel_scale_px) as u32,
                 Pt::from(PANEL_WIDTH * panel_scale_px),
                 Pt::from(PANEL_HEIGHT * panel_scale_px),
                 &build_panel_rgba(panel_scale_px),
@@ -185,6 +187,8 @@ impl<TNext: Spot + 'static> SpottedcatSplash<TNext> {
 
         if self.logo_scale_px != logo_scale_px || self.logo.is_none() {
             self.logo = Some(ctx.register_image(
+                (LOGO_SIZE * logo_scale_px) as u32,
+                (LOGO_SIZE * logo_scale_px) as u32,
                 Pt::from(LOGO_SIZE * logo_scale_px),
                 Pt::from(LOGO_SIZE * logo_scale_px),
                 &build_logo_rgba(logo_scale_px),
@@ -194,7 +198,13 @@ impl<TNext: Spot + 'static> SpottedcatSplash<TNext> {
 
         if self.wordmark_scale_px != wordmark_scale_px || self.wordmark.is_none() {
             let (width, height, rgba) = build_wordmark_rgba(wordmark_scale_px);
-            self.wordmark = Some(ctx.register_image(Pt::from(width), Pt::from(height), &rgba));
+            self.wordmark = Some(ctx.register_image(
+                width as u32,
+                height as u32,
+                Pt::from(width),
+                Pt::from(height),
+                &rgba,
+            ));
             self.wordmark_scale_px = wordmark_scale_px;
         }
     }

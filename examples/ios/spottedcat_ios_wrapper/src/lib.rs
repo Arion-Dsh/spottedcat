@@ -198,7 +198,8 @@ pub extern "C" fn spottedcat_ios_start() {
             eprintln!("[spot][ios] initialize called");
 
             const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../../../../assets/happy-tree.png");
-            let happy_tree = Image::from_bytes(ctx, HAPPY_TREE_BYTES).unwrap();
+            let img = image::load_from_memory(HAPPY_TREE_BYTES).unwrap();
+            let happy_tree = spottedcat::utils::image::from_image(ctx, &img).unwrap();
 
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
             let font_id = spottedcat::register_font(ctx, FALLBACK_FONT.to_vec());
