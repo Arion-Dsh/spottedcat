@@ -1,4 +1,4 @@
-use spottedcat::{Context, DrawOption, Pt, Spot, SpottedcatSplash, Text, WindowConfig, run};
+use spottedcat::{Context, DrawOption, OneShotSplash, Pt, Spot, Text, WindowConfig, run};
 
 struct GameplayScene {
     font_id: u32,
@@ -30,7 +30,7 @@ impl Spot for GameplayScene {
         );
 
         let hint = Text::new(
-            "Use `run::<SpottedcatSplash<YourScene>>()` to show the intro first.",
+            "Use `run::<OneShotSplash<YourScene>>()` to show the intro first.",
             self.font_id,
         )
         .with_font_size(Pt::from(18.0))
@@ -52,7 +52,7 @@ impl Spot for GameplayScene {
 }
 
 fn main() {
-    run::<SpottedcatSplash<GameplayScene>>(WindowConfig {
+    run::<OneShotSplash<GameplayScene>>(WindowConfig {
         title: "Rusty-spotted cat".to_string(),
         width: Pt::from(540.0),
         height: Pt::from(960.0),

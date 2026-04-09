@@ -98,11 +98,11 @@ fn main() {
 
 ### Built-in Intro Scene
 
-If you want the game to show a branded first-run intro before entering your own
-scene, wrap your root scene with `SpottedcatSplash<T>`:
+If you want the game to show a branded startup intro before entering your own
+scene, wrap your root scene with `OneShotSplash<T>`:
 
 ```rust
-use spottedcat::{Context, Spot, SpottedcatSplash, WindowConfig, run};
+use spottedcat::{Context, OneShotSplash, Spot, WindowConfig, run};
 
 struct MyGame;
 
@@ -117,13 +117,14 @@ impl Spot for MyGame {
 }
 
 fn main() {
-    run::<SpottedcatSplash<MyGame>>(WindowConfig::default());
+    run::<OneShotSplash<MyGame>>(WindowConfig::default());
 }
 ```
 
 The default intro uses a font-free pixel-art Rusty-spotted cat logo and
 automatically switches to your main scene after a short delay. Players can
-also skip with Space, Enter, mouse click, or touch.
+also skip with Space, Enter, mouse click, or touch. The splash is shown once
+per process, so Android surface restoration resumes directly into your game.
 
 ## AI Assistant Guide
 

@@ -85,8 +85,8 @@ path = "examples/happy_tree_desktop.rs"
 required-features = ["utils"]
 
 [[example]]
-name = "spottedcat_splash"
-path = "examples/spottedcat_splash.rs"
+name = "one_shot_splash"
+path = "examples/one_shot_splash.rs"
 
 [[example]]
 name = "gltf_loader"

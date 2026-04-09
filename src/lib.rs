@@ -110,7 +110,7 @@ pub use pt::Pt;
 pub use scenes::{Spot, quit, switch_scene, switch_scene_with};
 pub use shader_opts::ShaderOpts;
 pub use sound::*;
-pub use splash::SpottedcatSplash;
+pub use splash::OneShotSplash;
 pub use text::Text;
 pub use touch::{TouchInfo, TouchPhase};
 

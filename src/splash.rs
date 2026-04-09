@@ -1,5 +1,6 @@
 use crate::{Context, DrawOption, Image, Key, MouseButton, Pt, Spot, TouchPhase, switch_scene};
 use std::marker::PhantomData;
+use std::rc::Rc;
 use std::time::Duration;
 
 const AUTO_ADVANCE_AFTER: f32 = 2.8;
@@ -11,14 +12,14 @@ const SAFE_MARGIN_MIN: f32 = 18.0;
 const LOGO_TOP_INSET: usize = 3;
 const LOGO_BOTTOM_INSET: usize = 10;
 
-/// A reusable first-run splash scene with the built-in Spottedcat branding.
+/// A reusable startup splash scene with the built-in Spottedcat branding.
 ///
 /// The visual language is intentionally pixel-forward: a Rusty-spotted cat
 /// inside a compact frame, tying the intro back to the world's smallest wild
 /// cat and the engine's small, agile, practical direction.
 ///
 /// ```rust,no_run
-/// use spottedcat::{Spot, SpottedcatSplash, WindowConfig, run};
+/// use spottedcat::{OneShotSplash, Spot, WindowConfig, run};
 ///
 /// struct Game;
 ///
@@ -33,10 +34,21 @@ const LOGO_BOTTOM_INSET: usize = 10;
 /// }
 ///
 /// fn main() {
-///     run::<SpottedcatSplash<Game>>(WindowConfig::default());
+///     run::<OneShotSplash<Game>>(WindowConfig::default());
 /// }
 /// ```
-pub struct SpottedcatSplash<TNext: Spot + 'static> {
+pub struct OneShotSplash<TNext: Spot + 'static> {
+    inner: OneShotSplashInner<TNext>,
+}
+
+enum OneShotSplashInner<TNext: Spot + 'static> {
+    Splash(BrandedSplash<TNext>),
+    Next(TNext),
+}
+
+struct OneShotSplashSeen<TNext: Spot + 'static>(PhantomData<TNext>);
+
+struct BrandedSplash<TNext: Spot + 'static> {
     elapsed: f32,
     panel: Option<Image>,
     logo: Option<Image>,
@@ -48,9 +60,57 @@ pub struct SpottedcatSplash<TNext: Spot + 'static> {
     _next: PhantomData<TNext>,
 }
 
-impl<TNext: Spot + 'static> Spot for SpottedcatSplash<TNext> {
+impl<TNext: Spot + 'static> Spot for OneShotSplash<TNext> {
     fn initialize(ctx: &mut Context) -> Self {
-        let _ = ctx;
+        let already_shown = crate::get_resource::<OneShotSplashSeen<TNext>>(ctx).is_some();
+        let inner = if already_shown {
+            OneShotSplashInner::Next(TNext::initialize(ctx))
+        } else {
+            crate::insert_resource(ctx, Rc::new(OneShotSplashSeen::<TNext>(PhantomData)));
+            OneShotSplashInner::Splash(BrandedSplash::new())
+        };
+
+        Self { inner }
+    }
+
+    fn update(&mut self, ctx: &mut Context, dt: Duration) {
+        match &mut self.inner {
+            OneShotSplashInner::Splash(splash) => splash.update(ctx, dt),
+            OneShotSplashInner::Next(next) => next.update(ctx, dt),
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut Context) {
+        match &mut self.inner {
+            OneShotSplashInner::Splash(splash) => splash.draw(ctx),
+            OneShotSplashInner::Next(next) => next.draw(ctx),
+        }
+    }
+
+    fn resumed(&mut self, ctx: &mut Context) {
+        match &mut self.inner {
+            OneShotSplashInner::Splash(splash) => splash.resumed(ctx),
+            OneShotSplashInner::Next(next) => next.resumed(ctx),
+        }
+    }
+
+    fn suspended(&mut self, ctx: &mut Context) {
+        match &mut self.inner {
+            OneShotSplashInner::Splash(splash) => splash.suspended(ctx),
+            OneShotSplashInner::Next(next) => next.suspended(ctx),
+        }
+    }
+
+    fn remove(&mut self, ctx: &mut Context) {
+        match &mut self.inner {
+            OneShotSplashInner::Splash(splash) => splash.remove(ctx),
+            OneShotSplashInner::Next(next) => next.remove(ctx),
+        }
+    }
+}
+
+impl<TNext: Spot + 'static> BrandedSplash<TNext> {
+    fn new() -> Self {
         Self {
             elapsed: 0.0,
             panel: None,
@@ -164,9 +224,15 @@ impl<TNext: Spot + 'static> Spot for SpottedcatSplash<TNext> {
             );
         }
     }
+
+    fn resumed(&mut self, _ctx: &mut Context) {}
+
+    fn suspended(&mut self, _ctx: &mut Context) {}
+
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
-impl<TNext: Spot + 'static> SpottedcatSplash<TNext> {
+impl<TNext: Spot + 'static> BrandedSplash<TNext> {
     fn ensure_scaled_assets(
         &mut self,
         ctx: &mut Context,
