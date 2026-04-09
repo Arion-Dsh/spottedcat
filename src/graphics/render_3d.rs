@@ -426,13 +426,13 @@ impl Graphics {
                     {
                         bone_offset = off;
                     }
-                    if !is_shadow_pass && current_shader_opts != Some(*shader_opts) {
-                        if let Ok(offset) =
+                    if !is_shadow_pass
+                        && current_shader_opts != Some(*shader_opts)
+                        && let Ok(offset) =
                             model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes())
-                        {
-                            current_shader_opts = Some(*shader_opts);
-                            current_shader_opts_offset = offset;
-                        }
+                    {
+                        current_shader_opts = Some(*shader_opts);
+                        current_shader_opts_offset = offset;
                     }
 
                     for part in model.parts.iter() {
@@ -586,13 +586,13 @@ impl Graphics {
                     {
                         bone_offset = off;
                     }
-                    if !is_shadow_pass && current_shader_opts != Some(*shader_opts) {
-                        if let Ok(offset) =
+                    if !is_shadow_pass
+                        && current_shader_opts != Some(*shader_opts)
+                        && let Ok(offset) =
                             model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes())
-                        {
-                            current_shader_opts = Some(*shader_opts);
-                            current_shader_opts_offset = offset;
-                        }
+                    {
+                        current_shader_opts = Some(*shader_opts);
+                        current_shader_opts_offset = offset;
                     }
 
                     if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {

@@ -24,7 +24,7 @@ impl Spot for FogWorld {
         spottedcat::set_camera_up(ctx, 0.0, 1.0, 0.0);
         spottedcat::set_ambient_light(ctx, [0.16, 0.18, 0.17, 1.0]);
 
-        let floor_tex = spottedcat::image::create(
+        let floor_tex = spottedcat::Image::new(
             ctx,
             Pt::from(2.0),
             Pt::from(2.0),
@@ -34,13 +34,13 @@ impl Spot for FogWorld {
         )
         .unwrap();
         let cube_tex =
-            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[152, 162, 156, 255])
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[152, 162, 156, 255])
                 .unwrap();
         let sphere_tex =
-            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[225, 232, 228, 255])
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[225, 232, 228, 255])
                 .unwrap();
         let bg_tex =
-            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[104, 113, 116, 255])
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[104, 113, 116, 255])
                 .unwrap();
 
         let floor = spottedcat::model::create_plane(ctx, 1.0, 1.0)

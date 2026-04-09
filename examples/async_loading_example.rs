@@ -18,8 +18,7 @@ impl Spot for AsyncLoadingExample {
         // Note: Asset registration must now happen on the thread owning the Context.
         // Image 1: Normal initialization (starts as Pending)
         let rgba1 = vec![255u8; 100 * 100 * 4];
-        example.image1 =
-            Some(spottedcat::image::create(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
+        example.image1 = Some(Image::new(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
 
         example
     }
@@ -31,19 +30,16 @@ impl Spot for AsyncLoadingExample {
         if self.loading_timer > 3.0 && self.image2.is_none() {
             println!("Context: Registering second image late...");
             let rgba2 = vec![100u8; 100 * 100 * 4];
-            self.image2 = Some(
-                spottedcat::image::create(ctx, Pt::from(100.0), Pt::from(100.0), &rgba2).unwrap(),
-            );
+            self.image2 = Some(Image::new(ctx, Pt::from(100.0), Pt::from(100.0), &rgba2).unwrap());
         }
     }
 
     fn draw(&mut self, ctx: &mut Context) {
         // Draw Image 1
         if let Some(img) = self.image1 {
-            if spottedcat::image::is_ready(ctx, img) {
-                spottedcat::image::draw(
+            if img.is_ready(ctx) {
+                img.draw(
                     ctx,
-                    img,
                     DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]),
                 );
             } else {
@@ -54,10 +50,9 @@ impl Spot for AsyncLoadingExample {
 
         // Draw Image 2
         if let Some(img) = self.image2 {
-            if spottedcat::image::is_ready(ctx, img) {
-                spottedcat::image::draw(
+            if img.is_ready(ctx) {
+                img.draw(
                     ctx,
-                    img,
                     DrawOption::default().with_position([Pt::from(200.0), Pt::from(50.0)]),
                 );
             } else {

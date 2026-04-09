@@ -51,6 +51,7 @@ Notes:
 
 - The iOS wrapper shows today's steps plus the last 7 days of pedometer history, both queried from Rust.
 - Historical pedometer data is expected to be unavailable in the iOS Simulator.
+- The iOS wrapper loads its sample PNG through `Image::from_bytes(...)`.
 
 ## Android
 
@@ -73,6 +74,7 @@ Notes:
 - The sample shows sensor-driven "today's steps", not a historical or lifetime total.
 - On Android 10 and above, the sample requests `ACTIVITY_RECOGNITION` at runtime before step data becomes available.
 - Recent step history is requested from Rust via JNI after Health Connect permission is granted by the Android host app.
+- The Android wrapper loads its sample PNG through `Image::from_bytes(...)`.
 
 Desktop graphics example to validate the new fog system:
 

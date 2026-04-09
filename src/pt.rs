@@ -54,6 +54,13 @@ impl Pt {
         v.round() as i32
     }
 
+    pub(crate) fn from_physical_px(px: f64, scale_factor: f64) -> Self {
+        let v = px / scale_factor;
+        let v = if v.is_finite() { v } else { 0.0 };
+        let v = v.round();
+        Pt(v as f32)
+    }
+
     pub(crate) fn to_u32_clamped(self) -> u32 {
         let v = if self.0.is_finite() { self.0 } else { 0.0 };
         if v <= 0.0 {
@@ -62,13 +69,6 @@ impl Pt {
             let v = v.round().min(u32::MAX as f32);
             v as u32
         }
-    }
-
-    pub(crate) fn from_physical_px(px: f64, scale_factor: f64) -> Self {
-        let v = px / scale_factor;
-        let v = if v.is_finite() { v } else { 0.0 };
-        let v = v.round();
-        Pt(v as f32)
     }
 }
 

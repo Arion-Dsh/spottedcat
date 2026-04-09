@@ -7,7 +7,6 @@ use crate::model::{Bone, SkinData, Vertex};
 
 use super::core::{AtlasSlot, Graphics};
 
-
 type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
 type MaterialTextureSet<'a> = (
     MaterialTextureBinding<'a>,
@@ -867,33 +866,6 @@ impl Graphics {
                 );
             }
         }
-    }
-
-    pub fn create_mesh(
-        &mut self,
-        ctx: &mut crate::Context,
-        vertices: &[Vertex],
-        indices: &[u32],
-    ) -> anyhow::Result<u32> {
-        let id = ctx.registry.model_3d.next_mesh_id;
-        ctx.registry.model_3d.next_mesh_id += 1;
-
-        while ctx.registry.model_3d.models.len() <= id as usize {
-            ctx.registry.model_3d.models.push(None);
-        }
-        ctx.registry.model_3d.models[id as usize] = Some(crate::model::MeshDataPersistent {
-            vertices: vertices.to_vec(),
-            indices: indices.to_vec(),
-        });
-
-        let mesh = MeshData::new(&self.device, vertices, indices);
-        mesh.upload(&self.queue, vertices, indices);
-        self.ensure_model_3d()
-            .model_renderer
-            .meshes
-            .insert(id, mesh);
-
-        Ok(id)
     }
 
     pub fn create_skin(

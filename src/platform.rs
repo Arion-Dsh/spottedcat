@@ -1,8 +1,5 @@
 use crate::graphics::core::Graphics;
 
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use std::cell::RefCell;
-
 #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
 #[allow(dead_code)]
 pub(crate) const PREFERRED_WGPU_BACKENDS: &[wgpu::Backends] = &[wgpu::Backends::PRIMARY];

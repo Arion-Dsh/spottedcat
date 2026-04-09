@@ -25,9 +25,6 @@ impl App {
         let Some(window) = self.platform.window.as_ref() else {
             return;
         };
-        let Some(surface) = self.surface.as_ref() else {
-            return;
-        };
 
         let canvas = self.platform.canvas_id.as_deref().and_then(|id| {
             web_sys::window()
@@ -51,15 +48,29 @@ impl App {
         let w = ((css_w * dpr).round() as i64).max(1) as u32;
         let h = ((css_h * dpr).round() as i64).max(1) as u32;
 
-        if self.platform.last_physical_size == Some((w, h)) {
+        let canvas_matches = canvas.width() == w && canvas.height() == h;
+        let graphics_matches = self
+            .ctx
+            .runtime
+            .graphics
+            .as_ref()
+            .map(|g| g.config.width == w && g.config.height == h)
+            .unwrap_or(false);
+
+        if self.platform.last_physical_size == Some((w, h)) && canvas_matches && graphics_matches {
             return;
         }
         self.platform.last_physical_size = Some((w, h));
 
-        canvas.set_width(w);
-        canvas.set_height(h);
+        if !canvas_matches {
+            canvas.set_width(w);
+            canvas.set_height(h);
+        }
 
-        if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+        if !graphics_matches
+            && let Some(surface) = self.surface.as_ref()
+            && let Some(g) = self.ctx.runtime.graphics.as_mut()
+        {
             g.resize(surface, w, h);
         }
 
@@ -78,11 +89,9 @@ pub(crate) unsafe fn handle_wasm_graphics_init_result(
     graphics_r: anyhow::Result<crate::graphics::core::Graphics>,
 ) {
     match graphics_r {
-        Ok(graphics) => {
-            unsafe {
-                (*app_ptr).init_state = platform::GraphicsInitState::Ready(Box::new(Some(graphics)));
-            }
-        }
+        Ok(graphics) => unsafe {
+            (*app_ptr).init_state = platform::GraphicsInitState::Ready(Box::new(Some(graphics)));
+        },
         Err(e) => {
             web_sys::console::error_1(
                 &format!("[spot][wasm][init] Graphics::new failed: {:?}", e).into(),
@@ -100,7 +109,10 @@ pub(crate) unsafe fn handle_wasm_graphics_init_result(
             }
         });
         web_sys::window()
-            .and_then(|w| w.request_animation_frame(closure.as_ref().unchecked_ref()).ok())
+            .and_then(|w| {
+                w.request_animation_frame(closure.as_ref().unchecked_ref())
+                    .ok()
+            })
             .expect("failed to request_animation_frame");
         closure.forget();
     }

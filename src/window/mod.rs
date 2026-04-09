@@ -155,6 +155,7 @@ impl SceneHost {
         self.is_floating_scene = false;
     }
 
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn initialize_if_missing(&mut self, ctx: &mut Context) {
         if self.spot.is_none() {
             self.spot = Some((self.factory)(ctx));
@@ -198,6 +199,7 @@ pub(crate) struct App {
 }
 
 impl App {
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
         let instance = platform::create_wgpu_instance();
 

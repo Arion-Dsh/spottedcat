@@ -372,11 +372,7 @@ pub fn android_main(app: AndroidApp) {
             eprintln!("[spot][android] initialize called");
             // Load an image from assets
             const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../../../../assets/happy-tree.png");
-            let img = image::load_from_memory(HAPPY_TREE_BYTES)
-                .unwrap()
-                .to_rgba8();
-            let happy_tree =
-                spottedcat::image::create(ctx, Pt::from(img.width()), Pt::from(img.height()), &img).unwrap();
+            let happy_tree = Image::from_bytes(ctx, HAPPY_TREE_BYTES).unwrap();
 
             // Register a font and create text
             const FALLBACK_FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
@@ -777,7 +773,7 @@ pub fn android_main(app: AndroidApp) {
                     Pt::from(center_y - scaled_height * 0.5),
                 ])
                 .with_scale([image_scale, image_scale]);
-            spottedcat::image::draw(ctx, self.happy_tree, img_opts);
+            self.happy_tree.draw(ctx, img_opts);
         }
 
         fn resumed(&mut self, _ctx: &mut Context) {

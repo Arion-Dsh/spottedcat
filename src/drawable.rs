@@ -17,7 +17,9 @@ pub(crate) struct ImageCommand {
 pub(crate) enum DrawCommand {
     Image(Box<ImageCommand>),
     Text(Box<Text>, DrawOption),
+    #[allow(dead_code)]
     ClearImage(u32, [f32; 4]),
+    #[allow(dead_code)]
     CopyImage(u32, u32),
 }
 

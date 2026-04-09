@@ -11,11 +11,6 @@ pub fn register_model_shader(ctx: &mut Context, wgsl_source: &str) -> u32 {
     ctx.register_model_shader(wgsl_source)
 }
 
-/// Registers font bytes and returns the font id.
-pub fn register_font(ctx: &mut Context, font_data: Vec<u8>) -> u32 {
-    ctx.register_font(font_data)
-}
-
 /// Returns a copy of the raw bytes for a registered font.
 pub fn get_registered_font(ctx: &Context, font_id: u32) -> Option<Vec<u8>> {
     ctx.registry.fonts.get(&font_id).cloned()

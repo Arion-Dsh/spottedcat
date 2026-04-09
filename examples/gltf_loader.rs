@@ -1,7 +1,7 @@
+use spottedcat::math::mat4::identity;
 use spottedcat::model::Bone;
 use spottedcat::model::{Model, Vertex};
 use spottedcat::{Context, DrawOption3D, Spot, WindowConfig};
-use spottedcat::math::mat4::identity;
 
 struct GltfApp {
     model: Model,

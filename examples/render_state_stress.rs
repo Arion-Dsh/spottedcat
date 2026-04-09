@@ -15,8 +15,7 @@ fn checker_texture(ctx: &mut Context, a: [u8; 4], b: [u8; 4]) -> Image {
         a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3], b[0], b[1], b[2], b[3], a[0], a[1], a[2],
         a[3],
     ];
-    spottedcat::image::create(ctx, Pt::from(2.0), Pt::from(2.0), &rgba)
-        .expect("checker texture should be created")
+    Image::new(ctx, Pt::from(2.0), Pt::from(2.0), &rgba).expect("checker texture should be created")
 }
 
 impl Spot for RenderStateStress {

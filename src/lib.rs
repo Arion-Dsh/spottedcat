@@ -18,7 +18,7 @@
 //!     fn initialize(ctx: &mut Context) -> Self {
 //!         // Create an image from raw RGBA8 data
 //!         let rgba = vec![255u8; 64 * 64 * 4]; // Red square
-//!         let image = spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
+//!         let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
 //!             .expect("Failed to create image");
 //!         Self { image }
 //!     }
@@ -35,7 +35,7 @@
 //!             .with_position([w / 2.0, h / 2.0])
 //!             .with_scale([2.0, 2.0]);
 //!             
-//!         spottedcat::image::draw(ctx, self.image, opts);
+//!         self.image.draw(ctx, opts);
 //!     }
 //!
 //!     fn remove(&mut self, _ctx: &mut Context) {}
@@ -63,11 +63,11 @@ mod fog;
 mod glyph_cache;
 mod graphics;
 pub mod image;
-pub mod math;
 mod image_raw;
 mod input;
 mod key;
 mod launch;
+pub mod math;
 #[cfg(feature = "model-3d")]
 pub mod model;
 mod mouse;
@@ -78,6 +78,7 @@ mod pt;
 mod scenes;
 mod shader_opts;
 mod sound;
+mod splash;
 pub mod text;
 mod texture;
 mod touch;
@@ -109,6 +110,7 @@ pub use pt::Pt;
 pub use scenes::{Spot, quit, switch_scene, switch_scene_with};
 pub use shader_opts::ShaderOpts;
 pub use sound::*;
+pub use splash::SpottedcatSplash;
 pub use text::Text;
 pub use touch::{TouchInfo, TouchPhase};
 

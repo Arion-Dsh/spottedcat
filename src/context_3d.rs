@@ -9,29 +9,15 @@ use crate::context::Context;
 use crate::drawable::DrawCommand3D;
 
 #[cfg(feature = "model-3d")]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct Model3dRuntime {
     pub(crate) draw_list: Vec<DrawCommand3D>,
     pub(crate) camera: crate::model::Camera,
 }
 
 #[cfg(feature = "model-3d")]
-impl Default for Model3dRuntime {
-    fn default() -> Self {
-        Self {
-            draw_list: Vec::new(),
-            camera: crate::model::Camera::default(),
-        }
-    }
-}
-
-#[cfg(not(feature = "model-3d"))]
-#[derive(Debug, Default)]
-pub(crate) struct Model3dRuntime;
-
 impl Model3dRuntime {
     pub(crate) fn begin_frame(&mut self) {
-        #[cfg(feature = "model-3d")]
         self.draw_list.clear();
     }
 }
@@ -60,10 +46,6 @@ impl Default for Model3dRegistry {
         }
     }
 }
-
-#[cfg(not(feature = "model-3d"))]
-#[derive(Debug, Default)]
-pub(crate) struct Model3dRegistry;
 
 #[cfg(feature = "model-3d")]
 impl Context {

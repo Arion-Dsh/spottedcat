@@ -11,8 +11,7 @@ struct FlipTest {
 impl Spot for FlipTest {
     fn initialize(ctx: &mut Context) -> Self {
         let img_raw = vec![255u8; 64 * 64 * 4];
-        let image =
-            spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &img_raw).unwrap();
+        let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &img_raw).unwrap();
 
         let font_data = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, font_data.to_vec());
@@ -75,7 +74,7 @@ impl Spot for FlipTest {
             let mut shader_opts = ShaderOpts::default().with_opacity(shader_alpha);
             shader_opts.set_vec4(0, color);
 
-            spottedcat::image::draw_with_shader(ctx, self.image, 1, opts, shader_opts);
+            self.image.draw_with_shader(ctx, 1, opts, shader_opts);
 
             let mut t = self.text_obj.clone();
             t.set_content(label);
@@ -138,13 +137,8 @@ impl Spot for FlipTest {
                 .with_position([Pt::from(x), Pt::from(y)])
                 .with_scale([-s, -s]);
 
-            spottedcat::image::draw_with_shader(
-                ctx,
-                self.image,
-                self.yellow_shader_id,
-                opts,
-                yellow_opts,
-            );
+            self.image
+                .draw_with_shader(ctx, self.yellow_shader_id, opts, yellow_opts);
         };
         yellow_draw(ctx, fsw - 100.0, fsh - 100.0);
 
@@ -161,9 +155,8 @@ impl Spot for FlipTest {
         let mut fill_opts = ShaderOpts::default();
         fill_opts.set_vec4(0, [1.0, 0.5, 0.0, 1.0]); // Orange Fill
 
-        spottedcat::image::draw_with_shader(
+        self.image.draw_with_shader(
             ctx,
-            self.image,
             self.yellow_shader_id, // User-registered Fill Shader
             DrawOption::default()
                 .with_position([Pt::from(fsw * 0.5), Pt::from(move_y)])

@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat"
-version = "0.7.2"
+version = "0.7.4"
 dependencies = [
  "ab_glyph",
  "android-activity",

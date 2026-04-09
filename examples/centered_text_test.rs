@@ -12,9 +12,9 @@ impl Spot for CenteredTextTestSpot {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
-        // Create a larger outer image (400x150)
-        let outer_width = 400.0;
-        let outer_height = 150.0;
+        // Create a larger outer image with a 400x150 logical display size
+        let outer_width = 400u32;
+        let outer_height = 150u32;
         let mut outer_rgba = vec![240u8; (outer_width as usize) * (outer_height as usize) * 4]; // Light blue background
 
         for i in 0..(outer_width as usize) * (outer_height as usize) {
@@ -24,7 +24,7 @@ impl Spot for CenteredTextTestSpot {
             outer_rgba[i * 4 + 3] = 255; // A
         }
 
-        let outer_image = spottedcat::image::create(
+        let outer_image = Image::new(
             ctx,
             Pt::from(outer_width),
             Pt::from(outer_height),
@@ -32,9 +32,9 @@ impl Spot for CenteredTextTestSpot {
         )
         .unwrap();
 
-        // Create inner image (300x50)
-        let width = 300.0;
-        let height = 50.0;
+        // Create inner image with a 300x50 logical display size
+        let width = 300u32;
+        let height = 50u32;
         let mut rgba = vec![200u8; (width as usize) * (height as usize) * 4]; // Light gray background
 
         for i in 0..(width as usize) * (height as usize) {
@@ -44,8 +44,7 @@ impl Spot for CenteredTextTestSpot {
             rgba[i * 4 + 3] = 255; // A
         }
 
-        let inner_image =
-            spottedcat::image::create(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
+        let inner_image = Image::new(ctx, Pt::from(width), Pt::from(height), &rgba).unwrap();
 
         Self {
             font_id,
@@ -61,11 +60,11 @@ impl Spot for CenteredTextTestSpot {
         // Draw outer image at position (50, 50)
         let outer_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]);
 
-        spottedcat::image::with_clip_scope(ctx, self.outer_image, outer_opts, |ctx1| {
+        self.outer_image.with_clip_scope(ctx, outer_opts, |ctx1| {
             // Draw inner image at (10, 10) position within outer image
             let inner_opts = DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
 
-            spottedcat::image::with_clip_scope(ctx1, self.inner_image, inner_opts, |ctx2| {
+            self.inner_image.with_clip_scope(ctx1, inner_opts, |ctx2| {
                 // Calculate centered position for text
                 let text_content = "Centered Text";
                 let font_size = Pt::from(20.0);

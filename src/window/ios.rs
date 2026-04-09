@@ -3,7 +3,7 @@ use objc2::{msg_send, rc::Retained};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
 use objc2_core_motion::{CMMotionManager, CMPedometer, CMPedometerData};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
-use objc2_foundation::{MainThreadMarker, NSCalendar, NSDate};
+use objc2_foundation::{MainThreadMarker, NSDate};
 #[cfg(all(target_os = "ios", feature = "sensors"))]
 use std::sync::{Arc, Mutex};
 

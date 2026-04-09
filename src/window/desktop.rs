@@ -2,9 +2,9 @@ use super::App;
 use crate::Pt;
 use crate::platform;
 use crate::scenes::take_quit_request;
-use winit::application::ApplicationHandler;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::JsCast;
+use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Fullscreen, Window, WindowId};
@@ -21,6 +21,7 @@ pub(crate) struct PlatformData {
 }
 
 impl PlatformData {
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub(crate) fn new() -> Self {
         Self {
             window: None,
@@ -90,9 +91,6 @@ impl App {
             return;
         }
 
-        let width = self.window_config.width.0.max(1.0) as f64;
-        let height = self.window_config.height.0.max(1.0) as f64;
-
         let attributes = Window::default_attributes()
             .with_title(self.window_config.title.clone())
             .with_resizable(self.window_config.resizable)
@@ -102,6 +100,9 @@ impl App {
         let attributes = {
             use wasm_bindgen::JsCast;
             use winit::platform::web::WindowAttributesExtWebSys;
+
+            let width = self.window_config.width.0.max(1.0) as f64;
+            let height = self.window_config.height.0.max(1.0) as f64;
 
             let canvas = self.platform.canvas_id.as_deref().and_then(|id| {
                 web_sys::window()
@@ -116,7 +117,11 @@ impl App {
         };
 
         #[cfg(not(any(target_os = "ios", target_os = "android", target_arch = "wasm32")))]
-        let attributes = attributes.with_inner_size(winit::dpi::LogicalSize::new(width, height));
+        let attributes = {
+            let width = self.window_config.width.0.max(1.0) as f64;
+            let height = self.window_config.height.0.max(1.0) as f64;
+            attributes.with_inner_size(winit::dpi::LogicalSize::new(width, height))
+        };
 
         let window = event_loop
             .create_window(attributes)
@@ -138,6 +143,7 @@ impl App {
         self.platform.window = Some(window);
     }
 
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     fn ensure_audio_initialized(&mut self) {
         if self.ctx.runtime.audio.is_none() {
             match crate::audio::AudioSystem::new() {
@@ -336,11 +342,14 @@ impl ApplicationHandler for App {
             self.sync_canvas_resize();
             if let Some(window) = self.platform.window.as_ref() {
                 let window_ptr = window as *const winit::window::Window;
-                let closure = wasm_bindgen::prelude::Closure::once(move || {
-                    unsafe { (*window_ptr).request_redraw(); }
+                let closure = wasm_bindgen::prelude::Closure::once(move || unsafe {
+                    (*window_ptr).request_redraw();
                 });
                 web_sys::window()
-                    .and_then(|w| w.request_animation_frame(closure.as_ref().unchecked_ref()).ok())
+                    .and_then(|w| {
+                        w.request_animation_frame(closure.as_ref().unchecked_ref())
+                            .ok()
+                    })
                     .expect("failed to request_animation_frame");
                 closure.forget();
             }
@@ -438,7 +447,8 @@ impl ApplicationHandler for App {
             return;
         }
 
-        let updates = self.timing.run_updates(8, |dt| {
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        self.timing.run_updates(8, |dt| {
             #[cfg(all(target_os = "ios", feature = "sensors"))]
             if let Some(state) = self.platform.sensor_state.as_ref() {
                 state.poll(&mut self.ctx.input_mut());
@@ -453,6 +463,21 @@ impl ApplicationHandler for App {
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         self.request_redraw();
+
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        let updates = self.timing.run_updates(8, |dt| {
+            #[cfg(all(target_os = "ios", feature = "sensors"))]
+            if let Some(state) = self.platform.sensor_state.as_ref() {
+                state.poll(&mut self.ctx.input_mut());
+            }
+
+            self.ctx.set_delta_time(dt);
+            if let Some(spot) = self.scene.spot_mut() {
+                spot.update(&mut self.ctx, dt);
+            }
+            self.ctx.input_mut().end_frame();
+        });
+
         #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         if updates > 0 {
             self.request_redraw();

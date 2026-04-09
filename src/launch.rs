@@ -56,7 +56,7 @@ pub fn run<T: Spot + 'static>(window: WindowConfig) {
 
     let event_loop = EventLoop::new().expect("failed to create winit EventLoop");
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    let mut app = window::App::new_wasm::<T>(window.clone(), window.canvas_id.clone());
+    let app = window::App::new_wasm::<T>(window.clone(), window.canvas_id.clone());
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     let mut app = window::App::new::<T>(window);
 

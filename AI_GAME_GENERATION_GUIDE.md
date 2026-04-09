@@ -60,14 +60,14 @@ fn main() {
 ## 2. Drawing 2D (Images & Text)
 
 ### Images
-Images are created via `spottedcat::image::create(...)`. Use `Pt` for logical units.
+Images are created via `Image::new(...)`. Use `Pt` for logical units, or `Image::from_bytes(...)` for encoded PNG/JPEG bytes.
 ```rust
 use spottedcat::{Image, DrawOption, Pt};
 
 // Registering requires the ctx to synchronize with the GPU
-let image = spottedcat::image::create(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
+let image = Image::new(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
 
-spottedcat::image::draw(ctx, image, DrawOption::default()
+image.draw(ctx, DrawOption::default()
     .with_position([Pt(100.0), Pt(100.0)])
     .with_scale([2.0, 2.0])
     .with_rotation(45.0f32.to_radians())

@@ -22,15 +22,13 @@ impl Spot for ModelTest {
             0, 0, 255, 255, // Blue
             255, 255, 0, 255, // Yellow
         ];
-        let texture = spottedcat::image::create(ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
+        let texture = spottedcat::Image::new(ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
         let axis_x_tex =
-            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 64, 64, 255])
-                .unwrap();
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 64, 64, 255]).unwrap();
         let axis_y_tex =
-            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 255, 64, 255])
-                .unwrap();
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 255, 64, 255]).unwrap();
         let axis_z_tex =
-            spottedcat::image::create(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 128, 255, 255])
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[64, 128, 255, 255])
                 .unwrap();
 
         // Create a 3D cube model and apply the texture

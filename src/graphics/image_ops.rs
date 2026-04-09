@@ -4,8 +4,8 @@ use crate::packer::AtlasPacker;
 use crate::platform;
 use crate::texture::Texture;
 
-use super::core::Graphics;
 use super::core::AtlasSlot;
+use super::core::Graphics;
 
 impl Graphics {
     pub(super) fn ensure_atlas_for_image(
@@ -257,14 +257,12 @@ impl Graphics {
             if let Some(entry) = ctx.registry.images[i].as_ref()
                 && entry.raw_data.is_some()
             {
-                let width = entry.bounds.width;
-                let height = entry.bounds.height;
                 let raw_data = entry.raw_data.clone().unwrap_or_else(|| {
                     panic!("[spot][atlas] image {} lost raw data during rebuild", i)
                 });
 
-                let w = width.to_u32_clamped();
-                let h = height.to_u32_clamped();
+                let w = entry.bounds.width.to_u32_clamped();
+                let h = entry.bounds.height.to_u32_clamped();
 
                 let (atlas_index, rect) = match self.ensure_atlas_for_image(ctx, w, h) {
                     Ok(v) => v,

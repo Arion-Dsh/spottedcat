@@ -9,22 +9,33 @@ struct ShaderScopeApp {
 
 impl Spot for ShaderScopeApp {
     fn initialize(ctx: &mut Context) -> Self {
-        // Create a Blue image
+        // Create a 64x64 logical blue image
         let rgba = vec![0, 0, 255, 255]
             .into_iter()
             .cycle()
             .take(64 * 64 * 4)
             .collect::<Vec<u8>>();
-        let image = spottedcat::image::create(ctx, 64u32.into(), 64u32.into(), &rgba).unwrap();
+        let image = Image::new(
+            ctx,
+            spottedcat::Pt::from(64.0),
+            spottedcat::Pt::from(64.0),
+            &rgba,
+        )
+        .unwrap();
 
-        // Create a Red image
+        // Create a 32x32 logical red image
         let child_rgba = vec![255, 0, 0, 255]
             .into_iter()
             .cycle()
             .take(32 * 32 * 4)
             .collect::<Vec<u8>>();
-        let child_image =
-            spottedcat::image::create(ctx, 32u32.into(), 32u32.into(), &child_rgba).unwrap();
+        let child_image = Image::new(
+            ctx,
+            spottedcat::Pt::from(32.0),
+            spottedcat::Pt::from(32.0),
+            &child_rgba,
+        )
+        .unwrap();
 
         // A shader that uses screen coordinates to make a visible wave
         // Note: engine uses hooks. global 'user_globals' is available. available vars: in, color.
@@ -64,24 +75,25 @@ impl Spot for ShaderScopeApp {
         shader_opts.set_vec4(0, [self.time, 0.0, 0.0, 0.0]);
 
         // Draw parent with shader scope
-        spottedcat::image::with_shader_scope(ctx, self.image, self.shader_id, shader_opts, |ctx| {
-            // Draw the parent itself (it needs to be drawn explicitly if we want it visible)
-            spottedcat::image::draw(ctx, self.image, opts);
+        self.image
+            .with_shader_scope(ctx, self.shader_id, shader_opts, |ctx| {
+                // Draw the parent itself (it needs to be drawn explicitly if we want it visible)
+                self.image.draw(ctx, opts);
 
-            // Draw child relative to parent
-            let child_opts = DrawOption::default().with_position([
-                spottedcat::Pt::from(100.0),
-                spottedcat::Pt::from(200.0) + spottedcat::Pt::from(20.0),
-            ]); // Slightly offset
+                // Draw child relative to parent
+                let child_opts = DrawOption::default().with_position([
+                    spottedcat::Pt::from(100.0),
+                    spottedcat::Pt::from(200.0) + spottedcat::Pt::from(20.0),
+                ]); // Slightly offset
 
-            // This child should INHERIT the shader and the wave should be continuous
-            spottedcat::image::draw(ctx, self.child_image, child_opts);
-        });
+                // This child should INHERIT the shader and the wave should be continuous
+                self.child_image.draw(ctx, child_opts);
+            });
 
         // Draw another instance WITHOUT scope to compare
         let ref_opts =
             opts.with_position([spottedcat::Pt::from(400.0), spottedcat::Pt::from(200.0)]);
-        spottedcat::image::draw(ctx, self.image, ref_opts);
+        self.image.draw(ctx, ref_opts);
     }
 
     fn update(&mut self, _ctx: &mut Context, dt: std::time::Duration) {

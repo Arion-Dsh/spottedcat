@@ -25,8 +25,8 @@ impl Spot for WasmDemo {
             }
         }
 
-        let image = spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
-            .expect("failed to create test image");
+        let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
+            .expect("failed to create 64x64 test image");
 
         // Include font for WASM demo
         const FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
@@ -77,7 +77,7 @@ impl Spot for WasmDemo {
         let opts = DrawOption::default()
             .with_position([Pt::from(image_x), Pt::from(image_y)])
             .with_scale([image_scale, image_scale]);
-        spottedcat::image::draw(ctx, self.image, opts);
+        self.image.draw(ctx, opts);
 
         let text_opts =
             DrawOption::default().with_position([Pt::from(text_x), Pt::from(title_y)]);

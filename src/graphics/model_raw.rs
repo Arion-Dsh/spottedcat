@@ -20,7 +20,6 @@ pub struct ModelGlobals {
     pub emissive_uv: [f32; 4],
 }
 
-
 pub struct ModelRenderer {
     pub(crate) globals_bind_group_layout: wgpu::BindGroupLayout, // Group 0: [Model, Scene, UserOpts]
     pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout, // Group 1: Material textures
@@ -50,7 +49,6 @@ pub struct ModelRenderer {
     pub(crate) max_user_shader_opts: u32,
     pub(crate) max_instances: u32,
 
-    pub(crate) meshes: HashMap<u32, MeshData>,
     pub(crate) skins: HashMap<u32, crate::model::SkinData>,
     pub(crate) texture_bind_groups: HashMap<MaterialBindGroupKey, wgpu::BindGroup>,
     pub(crate) skin_bone_offsets: HashMap<u32, u32>,
@@ -398,7 +396,6 @@ impl ModelRenderer {
             max_model_globals,
             max_user_shader_opts,
             max_instances,
-            meshes: HashMap::new(),
             skins: HashMap::new(),
             texture_bind_groups: HashMap::new(),
             skin_bone_offsets: HashMap::new(),
@@ -654,8 +651,6 @@ impl MeshData {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     fn project_point(matrix: [[f32; 4]; 4], point: [f32; 3]) -> [f32; 4] {
         let v = [point[0], point[1], point[2], 1.0];
         let mut out = [0.0; 4];

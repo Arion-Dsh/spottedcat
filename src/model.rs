@@ -238,7 +238,7 @@ impl Model {
     }
 
     /// Appends a new sub-mesh part to the model.
-    pub(crate) fn add_part(
+    pub fn add_part(
         &mut self,
         ctx: &mut crate::Context,
         vertices: &[Vertex],
@@ -254,7 +254,7 @@ impl Model {
     }
 
     /// Chaining version of add_part.
-    pub(crate) fn with_part(
+    pub fn with_part(
         mut self,
         ctx: &mut crate::Context,
         vertices: &[Vertex],
@@ -586,7 +586,7 @@ impl Model {
         ));
     }
 
-    pub(crate) fn draw_skinned(
+    pub fn draw_skinned(
         &self,
         ctx: &mut crate::Context,
         options: crate::DrawOption3D,
@@ -635,7 +635,7 @@ impl Model {
     }
 
     /// Renders instances using a caller-owned transform buffer without making an extra copy.
-    pub(crate) fn draw_instanced_owned(
+    pub fn draw_instanced_owned(
         &self,
         ctx: &mut crate::Context,
         options: crate::DrawOption3D,

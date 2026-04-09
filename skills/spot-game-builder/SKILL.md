@@ -93,11 +93,12 @@ Honor these rules:
 - Multiply motion and time-based effects by delta time.
 - Treat 2D origin as top-left.
 - Use `Pt` for logical 2D units and viewport-relative helpers when layout should scale.
+- For encoded PNG/JPEG/WebP bytes, use `Image::from_bytes(ctx, data)`.
 - Keep the first implementation simple enough to run immediately.
 
 ### 6. Map common game needs to `spottedcat`
 
-- sprite or HUD element -> `spottedcat::image::create` plus `spottedcat::image::draw`
+- sprite or HUD element -> `Image::new` plus `image.draw`
 - on-screen text -> `register_font`, `Text::new`, `spottedcat::text::draw`
 - player movement -> `key_down`, `key_pressed`, `mouse_down`, `mouse_pos`, `touches`
 - simple sound feedback -> `register_sound` + `play_sound`, or `play_sine` for fast smoke tests

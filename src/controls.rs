@@ -1,14 +1,4 @@
-use crate::{Context, Key, MouseButton, PlatformEvent, Pt, TouchInfo};
-
-/// Returns true if the specified key is currently held down.
-pub fn key_down(ctx: &Context, key: Key) -> bool {
-    ctx.input().key_down(key)
-}
-
-/// Returns true if the specified key was just pressed this frame.
-pub fn key_pressed(ctx: &Context, key: Key) -> bool {
-    ctx.input().key_pressed(key)
-}
+use crate::{Context, Key, MouseButton, PlatformEvent, Pt};
 
 /// Returns true if the specified key was just released this frame.
 pub fn key_released(ctx: &Context, key: Key) -> bool {
@@ -39,11 +29,6 @@ pub fn mouse_button_pressed_position(ctx: &Context, button: MouseButton) -> Opti
     }
 }
 
-/// Returns the window's logical size.
-pub fn window_size(ctx: &Context) -> (Pt, Pt) {
-    ctx.window_logical_size()
-}
-
 /// Returns the current hardware cursor position in logical coordinates.
 pub fn cursor_position(ctx: &Context) -> Option<(Pt, Pt)> {
     ctx.input().cursor_position()
@@ -67,11 +52,6 @@ pub fn text_input(ctx: &Context) -> &str {
 /// Compatibility alias for `text_input`.
 pub fn get_input(ctx: &Context) -> &str {
     ctx.input().text_input()
-}
-
-/// Returns a slice of active touch points.
-pub fn touches(ctx: &Context) -> &[TouchInfo] {
-    ctx.input().touches()
 }
 
 #[cfg(feature = "sensors")]

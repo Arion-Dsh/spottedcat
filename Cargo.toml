@@ -80,6 +80,10 @@ name = "text_performance_test"
 path = "examples/text_performance_test.rs"
 
 [[example]]
+name = "spottedcat_splash"
+path = "examples/spottedcat_splash.rs"
+
+[[example]]
 name = "gltf_loader"
 path = "examples/gltf_loader.rs"
 required-features = ["gltf"]

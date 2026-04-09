@@ -1,5 +1,6 @@
 use crate::DrawOption;
 use crate::audio::AudioSystem;
+#[cfg(feature = "model-3d")]
 use crate::context_3d::{Model3dRegistry, Model3dRuntime};
 use crate::drawable::DrawCommand;
 use crate::graphics::core::Graphics;

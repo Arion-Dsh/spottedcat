@@ -1,4 +1,4 @@
-use crate::{Context, DrawOption, Pt, ShaderOpts};
+use crate::Pt;
 
 use std::sync::Arc;
 
@@ -59,6 +59,27 @@ pub struct Image {
 }
 
 impl Image {
+    /// Creates a new image from RGBA8 data.
+    pub fn new(
+        ctx: &mut crate::Context,
+        width: Pt,
+        height: Pt,
+        rgba: &[u8],
+    ) -> anyhow::Result<Self> {
+        Self::new_from_rgba8(ctx, width, height, rgba)
+    }
+
+    /// Loads an encoded image (PNG, JPEG, etc.) from bytes and creates an `Image`.
+    #[cfg(feature = "utils")]
+    pub fn from_bytes(ctx: &mut crate::Context, data: &[u8]) -> anyhow::Result<Self> {
+        use ::image::GenericImageView;
+
+        let img = ::image::load_from_memory(data)?;
+        let (w, h) = img.dimensions();
+        let rgba = img.to_rgba8();
+        Self::new(ctx, w.into(), h.into(), &rgba)
+    }
+
     /// Returns the logical width of the image.
     pub fn width(&self) -> Pt {
         self.width
@@ -73,7 +94,7 @@ impl Image {
     }
 
     /// Returns true if the image is ready for rendering.
-    pub(crate) fn is_ready(&self, ctx: &crate::Context) -> bool {
+    pub fn is_ready(&self, ctx: &crate::Context) -> bool {
         ctx.registry
             .images
             .get(self.index())
@@ -130,7 +151,7 @@ impl Image {
 
     /// Arguments
     /// * `image` - The source image to copy
-    pub(crate) fn new_from_image(ctx: &mut crate::Context, image: Image) -> anyhow::Result<Self> {
+    pub fn from_image(ctx: &mut crate::Context, image: Image) -> anyhow::Result<Self> {
         Self::sub_image(
             ctx,
             image,
@@ -154,7 +175,7 @@ impl Image {
     ///
     /// # Errors
     /// Returns an error if the bounds are out of range.
-    pub(crate) fn sub_image(
+    pub fn sub_image(
         ctx: &mut crate::Context,
         image: Image,
         bounds: Bounds,
@@ -203,7 +224,7 @@ impl Image {
     /// opts = opts.with_scale([2.0, 2.0]);
     /// image.draw(&mut ctx, opts);
     /// ```
-    pub(crate) fn draw(self, ctx: &mut crate::Context, options: crate::DrawOption) {
+    pub fn draw(self, ctx: &mut crate::Context, options: crate::DrawOption) {
         ctx.push(crate::drawable::DrawCommand::Image(Box::new(
             crate::drawable::ImageCommand {
                 id: self.id,
@@ -215,7 +236,7 @@ impl Image {
         )));
     }
 
-    pub(crate) fn draw_with_shader(
+    pub fn draw_with_shader(
         self,
         ctx: &mut crate::Context,
         shader_id: u32,
@@ -233,12 +254,14 @@ impl Image {
         )));
     }
 
-    pub(crate) fn clear(self, ctx: &mut crate::Context, color: [f32; 4]) -> anyhow::Result<()> {
+    #[allow(dead_code)]
+    pub fn clear(self, ctx: &mut crate::Context, color: [f32; 4]) -> anyhow::Result<()> {
         ctx.push(crate::drawable::DrawCommand::ClearImage(self.id, color));
         Ok(())
     }
 
-    pub(crate) fn copy_from(self, ctx: &mut crate::Context, src: Image) -> anyhow::Result<()> {
+    #[allow(dead_code)]
+    pub fn copy_from(self, ctx: &mut crate::Context, src: Image) -> anyhow::Result<()> {
         ctx.push(crate::drawable::DrawCommand::CopyImage(self.id, src.id));
         Ok(())
     }
@@ -258,7 +281,7 @@ impl Image {
     /// Destroys the image and frees its GPU resources.
     ///
     /// Returns true if the image was successfully destroyed.
-    pub(crate) fn destroy(self, ctx: &mut crate::Context) -> bool {
+    pub fn destroy(self, ctx: &mut crate::Context) -> bool {
         ctx.registry
             .images
             .get_mut(self.index())
@@ -329,12 +352,8 @@ impl Image {
         ctx.pop_state();
     }
 
-    pub(crate) fn with_clip_scope<F>(
-        self,
-        ctx: &mut crate::Context,
-        options: crate::DrawOption,
-        f: F,
-    ) where
+    pub fn with_clip_scope<F>(self, ctx: &mut crate::Context, options: crate::DrawOption, f: F)
+    where
         F: FnOnce(&mut crate::Context),
     {
         self.with_clip_scope_draw(ctx, options, |img, ctx, opts| img.draw(ctx, opts), f);
@@ -395,75 +414,4 @@ impl ImageEntry {
     pub(crate) fn is_ready(&self) -> bool {
         self.atlas_index.is_some() && self.uv_rect.is_some()
     }
-}
-
-/// Creates a new image from RGBA8 data.
-pub fn create(ctx: &mut Context, width: Pt, height: Pt, rgba: &[u8]) -> anyhow::Result<Image> {
-    Image::new_from_rgba8(ctx, width, height, rgba)
-}
-
-/// Creates a sub-image from an existing image.
-pub fn create_sub(ctx: &mut Context, image: Image, bounds: Bounds) -> anyhow::Result<Image> {
-    Image::sub_image(ctx, image, bounds)
-}
-
-/// Draws an image to the screen.
-pub fn draw(ctx: &mut Context, image: Image, options: DrawOption) {
-    image.draw(ctx, options);
-}
-
-/// Draws an image with a custom shader.
-pub fn draw_with_shader(
-    ctx: &mut Context,
-    image: Image,
-    shader_id: u32,
-    options: DrawOption,
-    shader_opts: ShaderOpts,
-) {
-    image.draw_with_shader(ctx, shader_id, options, shader_opts);
-}
-
-/// Returns true if the image is ready for rendering.
-pub fn is_ready(ctx: &Context, image: Image) -> bool {
-    image.is_ready(ctx)
-}
-
-/// Destroys the image and frees its GPU resources.
-pub fn destroy(ctx: &mut Context, image: Image) -> bool {
-    image.destroy(ctx)
-}
-
-/// Draws an image and clips nested drawing inside its bounds.
-pub fn with_clip_scope<F>(ctx: &mut Context, image: Image, options: DrawOption, f: F)
-where
-    F: FnOnce(&mut Context),
-{
-    image.with_clip_scope(ctx, options, f);
-}
-
-/// Applies an image shader scope to nested drawing commands.
-pub fn with_shader_scope<F>(
-    ctx: &mut Context,
-    image: Image,
-    shader_id: u32,
-    shader_opts: ShaderOpts,
-    f: F,
-) where
-    F: FnOnce(&mut Context),
-{
-    image.with_shader_scope(ctx, shader_id, shader_opts, f);
-}
-
-/// Draws an image and provides a clipping scope for nested drawing, with a custom draw call.
-pub fn with_clip_scope_draw<F, D>(
-    ctx: &mut Context,
-    image: Image,
-    options: DrawOption,
-    draw: D,
-    f: F,
-) where
-    D: FnOnce(Image, &mut Context, DrawOption),
-    F: FnOnce(&mut Context),
-{
-    image.with_clip_scope_draw(ctx, options, draw, f);
 }

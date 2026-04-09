@@ -65,7 +65,7 @@ impl Spot for MyApp {
     fn initialize(ctx: &mut Context) -> Self {
         // Create an image from raw RGBA8 data
         let rgba = vec![255u8; 64 * 64 * 4]; // Red square
-        let image = spottedcat::image::create(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
+        let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
             .expect("Failed to create image");
         Self { image }
     }
@@ -82,7 +82,7 @@ impl Spot for MyApp {
             .with_position([w / 2.0, h / 2.0])
             .with_scale([2.0, 2.0]);
             
-        spottedcat::image::draw(ctx, self.image, opts);
+        self.image.draw(ctx, opts);
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
@@ -96,6 +96,35 @@ fn main() {
 }
 ```
 
+### Built-in Intro Scene
+
+If you want the game to show a branded first-run intro before entering your own
+scene, wrap your root scene with `SpottedcatSplash<T>`:
+
+```rust
+use spottedcat::{Context, Spot, SpottedcatSplash, WindowConfig, run};
+
+struct MyGame;
+
+impl Spot for MyGame {
+    fn initialize(_ctx: &mut Context) -> Self {
+        Self
+    }
+
+    fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
+
+    fn draw(&mut self, _ctx: &mut Context) {}
+}
+
+fn main() {
+    run::<SpottedcatSplash<MyGame>>(WindowConfig::default());
+}
+```
+
+The default intro uses a font-free pixel-art Rusty-spotted cat logo and
+automatically switches to your main scene after a short delay. Players can
+also skip with Space, Enter, mouse click, or touch.
+
 ## AI Assistant Guide
 
 For comprehensive guidance on generating games and working with the `spottedcat` engine, please refer to the dedicated [AI Game Generation Guide](AI_GAME_GENERATION_GUIDE.md).
@@ -106,7 +135,7 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 
 - **`Context`**: Central state for managing draw commands, input, audio, and resources. Hides internal methods to ensure consistency.
 - **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for 2D drawing. Created via `spottedcat::image::create(ctx, ...)` and rendered via `spottedcat::image::draw(ctx, ...)`.
+- **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` and rendered via `image.draw(ctx, ...)`.
 - **`Model`**: 3D model handle created via `spottedcat::model::create(...)` and rendered via `spottedcat::model::*`.
 - **`Text`**: High-level text structure for 2D layout.
 - **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
@@ -114,11 +143,13 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 
 ### API Style
 
-- **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `register_font`, `set_window_size`, `key_down`, `play_sound`), while image creation lives at `spottedcat::image::create` and model creation lives at `spottedcat::model::create`.
+- **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `register_font`, `set_window_size`, `key_down`, `play_sound`), while image creation and drawing live on `Image` methods and model creation lives at `spottedcat::model::create`.
 - **Resource operations** stay inside their domains:
-  - `spottedcat::image::*` for image draw/scope/ready checks.
+  - `Image` methods for image creation, draw, scope, and readiness checks.
   - `spottedcat::model::*` for model create/draw/instancing/shader draw.
   - `spottedcat::text::*` for text draw/measure.
+
+- Use `Image::from_bytes(ctx, data)` when you want to create an image directly from encoded PNG/JPEG bytes.
 
 ### Key Systems
 

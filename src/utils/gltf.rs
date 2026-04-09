@@ -1,4 +1,3 @@
-use crate::Image;
 use crate::model::{Material, Model, ModelPart, Vertex};
 
 /// Loads a GLB or glTF file from a byte slice into a Model.
@@ -28,7 +27,7 @@ pub fn load_gltf_from_bytes(ctx: &mut crate::Context, data: &[u8]) -> anyhow::Re
             }
         };
 
-        let spot_img = crate::image::create(ctx, width.into(), height.into(), &rgba)?;
+        let spot_img = crate::Image::new(ctx, width.into(), height.into(), &rgba)?;
         spot_images.push(spot_img);
     }
 

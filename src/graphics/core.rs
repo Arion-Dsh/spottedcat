@@ -389,6 +389,7 @@ impl Graphics {
         self.transparent = transparent;
     }
 
+    #[cfg(target_os = "android")]
     pub fn poll_device(&self, force_wait: bool) {
         let _ = self.device.poll(if force_wait {
             wgpu::PollType::Wait {

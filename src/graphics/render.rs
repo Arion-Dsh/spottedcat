@@ -121,7 +121,6 @@ impl Graphics {
                 DrawCommand::ClearImage(_, _) | DrawCommand::CopyImage(_, _) => {}
             }
         }
-
     }
 
     pub(crate) fn render_batches_internal<'a>(
