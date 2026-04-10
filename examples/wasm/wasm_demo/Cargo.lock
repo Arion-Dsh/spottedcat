@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat"
-version = "0.7.7"
+version = "0.8.0"
 dependencies = [
  "ab_glyph",
  "android-activity",
@@ -2917,7 +2917,7 @@ dependencies = [
 
 [[package]]
 name = "wasm_demo"
-version = "0.5.2"
+version = "0.8.0"
 dependencies = [
  "console_error_panic_hook",
  "image",

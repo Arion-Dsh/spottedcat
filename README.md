@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.7.7"
+spottedcat = "0.8.0"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.7.7", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.8.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example

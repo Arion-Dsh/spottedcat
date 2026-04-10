@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat_android_wrapper"
-version = "0.5.4"
+version = "0.8.0"
 edition = "2024"
 
 [lib]

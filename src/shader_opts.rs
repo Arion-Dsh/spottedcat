@@ -81,6 +81,17 @@ impl ShaderOpts {
         }
     }
 
+    /// Sets the standard tint color (index 0).
+    pub fn set_color(&mut self, color: [f32; 4]) {
+        self.set_vec4(0, color);
+    }
+
+    /// Builder method to set the standard tint color (index 0).
+    pub fn with_color(mut self, color: [f32; 4]) -> Self {
+        self.set_color(color);
+        self
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }

@@ -2,6 +2,7 @@ use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 
 struct SevenLevelNestTestSpot {
     images: Vec<Image>,
+    white_image: Image,
     font_id: u32,
 }
 
@@ -20,7 +21,9 @@ impl Spot for SevenLevelNestTestSpot {
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
-        Self { images, font_id }
+        let white_image = spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]).expect("Failed to create white image");
+
+        Self { images, white_image, font_id }
     }
 
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
@@ -37,7 +40,14 @@ impl Spot for SevenLevelNestTestSpot {
 
         // 1. Initialize render targets with their respective colors
         for i in 0..7 {
-            let _ = self.images[i].clear(ctx, colors[i]);
+            let target = self.images[i];
+            target.draw_with_shader(
+                ctx,
+                &self.white_image,
+                1, // Built-in tint shader
+                DrawOption::default().with_scale([target.width().as_f32(), target.height().as_f32()]),
+                spottedcat::ShaderOpts::default().with_color(colors[i]),
+            );
         }
 
         // 2. Build the recursive stack (from bottom to top)

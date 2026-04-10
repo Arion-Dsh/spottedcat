@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat"
-version = "0.7.7"
+version = "0.8.0"
 dependencies = [
  "ab_glyph",
  "android-activity",
@@ -2431,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat_ios_wrapper"
-version = "0.5.5"
+version = "0.8.0"
 dependencies = [
  "block2 0.6.2",
  "image",

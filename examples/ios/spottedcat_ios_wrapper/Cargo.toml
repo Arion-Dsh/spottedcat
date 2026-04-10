@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat_ios_wrapper"
-version = "0.5.5"
+version = "0.8.0"
 edition = "2024"
 
 [lib]
