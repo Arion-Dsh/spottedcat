@@ -289,8 +289,9 @@ impl App {
         };
 
         self.ctx.begin_frame();
+        let screen = super::make_screen_target(&self.ctx);
         if let Some(spot) = self.scene.spot_mut() {
-            spot.draw(&mut self.ctx);
+            spot.draw(&mut self.ctx, screen);
         }
 
         self.scene.apply_pending_switch(&mut self.ctx);

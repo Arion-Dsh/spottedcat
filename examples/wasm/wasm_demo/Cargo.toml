@@ -8,6 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 spottedcat = { path = "../../..", features = ["model-3d", "utils"] }
+image = "0.25"
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
 

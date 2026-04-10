@@ -42,7 +42,7 @@ impl Spot for MetalSphere {
         self.rotation += dt.as_secs_f32() * 0.5;
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let opts = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0])
             .with_rotation([0.0, self.rotation, 0.0]);
@@ -50,6 +50,7 @@ impl Spot for MetalSphere {
         // Draw with our metallic shader
         spottedcat::model::draw_with_shader(
             ctx,
+            screen,
             &self.sphere,
             self.shader_id,
             opts,

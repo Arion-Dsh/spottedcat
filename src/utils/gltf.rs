@@ -255,11 +255,16 @@ impl AnimatedModel {
         ctx.update_bone_matrices(skin.skin_id, &bone_matrices);
     }
 
-    pub fn draw(&self, ctx: &mut crate::Context, options: crate::DrawOption3D) {
+}
+
+impl crate::Drawable for &AnimatedModel {
+    type Options = crate::DrawOption3D;
+
+    fn draw_to(self, ctx: &mut crate::Context, target: crate::Image, options: Self::Options) {
         if let Some(skin) = &self.skin {
-            self.model.draw_skinned(ctx, options, skin.skin_id);
+            self.model.draw_skinned(ctx, target, options, skin.skin_id);
         } else {
-            self.model.draw(ctx, options);
+            target.draw(ctx, &self.model, options);
         }
     }
 }
@@ -274,7 +279,7 @@ pub fn load_gltf_from_bytes(ctx: &mut crate::Context, data: &[u8]) -> anyhow::Re
 ///
 /// The returned value works for both static and animated assets. If the asset contains
 /// a skin and one or more animation clips, call [`AnimatedModel::update`] each frame
-/// and use [`AnimatedModel::draw`] for rendering.
+/// and render it with `target.draw(ctx, &animated_model, opts)`.
 pub fn load_animated_gltf_from_bytes(
     ctx: &mut crate::Context,
     data: &[u8],

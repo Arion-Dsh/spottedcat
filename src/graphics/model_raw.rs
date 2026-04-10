@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct MaterialBindGroupKey {
-    pub atlas_indices: [u32; 5],
+    pub texture_source_ids: [u32; 5],
 }
 
 #[repr(C)]
@@ -483,7 +483,7 @@ impl ModelRenderer {
         })
     }
 
-    pub fn texture_bind_group_for_atlases(
+    pub fn texture_bind_group_for_materials(
         &mut self,
         device: &wgpu::Device,
         key: MaterialBindGroupKey,

@@ -3,6 +3,7 @@
 .windsurf
 .cursor
 Cargo.lock
+*.log
 
 
 /examples/**/target/

@@ -1,4 +1,3 @@
-use crate::DrawOption;
 use crate::audio::AudioSystem;
 #[cfg(feature = "model-3d")]
 use crate::context_3d::{Model3dRegistry, Model3dRuntime};
@@ -6,36 +5,10 @@ use crate::drawable::DrawCommand;
 use crate::graphics::core::Graphics;
 use crate::input::InputManager;
 use crate::pt::Pt;
-use crate::shader_opts::ShaderOpts;
+
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::rc::Rc;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct DrawState {
-    pub position: [Pt; 2],
-    pub clip: Option<[Pt; 4]>,
-    pub shader_id: Option<u32>,
-    pub shader_opts: Option<ShaderOpts>,
-    pub layer: i32,
-}
-
-impl Default for DrawState {
-    fn default() -> Self {
-        Self {
-            position: [Pt(0.0), Pt(0.0)],
-            clip: None,
-            shader_id: None,
-            shader_opts: None,
-            layer: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct LastImageDrawInfo {
-    pub(crate) opts: DrawOption,
-}
 
 #[derive(Default)]
 struct ResourceMap {
@@ -58,9 +31,6 @@ pub(crate) struct ContextRuntime {
     pub(crate) input: InputManager,
     pub(crate) scale_factor: f64,
     pub(crate) window_logical_size: (Pt, Pt),
-    pub(crate) state_stack: Vec<DrawState>,
-    pub(crate) current_state: DrawState,
-    pub(crate) last_image_opts: HashMap<u32, LastImageDrawInfo>,
     pub(crate) graphics: Option<Graphics>,
     pub(crate) audio: Option<AudioSystem>,
     pub(crate) delta_time: std::time::Duration,
@@ -79,9 +49,6 @@ impl ContextRuntime {
             input: InputManager::new(),
             scale_factor: 1.0,
             window_logical_size: (Pt(0.0), Pt(0.0)),
-            state_stack: Vec::new(),
-            current_state: DrawState::default(),
-            last_image_opts: HashMap::new(),
             graphics: None,
             audio: None,
             delta_time: std::time::Duration::from_secs(0),
@@ -96,11 +63,13 @@ impl ContextRuntime {
 #[derive(Debug)]
 pub(crate) struct ResourceRegistry {
     resources: ResourceMap,
+    pub(crate) textures: Vec<Option<crate::graphics::texture::TextureEntry>>,
     pub(crate) images: Vec<Option<crate::image::ImageEntry>>,
     #[cfg(feature = "model-3d")]
     pub(crate) model_3d: Model3dRegistry,
     pub(crate) fonts: HashMap<u32, Vec<u8>>,
     pub(crate) image_shaders: HashMap<u32, String>,
+    pub(crate) next_texture_id: u32,
     pub(crate) next_image_id: u32,
     pub(crate) next_font_id: u32,
     pub(crate) next_image_shader_id: u32,
@@ -112,11 +81,13 @@ impl ResourceRegistry {
     fn new() -> Self {
         Self {
             resources: ResourceMap::default(),
+            textures: Vec::new(),
             images: Vec::new(),
             #[cfg(feature = "model-3d")]
             model_3d: Model3dRegistry::default(),
             fonts: HashMap::new(),
             image_shaders: HashMap::new(),
+            next_texture_id: 1,
             next_image_id: 1,
             next_font_id: 1,
             next_image_shader_id: 1,
@@ -267,6 +238,56 @@ impl Context {
             .and_then(|v| Rc::downcast::<T>(v).ok())
     }
 
+    /// Registers a new texture and returns a handle.
+    ///
+    /// This also creates a default full-image [`Image`] for the texture.
+    pub(crate) fn register_texture(
+        &mut self,
+        pixel_width: u32,
+        pixel_height: u32,
+        width: Pt,
+        height: Pt,
+        rgba: &[u8],
+    ) -> crate::Texture {
+        let texture_id = self.registry.next_texture_id;
+        self.registry.next_texture_id += 1;
+        let image_id = self.registry.next_image_id;
+        self.registry.next_image_id += 1;
+
+        while self.registry.textures.len() <= texture_id as usize {
+            self.registry.textures.push(None);
+        }
+        self.registry.textures[texture_id as usize] = Some(crate::graphics::texture::TextureEntry::new_sampled(
+            width,
+            height,
+            pixel_width,
+            pixel_height,
+            image_id,
+            std::sync::Arc::from(rgba),
+        ));
+
+        let bounds = crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height);
+        while self.registry.images.len() <= image_id as usize {
+            self.registry.images.push(None);
+        }
+        self.registry.images[image_id as usize] = Some(crate::image::ImageEntry::new(
+            texture_id,
+            bounds,
+        ));
+
+        self.registry.dirty_assets = true;
+
+        crate::Texture {
+            id: texture_id,
+            default_view_id: image_id,
+            width,
+            height,
+            pixel_width,
+            pixel_height,
+        }
+    }
+
+    /// Registers a new image from RGBA data and returns a full-view handle.
     pub(crate) fn register_image(
         &mut self,
         pixel_width: u32,
@@ -275,34 +296,8 @@ impl Context {
         height: Pt,
         rgba: &[u8],
     ) -> crate::Image {
-        let id = self.registry.next_image_id;
-        self.registry.next_image_id += 1;
-        let bounds = crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height);
-        let entry = crate::image::ImageEntry::new(
-            None,
-            bounds,
-            pixel_width,
-            pixel_height,
-            None,
-            Some(std::sync::Arc::from(rgba)),
-            None,
-        );
-
-        while self.registry.images.len() <= id as usize {
-            self.registry.images.push(None);
-        }
-        self.registry.images[id as usize] = Some(entry);
-        self.registry.dirty_assets = true;
-
-        crate::Image {
-            id,
-            x: bounds.x,
-            y: bounds.y,
-            width: bounds.width,
-            height: bounds.height,
-            pixel_width,
-            pixel_height,
-        }
+        self.register_texture(pixel_width, pixel_height, width, height, rgba)
+            .view()
     }
 
     pub(crate) fn register_sub_image(
@@ -310,33 +305,12 @@ impl Context {
         image: crate::image::Image,
         bounds: crate::image::Bounds,
     ) -> anyhow::Result<u32> {
-        let parent_id = image.id();
         let id = self.registry.next_image_id;
         self.registry.next_image_id += 1;
 
-        let width_ratio = if image.width.0 > 0.0 {
-            bounds.width.0 / image.width.0
-        } else {
-            0.0
-        };
-        let height_ratio = if image.height.0 > 0.0 {
-            bounds.height.0 / image.height.0
-        } else {
-            0.0
-        };
-        let pixel_width = ((image.pixel_width as f32) * width_ratio).round().max(1.0) as u32;
-        let pixel_height = ((image.pixel_height as f32) * height_ratio)
-            .round()
-            .max(1.0) as u32;
-
         let entry = crate::image::ImageEntry::new(
-            None,
-            bounds,
-            pixel_width,
-            pixel_height,
-            None,
-            None,
-            Some(parent_id),
+            image.texture_id(),
+            crate::image::Bounds::new(image.x + bounds.x, image.y + bounds.y, bounds.width, bounds.height),
         );
 
         while self.registry.images.len() <= id as usize {
@@ -365,6 +339,52 @@ impl Context {
         id
     }
 
+    /// Registers a texture specifically for use as a render target.
+    pub(crate) fn register_render_target_texture(
+        &mut self,
+        width: Pt,
+        height: Pt,
+    ) -> crate::Texture {
+        let texture_id = self.registry.next_texture_id;
+        self.registry.next_texture_id += 1;
+        let image_id = self.registry.next_image_id;
+        self.registry.next_image_id += 1;
+
+        let pixel_width = width.to_u32_clamped().max(1);
+        let pixel_height = height.to_u32_clamped().max(1);
+
+        while self.registry.textures.len() <= texture_id as usize {
+            self.registry.textures.push(None);
+        }
+        self.registry.textures[texture_id as usize] = Some(
+            crate::graphics::texture::TextureEntry::new_render_target(
+                width,
+                height,
+                pixel_width,
+                pixel_height,
+                image_id,
+            ),
+        );
+
+        while self.registry.images.len() <= image_id as usize {
+            self.registry.images.push(None);
+        }
+        self.registry.images[image_id as usize] = Some(crate::image::ImageEntry::new(
+            texture_id,
+            crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height),
+        ));
+        self.registry.dirty_assets = true;
+
+        crate::Texture {
+            id: texture_id,
+            default_view_id: image_id,
+            width,
+            height,
+            pixel_width,
+            pixel_height,
+        }
+    }
+
     pub(crate) fn insert_resource_dyn(&mut self, type_id: TypeId, value: Rc<dyn Any>) {
         self.registry.resources.inner.insert(type_id, value);
     }
@@ -377,9 +397,6 @@ impl Context {
         self.runtime.draw_list.clear();
         #[cfg(feature = "model-3d")]
         self.runtime.model_3d.begin_frame();
-        self.runtime.state_stack.clear();
-        self.runtime.current_state = DrawState::default();
-        self.runtime.last_image_opts.clear();
     }
 
     pub(crate) fn clear_transient_state(&mut self) {
@@ -433,28 +450,56 @@ impl Context {
         self.runtime.scale_factor
     }
 
+    pub(crate) fn resolve_target_texture_id(&self, target: crate::Image) -> u32 {
+        if target.texture_id == 0 {
+            return 0;
+        }
+
+        let Some(texture_entry) = self
+            .registry
+            .textures
+            .get(target.texture_id as usize)
+            .and_then(|v| v.as_ref())
+        else {
+            panic!(
+                "[spot][target] image {} points to missing texture {}",
+                target.id, target.texture_id
+            );
+        };
+
+        if !texture_entry.is_render_target() {
+            panic!(
+                "[spot][target] image {} uses texture {} which is not a render target",
+                target.id, target.texture_id
+            );
+        }
+
+        if texture_entry.default_view_id != target.id {
+            panic!(
+                "[spot][target] image {} is not the full target view for texture {}",
+                target.id, target.texture_id
+            );
+        }
+
+        target.texture_id
+    }
+
+    pub(crate) fn target_logical_size(&self, target_texture_id: u32) -> Option<(Pt, Pt)> {
+        if target_texture_id == 0 {
+            return Some(self.runtime.window_logical_size);
+        }
+
+        self.registry
+            .textures
+            .get(target_texture_id as usize)
+            .and_then(|v| v.as_ref())
+            .map(|entry| (entry.width, entry.height))
+    }
+
     pub(crate) fn push(&mut self, mut drawable: DrawCommand) {
         match &mut drawable {
-            DrawCommand::Image(cmd) => {
-                let opts = &mut cmd.opts;
-                let shader_id = &mut cmd.shader_id;
-                let shader_opts = &mut cmd.shader_opts;
-                *opts = opts.apply_state(&self.runtime.current_state);
-                *opts = opts.with_layer(opts.layer() + self.runtime.current_state.layer);
-                if *shader_id == 0
-                    && let Some(parent_shader_id) = self.runtime.current_state.shader_id
-                {
-                    *shader_id = parent_shader_id;
-                    if let Some(parent_shader_opts) = self.runtime.current_state.shader_opts {
-                        *shader_opts = parent_shader_opts;
-                    }
-                }
-            }
-            DrawCommand::Text(_, opts) => {
-                *opts = opts.apply_state(&self.runtime.current_state);
-                *opts = opts.with_layer(opts.layer() + self.runtime.current_state.layer);
-            }
-            DrawCommand::ClearImage(_, _) | DrawCommand::CopyImage(_, _) => {}
+            DrawCommand::Image(_) => {}
+            DrawCommand::Text(_) => {}
         }
 
         if let DrawCommand::Image(cmd) = &drawable {
@@ -467,7 +512,9 @@ impl Context {
             let w = size[0].as_f32() * scale[0];
             let h = size[1].as_f32() * scale[1];
 
-            let (vw, vh) = self.runtime.window_logical_size;
+            let (vw, vh) = self
+                .target_logical_size(cmd.target_texture_id)
+                .unwrap_or(self.runtime.window_logical_size);
             let screen_w = vw.as_f32();
             let screen_h = vh.as_f32();
 
@@ -517,79 +564,30 @@ impl Context {
                 return;
             }
 
-            self.runtime
-                .last_image_opts
-                .insert(id, LastImageDrawInfo { opts: *opts });
         }
 
         if std::env::var("SPOT_DEBUG_DRAW").is_ok() {
             match &drawable {
                 DrawCommand::Image(cmd) => {
                     eprintln!(
-                        "[spot][debug] draw image id={} shader_id={} pos={:?} clip={:?}",
+                        "[spot][debug] draw image id={} target={} shader_id={} pos={:?}",
                         cmd.id,
+                        cmd.target_texture_id,
                         cmd.shader_id,
                         cmd.opts.position(),
-                        cmd.opts.get_clip()
                     );
                 }
-                DrawCommand::Text(_, opts) => {
+                DrawCommand::Text(cmd) => {
                     eprintln!(
-                        "[spot][debug] draw text pos={:?} clip={:?}",
-                        opts.position(),
-                        opts.get_clip()
+                        "[spot][debug] draw text target={} pos={:?}",
+                        cmd.target_texture_id,
+                        cmd.opts.position(),
                     );
                 }
-                DrawCommand::ClearImage(_, _) | DrawCommand::CopyImage(_, _) => {}
             }
         }
 
         self.runtime.draw_list.push(drawable);
     }
 
-    pub(crate) fn current_draw_state(&self) -> DrawState {
-        self.runtime.current_state
-    }
-
-    pub(crate) fn last_image_draw_info(&self, image_id: u32) -> Option<LastImageDrawInfo> {
-        self.runtime.last_image_opts.get(&image_id).copied()
-    }
-
-    pub(crate) fn push_state(&mut self, state: DrawState) {
-        self.runtime.state_stack.push(self.runtime.current_state);
-        self.runtime.current_state.position[0] += state.position[0];
-        self.runtime.current_state.position[1] += state.position[1];
-        self.runtime.current_state.layer += state.layer;
-
-        if let Some(new_clip_abs) = state.clip {
-            let merged_clip = if let Some(old_clip_abs) = self.runtime.current_state.clip {
-                let x = old_clip_abs[0].as_f32().max(new_clip_abs[0].as_f32());
-                let y = old_clip_abs[1].as_f32().max(new_clip_abs[1].as_f32());
-                let right = (old_clip_abs[0].as_f32() + old_clip_abs[2].as_f32())
-                    .min(new_clip_abs[0].as_f32() + new_clip_abs[2].as_f32());
-                let bottom = (old_clip_abs[1].as_f32() + old_clip_abs[3].as_f32())
-                    .min(new_clip_abs[1].as_f32() + new_clip_abs[3].as_f32());
-
-                let w = (right - x).max(0.0);
-                let h = (bottom - y).max(0.0);
-                Some([Pt::from(x), Pt::from(y), Pt::from(w), Pt::from(h)])
-            } else {
-                Some(new_clip_abs)
-            };
-            self.runtime.current_state.clip = merged_clip;
-        }
-
-        if let Some(sid) = state.shader_id {
-            self.runtime.current_state.shader_id = Some(sid);
-        }
-        if let Some(sopts) = state.shader_opts {
-            self.runtime.current_state.shader_opts = Some(sopts);
-        }
-    }
-
-    pub(crate) fn pop_state(&mut self) {
-        if let Some(prev_state) = self.runtime.state_stack.pop() {
-            self.runtime.current_state = prev_state;
-        }
-    }
 }

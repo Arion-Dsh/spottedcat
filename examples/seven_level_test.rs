@@ -9,62 +9,12 @@ impl Spot for SevenLevelNestTestSpot {
     fn initialize(ctx: &mut Context) -> Self {
         let mut images = Vec::new();
 
-        // Level 1 - Red parent (200x200)
-        let mut rgba = vec![255u8; 200 * 200 * 4];
-        for i in 0..200 * 200 {
-            rgba[i * 4 + 1] = 0; // G
-            rgba[i * 4 + 2] = 0; // B
-            rgba[i * 4 + 3] = 255; // A
+        // Level 1-7 - Render targets
+        for _ in 0..6 {
+            images.push(spottedcat::Texture::new_render_target(ctx, Pt::from(200.0), Pt::from(200.0)).view());
         }
-        images.push(Image::new(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
-
-        // Level 2 - Blue
-        let mut rgba = vec![0u8; 200 * 200 * 4];
-        for i in 0..200 * 200 {
-            rgba[i * 4 + 2] = 255; // B
-            rgba[i * 4 + 3] = 255; // A
-        }
-        images.push(Image::new(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
-
-        // Level 3 - Green
-        let mut rgba = vec![0u8; 200 * 200 * 4];
-        for i in 0..200 * 200 {
-            rgba[i * 4 + 1] = 255; // G
-            rgba[i * 4 + 3] = 255; // A
-        }
-        images.push(Image::new(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
-
-        // Level 4 - Yellow
-        let mut rgba = vec![255u8; 200 * 200 * 4];
-        for i in 0..200 * 200 {
-            rgba[i * 4 + 2] = 0; // B
-            rgba[i * 4 + 3] = 255; // A
-        }
-        images.push(Image::new(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
-
-        // Level 5 - Cyan
-        let mut rgba = vec![0u8; 200 * 200 * 4];
-        for i in 0..200 * 200 {
-            rgba[i * 4 + 1] = 255; // G
-            rgba[i * 4 + 2] = 255; // B
-            rgba[i * 4 + 3] = 255; // A
-        }
-        images.push(Image::new(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
-
-        // Level 6 - Magenta
-        let mut rgba = vec![255u8; 200 * 200 * 4];
-        for i in 0..200 * 200 {
-            rgba[i * 4 + 1] = 0; // G
-            rgba[i * 4 + 3] = 255; // A
-        }
-        images.push(Image::new(ctx, Pt::from(200.0), Pt::from(200.0), &rgba).unwrap());
-
-        // Level 7 - White
-        let mut rgba = vec![255u8; 100 * 100 * 4];
-        for i in 0..100 * 100 {
-            rgba[i * 4 + 3] = 255; // A
-        }
-        images.push(Image::new(ctx, Pt::from(100.0), Pt::from(100.0), &rgba).unwrap());
+        // Final level at half size
+        images.push(spottedcat::Texture::new_render_target(ctx, Pt::from(100.0), Pt::from(100.0)).view());
 
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
@@ -73,59 +23,83 @@ impl Spot for SevenLevelNestTestSpot {
         Self { images, font_id }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
-        // Level 1 - Red parent
-        let level1_opts = DrawOption::default().with_position([Pt::from(-10.0), Pt::from(50.0)]);
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
+        // Define colors for each level
+        let colors = [
+            [1.0, 0.0, 0.0, 1.0], // Red
+            [0.0, 0.0, 1.0, 1.0], // Blue
+            [0.0, 1.0, 0.0, 1.0], // Green
+            [1.0, 1.0, 0.0, 1.0], // Yellow
+            [0.0, 1.0, 1.0, 1.0], // Cyan
+            [1.0, 0.0, 1.0, 1.0], // Magenta
+            [1.0, 1.0, 1.0, 1.0], // White (Level 7)
+        ];
 
-        self.images[0].with_clip_scope(ctx, level1_opts, |ctx| {
-            // Level 2 - Blue
-            let level2_opts = DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // 1. Initialize render targets with their respective colors
+        for i in 0..7 {
+            let _ = self.images[i].clear(ctx, colors[i]);
+        }
 
-            self.images[1].with_clip_scope(ctx, level2_opts, |ctx2| {
-                // Level 3 - Green
-                let level3_opts =
-                    DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // 2. Build the recursive stack (from bottom to top)
+        // Level 7 on Level 6
+        self.images[5].draw(
+            ctx,
+            &self.images[6],
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
 
-                self.images[2].with_clip_scope(ctx2, level3_opts, |ctx3| {
-                    // Level 4 - Yellow
-                    let level4_opts =
-                        DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // Level 6 on Level 5
+        self.images[4].draw(
+            ctx,
+            &self.images[5],
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
 
-                    self.images[3].with_clip_scope(ctx3, level4_opts, |ctx4| {
-                        // Level 5 - Cyan
-                        let level5_opts =
-                            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // Level 5 on Level 4
+        self.images[3].draw(
+            ctx,
+            &self.images[4],
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
 
-                        self.images[4].with_clip_scope(ctx4, level5_opts, |ctx5| {
-                            // Level 6 - Magenta
-                            let level6_opts = DrawOption::default()
-                                .with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // Level 4 on Level 3
+        self.images[2].draw(
+            ctx,
+            &self.images[3],
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
 
-                            self.images[5].with_clip_scope(ctx5, level6_opts, |ctx6| {
-                                // Level 7 - White (half size with text)
-                                let level7_opts = DrawOption::default()
-                                    .with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // Level 3 on Level 2
+        self.images[1].draw(
+            ctx,
+            &self.images[2],
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
 
-                                self.images[6].with_clip_scope(ctx6, level7_opts, |ctx7| {
-                                    // Add text in the center of level7
-                                    let text_opts = DrawOption::default()
-                                        .with_position([Pt::from(25.0), Pt::from(40.0)]);
+        // Level 2 on Level 1
+        self.images[0].draw(
+            ctx,
+            &self.images[1],
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
+        );
 
-                                    let text = spottedcat::Text::new(
-                                        "7级嵌套测试文字宽度测试",
-                                        self.font_id,
-                                    )
-                                    .with_font_size(Pt::from(16.0))
-                                    .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
+        // 3. Draw the final root onto the screen
+        screen.draw(
+            ctx,
+            &self.images[0],
+            DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]),
+        );
 
-                                    spottedcat::text::draw(ctx7, &text, text_opts);
-                                });
-                            });
-                        });
-                    });
-                });
-            });
-        });
+        // 4. Draw text on the top-most layer (Level 7)
+        let text = spottedcat::Text::new("7级嵌套递归渲染测试", self.font_id)
+            .with_font_size(Pt::from(16.0))
+            .with_color([0.0, 0.0, 0.0, 1.0]);
+
+        self.images[6].draw(
+            ctx,
+            &text,
+            DrawOption::default().with_position([Pt::from(10.0), Pt::from(40.0)]),
+        );
     }
 
     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}

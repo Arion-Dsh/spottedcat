@@ -576,23 +576,17 @@ impl Model {
         Self::new(ctx, &vertices, &indices)
     }
 
-    pub(crate) fn draw(&self, ctx: &mut crate::Context, options: crate::DrawOption3D) {
-        ctx.push_3d(crate::drawable::DrawCommand3D::Model(
-            self.clone(),
-            options,
-            0,
-            crate::ShaderOpts::default(),
-            None,
-        ));
-    }
-
+    /// Renders the model using skeletal animation.
     pub fn draw_skinned(
         &self,
         ctx: &mut crate::Context,
+        target: crate::Image,
         options: crate::DrawOption3D,
         skin_id: u32,
     ) {
+        let target_texture_id = ctx.resolve_target_texture_id(target);
         ctx.push_3d(crate::drawable::DrawCommand3D::Model(
+            target_texture_id,
             self.clone(),
             options,
             0,
@@ -604,12 +598,15 @@ impl Model {
     pub(crate) fn draw_with_shader(
         &self,
         ctx: &mut crate::Context,
+        target: crate::Image,
         shader_id: u32,
         options: crate::DrawOption3D,
         shader_opts: crate::ShaderOpts,
         skin_id: Option<u32>,
     ) {
+        let target_texture_id = ctx.resolve_target_texture_id(target);
         ctx.push_3d(crate::drawable::DrawCommand3D::Model(
+            target_texture_id,
             self.clone(),
             options,
             shader_id,
@@ -622,42 +619,49 @@ impl Model {
     ///
     /// `transforms` should be an array of 4x4 matrices representing the View/Model transformations
     /// for each instance. This achieves massive performance improvements for identical meshes.
+    ///
+    /// The `target` image is used as the render target (e.g., `screen`).
     pub(crate) fn draw_instanced(
         &self,
         ctx: &mut crate::Context,
+        target: crate::Image,
         options: crate::DrawOption3D,
         transforms: &[[[f32; 4]; 4]],
     ) {
         if transforms.is_empty() {
             return;
         }
-        self.draw_instanced_shared(ctx, options, std::sync::Arc::from(transforms));
+        self.draw_instanced_shared(ctx, target, options, std::sync::Arc::from(transforms));
     }
 
     /// Renders instances using a caller-owned transform buffer without making an extra copy.
     pub fn draw_instanced_owned(
         &self,
         ctx: &mut crate::Context,
+        target: crate::Image,
         options: crate::DrawOption3D,
         transforms: Vec<[[f32; 4]; 4]>,
     ) {
         if transforms.is_empty() {
             return;
         }
-        self.draw_instanced_shared(ctx, options, std::sync::Arc::from(transforms));
+        self.draw_instanced_shared(ctx, target, options, std::sync::Arc::from(transforms));
     }
 
     /// Renders instances backed by shared transform data.
     pub(crate) fn draw_instanced_shared(
         &self,
         ctx: &mut crate::Context,
+        target: crate::Image,
         options: crate::DrawOption3D,
         transforms: std::sync::Arc<[[[f32; 4]; 4]]>,
     ) {
         if transforms.is_empty() {
             return;
         }
+        let target_texture_id = ctx.resolve_target_texture_id(target);
         ctx.push_3d(crate::drawable::DrawCommand3D::ModelInstanced(
+            target_texture_id,
             self.clone(),
             options,
             0,
@@ -755,39 +759,53 @@ pub fn create_empty(ctx: &mut crate::Context) -> Model {
     Model::empty(ctx)
 }
 
-/// Draws a model.
-pub fn draw(ctx: &mut crate::Context, model: &Model, options: crate::DrawOption3D) {
-    model.draw(ctx, options);
-}
-
-/// Draws a model with a custom shader.
+/// Draws a model with a custom shader into a specific target.
 pub fn draw_with_shader(
     ctx: &mut crate::Context,
+    target: crate::Image,
     model: &Model,
     shader_id: u32,
     options: crate::DrawOption3D,
     shader_opts: crate::ShaderOpts,
     skin_id: Option<u32>,
 ) {
-    model.draw_with_shader(ctx, shader_id, options, shader_opts, skin_id);
+    model.draw_with_shader(ctx, target, shader_id, options, shader_opts, skin_id);
 }
 
 /// Draws instanced models from borrowed transform data.
 pub fn draw_instanced(
     ctx: &mut crate::Context,
+    target: crate::Image,
     model: &Model,
     options: crate::DrawOption3D,
     transforms: &[[[f32; 4]; 4]],
 ) {
-    model.draw_instanced(ctx, options, transforms);
+    model.draw_instanced(ctx, target, options, transforms);
 }
 
 /// Draws instanced models from Arc-backed shared transform data.
 pub fn draw_instanced_shared(
     ctx: &mut crate::Context,
+    target: crate::Image,
     model: &Model,
     options: crate::DrawOption3D,
     transforms: std::sync::Arc<[[[f32; 4]; 4]]>,
 ) {
-    model.draw_instanced_shared(ctx, options, transforms);
+    model.draw_instanced_shared(ctx, target, options, transforms);
+}
+
+impl crate::Drawable for &Model {
+    type Options = crate::DrawOption3D;
+
+    fn draw_to(self, ctx: &mut crate::Context, target: crate::Image, options: Self::Options) {
+        let target_texture_id = ctx.resolve_target_texture_id(target);
+        ctx.push_3d(crate::drawable::DrawCommand3D::Model(
+            target_texture_id,
+            self.clone(),
+            options,
+            0,
+            crate::ShaderOpts::default(),
+            None,
+        ));
+    }
 }

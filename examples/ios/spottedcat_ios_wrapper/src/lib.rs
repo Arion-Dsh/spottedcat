@@ -1,5 +1,5 @@
 #[cfg(target_os = "ios")]
-use spottedcat::{Context, DrawOption, DrawOption3D, Image, Model, Pt, Spot, Text, WindowConfig};
+use spottedcat::{Context, DrawOption, DrawOption3D, Image, Model, Pt, Spot, Text, Texture, WindowConfig};
 
 #[cfg(target_os = "ios")]
 use block2::RcBlock;
@@ -300,7 +300,9 @@ pub extern "C" fn spottedcat_ios_start() {
             }
         }
 
-        fn draw(&mut self, ctx: &mut Context) {
+        fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
+            let (w, h) = spottedcat::window_size(ctx);
+
             self.frame_count += 1;
             let now = std::time::Instant::now();
             let elapsed = now.duration_since(self.last_fps_time);
@@ -315,49 +317,35 @@ pub extern "C" fn spottedcat_ios_start() {
                 self.update_count = 0;
             }
 
+            // 1. Draw 3D model
             let opts_3d = DrawOption3D::default()
                 .with_position([0.0, 0.0, 0.0])
                 .with_rotation([0.0, self.rotation, 0.0]);
-            spottedcat::model::draw(ctx, &self.model, opts_3d);
+            screen.draw(ctx, &self.model, opts_3d);
 
-            spottedcat::text::draw(
-                ctx,
-                &self.text,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(100.0)]),
-            );
-            spottedcat::text::draw(
-                ctx,
-                &self.fps_text,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(150.0)]),
-            );
-            spottedcat::text::draw(
-                ctx,
-                &self.today_steps_text,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(190.0)]),
-            );
-            spottedcat::text::draw(
-                ctx,
-                &self.yesterday_steps_text,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(220.0)]),
-            );
-            spottedcat::text::draw(
+            // 2. Draw UI directly to screen
+            let title_opts = DrawOption::default().with_position([Pt::from(20.0), Pt::from(20.0)]);
+            screen.draw(ctx, &self.text, title_opts);
+
+            let fps_opts = DrawOption::default().with_position([Pt::from(20.0), Pt::from(70.0)]);
+            screen.draw(ctx, &self.fps_text, fps_opts);
+
+            let steps_opts = DrawOption::default().with_position([Pt::from(20.0), Pt::from(110.0)]);
+            screen.draw(ctx, &self.today_steps_text, steps_opts);
+
+            let tree_target_width = spottedcat::vw(ctx, 50.0).as_f32();
+            let tree_scale = tree_target_width / self.happy_tree.width().as_f32();
+            let tree_opts = DrawOption::default()
+                .with_position([Pt::from(20.0), Pt::from(150.0)])
+                .with_scale([tree_scale, tree_scale]);
+            screen.draw(ctx, &self.happy_tree, tree_opts);
+
+            let history_status_y = 150.0 + tree_target_width + 20.0;
+            screen.draw(
                 ctx,
                 &self.history_status_text,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(250.0)]),
+                DrawOption::default().with_position([Pt::from(20.0), Pt::from(history_status_y)]),
             );
-            spottedcat::text::draw(
-                ctx,
-                &self.history_text,
-                DrawOption::default().with_position([Pt::from(50.0), Pt::from(280.0)]),
-            );
-
-            let (w, h) = spottedcat::window_size(ctx);
-            let pos = self.touch_pos.unwrap_or_else(|| (w / 2.0, h / 2.0));
-            let img_opts = DrawOption::default().with_position([
-                pos.0 - self.happy_tree.width() / 2.0,
-                pos.1 - self.happy_tree.height() / 2.0,
-            ]);
-            self.happy_tree.draw(ctx, img_opts);
         }
 
         fn resumed(&mut self, _ctx: &mut Context) {

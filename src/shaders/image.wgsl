@@ -28,7 +28,6 @@ struct VsIn {
     @location(1) rotation: f32,
     @location(2) size: vec2<f32>,
     @location(3) uv_rect: vec4<f32>,
-    @location(4) clip_rect: vec4<f32>,
 };
 
 struct VsOut {
@@ -36,7 +35,6 @@ struct VsOut {
     @location(0) uv: vec2<f32>,
     @location(1) local_uv: vec2<f32>,
     @location(2) uv_scale: vec2<f32>,
-    @location(3) frag_clip_rect: vec4<f32>,
 };
 
 
@@ -98,8 +96,8 @@ fn vs_main(in: VsIn) -> VsOut {
     // uv_scale is the atlas-space size of this image region
     out.uv_scale = in.uv_rect.zw;
 
-    // Pass clip rect to fragment shader
-    out.frag_clip_rect = in.clip_rect;
+    // uv_scale is the atlas-space size of this image region
+    out.uv_scale = in.uv_rect.zw;
 
     // USER_VS_HOOK
 
@@ -108,24 +106,6 @@ fn vs_main(in: VsIn) -> VsOut {
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    // GPU-side clipping: discard fragments outside the clip rect
-    // clip_rect.z (width) < 0 means no clipping
-    if in.frag_clip_rect.z >= 0.0 {
-        // in.clip_pos in fragment shader is in physical pixels (0.5 to physical_w/h - 0.5)
-        // Subtract 0.5 and divide by scale_factor to get exact logical screen coords
-        let screen_x = (in.clip_pos.x - 0.5) / _sp_internal.scale_factor;
-        let screen_y = (in.clip_pos.y - 0.5) / _sp_internal.scale_factor;
-
-        let clip_x0 = in.frag_clip_rect.x;
-        let clip_y0 = in.frag_clip_rect.y;
-        let clip_x1 = in.frag_clip_rect.x + in.frag_clip_rect.z;
-        let clip_y1 = in.frag_clip_rect.y + in.frag_clip_rect.w;
-
-        if screen_x < clip_x0 || screen_x > clip_x1 || screen_y < clip_y0 || screen_y > clip_y1 {
-            discard;
-        }
-    }
-
     let c = textureSample(tex, samp, in.uv);
     let opacity = _sp_internal.opacity * _sp_internal.shader_opacity;
     var color = vec4<f32>(c.rgb, c.a * opacity);

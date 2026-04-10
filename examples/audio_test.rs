@@ -30,7 +30,7 @@ impl Spot for AudioTest {
         }
     }
 
-    fn draw(&mut self, _ctx: &mut Context) {
+    fn draw(&mut self, _ctx: &mut Context, _screen: spottedcat::Image) {
         // Just keep the window alive
     }
 

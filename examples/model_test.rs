@@ -88,29 +88,29 @@ impl Spot for ModelTest {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         // Draw the main cube at the origin.
         let cube_opts = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0])
             .with_rotation([self.rotation, self.rotation * 0.5, 0.0]);
-        spottedcat::model::draw(ctx, &self.cube, cube_opts);
+        screen.draw(ctx, &self.cube, cube_opts);
 
         // Draw colored axes so front-face culling and orientation are easy to inspect.
-        spottedcat::model::draw(
+        screen.draw(
             ctx,
             &self.axis_x,
             DrawOption3D::default()
                 .with_position([1.3, 0.0, 0.0])
                 .with_scale([2.2, 0.06, 0.06]),
         );
-        spottedcat::model::draw(
+        screen.draw(
             ctx,
             &self.axis_y,
             DrawOption3D::default()
                 .with_position([0.0, 1.3, 0.0])
                 .with_scale([0.06, 2.2, 0.06]),
         );
-        spottedcat::model::draw(
+        screen.draw(
             ctx,
             &self.axis_z,
             DrawOption3D::default()

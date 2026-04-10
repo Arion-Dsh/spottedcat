@@ -8,7 +8,7 @@ impl Spot for TouchTest {
         Self {}
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, _screen: spottedcat::Image) {
         let touches = spottedcat::touches(ctx);
         for touch in touches {
             let _color = match touch.phase {

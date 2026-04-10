@@ -81,7 +81,7 @@ Load or register assets, set camera/light/fog defaults, and create the initial s
 2. `update`
 Read input, advance simulation with `dt.as_secs_f32()`, and queue scene changes if needed.
 3. `draw`
-Issue all draw calls for the frame. Keep gameplay mutation out of rendering unless the pattern is trivial and already established in the repo.
+Issue all draw calls for the frame using the provided `screen: Image` as the target (e.g., `screen.draw(ctx, &self.image, opts)`). Keep gameplay mutation out of rendering unless the pattern is trivial and already established in the repo.
 4. `resumed` / `suspended`
 Use when platform lifecycle matters, especially on mobile.
 5. `remove`
@@ -98,8 +98,8 @@ Honor these rules:
 
 ### 6. Map common game needs to `spottedcat`
 
-- sprite or HUD element -> `Image::new` plus `image.draw`
-- on-screen text -> `register_font`, `Text::new`, `spottedcat::text::draw`
+- sprite or HUD element -> `Image::new` plus `target.draw(ctx, &image, opts)`
+- on-screen text -> `register_font`, `Text::new`, `target.draw(ctx, &text, opts)`
 - player movement -> `key_down`, `key_pressed`, `mouse_down`, `mouse_pos`, `touches`
 - simple sound feedback -> `register_sound` + `play_sound`, or `play_sine` for fast smoke tests
 - 3D blockout -> `model::create_cube`, `create_plane`, `create_sphere`

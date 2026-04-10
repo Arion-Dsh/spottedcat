@@ -90,7 +90,7 @@ impl Spot for FogWorld {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let fog = FogSettings::default()
             .with_color([0.72, 0.79, 0.77, 1.0])
             .with_strength(0.26)
@@ -104,7 +104,7 @@ impl Spot for FogWorld {
             .with_height(-1.0, 9.0, 0.16, 1.0);
         spottedcat::set_fog(ctx, fog);
 
-        spottedcat::model::draw(
+        screen.draw(
             ctx,
             &self.floor,
             DrawOption3D::default()
@@ -113,7 +113,7 @@ impl Spot for FogWorld {
                 .with_scale([50.0, 50.0, 1.0]),
         );
 
-        spottedcat::model::draw(
+        screen.draw(
             ctx,
             &self.giant_bg,
             DrawOption3D::default()
@@ -127,7 +127,7 @@ impl Spot for FogWorld {
             let sway = (self.time * 0.8 + row as f32 * 0.7).sin() * 0.35;
             let lift = (self.time * 1.1 + row as f32 * 0.5).sin() * 0.12;
 
-            spottedcat::model::draw(
+            screen.draw(
                 ctx,
                 &self.cube,
                 DrawOption3D::default()
@@ -136,7 +136,7 @@ impl Spot for FogWorld {
                     .with_rotation([0.0, self.time * 0.3 + row as f32 * 0.2, 0.0]),
             );
 
-            spottedcat::model::draw(
+            screen.draw(
                 ctx,
                 &self.cube,
                 DrawOption3D::default()
@@ -145,7 +145,7 @@ impl Spot for FogWorld {
                     .with_rotation([0.0, -self.time * 0.25 - row as f32 * 0.18, 0.0]),
             );
 
-            spottedcat::model::draw(
+            screen.draw(
                 ctx,
                 &self.sphere,
                 DrawOption3D::default()
@@ -161,7 +161,7 @@ impl Spot for FogWorld {
         spottedcat::clear_fog(ctx);
 
         // Draw FPS
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &self.fps_text,
             DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),

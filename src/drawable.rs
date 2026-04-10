@@ -4,9 +4,22 @@ use crate::Text;
 #[cfg(feature = "model-3d")]
 pub(crate) use crate::drawable_3d::DrawCommand3D;
 
+/// Trait for objects that can be drawn into an [`Image`][crate::Image].
+pub trait Drawable {
+    /// Associated options for configuring the draw call (e.g., [`DrawOption`][crate::DrawOption]).
+    type Options;
+
+    /// Renders the object into the specified target image.
+    ///
+    /// This is the low-level drawing interface. Users should typically call
+    /// `target.draw(ctx, drawable, options)` instead.
+    fn draw_to(self, ctx: &mut crate::Context, target: crate::Image, options: Self::Options);
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ImageCommand {
     pub id: u32,
+    pub target_texture_id: u32,
     pub opts: DrawOption,
     pub shader_id: u32,
     pub shader_opts: ShaderOpts,
@@ -14,13 +27,16 @@ pub(crate) struct ImageCommand {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TextCommand {
+    pub target_texture_id: u32,
+    pub text: Box<Text>,
+    pub opts: DrawOption,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand {
     Image(Box<ImageCommand>),
-    Text(Box<Text>, DrawOption),
-    #[allow(dead_code)]
-    ClearImage(u32, [f32; 4]),
-    #[allow(dead_code)]
-    CopyImage(u32, u32),
+    Text(Box<TextCommand>),
 }
 
 /// Unified options for drawing images and text.
@@ -28,17 +44,13 @@ pub(crate) enum DrawCommand {
 /// Controls the position, rotation, and scale of drawn items.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawOption {
-    /// Position in screen pixels (top-left corner). Origin is at top-left of window.
+    /// Position in logical units relative to the target's top-left corner.
     position: [Pt; 2],
     /// Rotation in radians.
     rotation: f32,
     /// Scale factors (x, y). Applied after size.
     scale: [f32; 2],
     opacity: f32,
-    /// Layer for sorting (z-index). Higher values are drawn later.
-    layer: i32,
-    /// Optional clipping rectangle [x, y, width, height] in screen pixels.
-    clip: Option<[Pt; 4]>,
 }
 
 impl Default for DrawOption {
@@ -48,22 +60,18 @@ impl Default for DrawOption {
             scale: [1.0, 1.0],
             rotation: 0.0,
             opacity: 1.0,
-            layer: 0,
-            clip: None,
         }
     }
 }
 
 impl DrawOption {
     /// Creates a new DrawOption with position, rotation, and scale.
-    pub fn new(position: [Pt; 2], rotation: f32, scale: [f32; 2], layer: i32) -> Self {
+    pub fn new(position: [Pt; 2], rotation: f32, scale: [f32; 2]) -> Self {
         Self {
             position,
             rotation,
             scale,
             opacity: 1.0,
-            layer,
-            clip: None,
         }
     }
 
@@ -71,7 +79,7 @@ impl DrawOption {
         self.position
     }
 
-    /// Sets the drawing position. Coordinates are logical Pt relative to parent or window.
+    /// Sets the drawing position relative to the current target's top-left corner.
     pub fn with_position(mut self, position: [Pt; 2]) -> Self {
         self.position = position;
         self
@@ -109,63 +117,5 @@ impl DrawOption {
     pub fn with_opacity(mut self, opacity: f32) -> Self {
         self.opacity = opacity.clamp(0.0, 1.0);
         self
-    }
-
-    pub fn layer(&self) -> i32 {
-        self.layer
-    }
-
-    /// Sets the rendering layer (sorting index). Higher values are drawn later.
-    pub fn with_layer(mut self, layer: i32) -> Self {
-        self.layer = layer;
-        self
-    }
-
-    /// Sets an optional clipping rectangle [x, y, width, height] in logical coordinates.
-    pub fn with_clip(mut self, clip: Option<[Pt; 4]>) -> Self {
-        self.clip = clip;
-        self
-    }
-
-    pub fn get_clip(&self) -> Option<[Pt; 4]> {
-        self.clip
-    }
-
-    pub(crate) fn apply_state(&self, state: &crate::DrawState) -> Self {
-        let mut new_opts = *self;
-
-        // Add current state's position to our relative position to get absolute screen position
-        new_opts.position[0] += state.position[0];
-        new_opts.position[1] += state.position[1];
-
-        // Layer is usually absolute or additive? Let's make it additive for nested offsets.
-        // Actually, let's just use the DrawOption layer as the base.
-        // If we want nested layers, we need state.layer too.
-
-        // Merge clip
-        if let Some(state_clip_abs) = state.clip {
-            new_opts.clip = if let Some(own_clip_rel) = self.clip {
-                // own_clip is relative to own relative position
-                // Calculate absolute coordinates for our own clip
-                let own_x_abs = new_opts.position[0].as_f32() + own_clip_rel[0].as_f32();
-                let own_y_abs = new_opts.position[1].as_f32() + own_clip_rel[1].as_f32();
-
-                let x = own_x_abs.max(state_clip_abs[0].as_f32());
-                let y = own_y_abs.max(state_clip_abs[1].as_f32());
-                let right = (own_x_abs + own_clip_rel[2].as_f32())
-                    .min(state_clip_abs[0].as_f32() + state_clip_abs[2].as_f32());
-                let bottom = (own_y_abs + own_clip_rel[3].as_f32())
-                    .min(state_clip_abs[1].as_f32() + state_clip_abs[3].as_f32());
-
-                let w = (right - x).max(0.0);
-                let h = (bottom - y).max(0.0);
-                Some([Pt::from(x), Pt::from(y), Pt::from(w), Pt::from(h)])
-            } else {
-                // If we don't have our own clip, we inherit the state clip
-                Some(state_clip_abs)
-            };
-        }
-
-        new_opts
     }
 }

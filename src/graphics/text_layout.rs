@@ -6,6 +6,7 @@ use crate::pt::Pt;
 
 use super::core::Graphics;
 use super::core::ResolvedDraw;
+use super::image_ops::resolve_image_uv;
 
 impl Graphics {
     pub(crate) fn ensure_text_layout(
@@ -135,14 +136,21 @@ impl Graphics {
 
                 let w = img_entry.bounds.width.as_f32() * sx;
                 let h = img_entry.bounds.height.as_f32() * sy;
+                let texture_entry = if let Some(Some(e)) =
+                    ctx.registry.textures.get(img_entry.texture_id as usize)
+                {
+                    e
+                } else {
+                    caret_pos[0] += Pt::from(entry.advance);
+                    continue;
+                };
 
                 cached_glyphs.push(CachedGlyph {
                     instance: crate::image_raw::InstanceData {
                         pos: [rel_x, rel_y],
                         rotation: 0.0,
                         size: [w, h],
-                        uv_rect: img_entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]),
-                        clip_rect: [-1.0, -1.0, -1.0, -1.0],
+                        uv_rect: resolve_image_uv(img_entry, texture_entry),
                     },
                     image_id: img_id,
                 });
@@ -195,24 +203,20 @@ impl Graphics {
                 && final_y + glyph.instance.size[1] >= viewport_rect[1]
                 && final_y <= viewport_rect[3]
                 && let Some(Some(img_entry)) = ctx.registry.images.get(glyph.image_id as usize)
-                && let Some(atlas_index) = img_entry.atlas_index
-                && let Some(uv_rect) = img_entry.uv_rect
+                && let Some(Some(texture_entry)) =
+                    ctx.registry.textures.get(img_entry.texture_id as usize)
+                && texture_entry.is_ready(self.gpu_generation)
             {
                 let mut glyph_opts = *opts;
                 glyph_opts.set_position(Pt::from(final_x), Pt::from(final_y));
 
-                let draw_index = self.draw_index_counter;
-                self.draw_index_counter += 1;
-
                 self.resolved_draws.push(ResolvedDraw {
-                    atlas_index,
+                    texture_id: img_entry.texture_id,
                     bounds: img_entry.bounds,
-                    uv_rect,
+                    uv_rect: resolve_image_uv(img_entry, texture_entry),
                     opts: glyph_opts,
                     shader_id: self.text_shader_id,
                     shader_opts,
-                    layer: opts.layer(),
-                    draw_index,
                 });
             }
         }

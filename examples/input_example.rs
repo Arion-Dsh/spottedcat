@@ -42,10 +42,10 @@ impl Spot for InputExample {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let title_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(40.0)]);
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &Text::new("Input Example (Use WASD or Arrow keys)", self.font_id)
                 .with_font_size(spottedcat::Pt::from(24.0))
@@ -55,7 +55,7 @@ impl Spot for InputExample {
 
         let keys_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(90.0)]);
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &Text::new(
                 format!("Position: ({:.1}, {:.1})", self.x, self.y),
@@ -68,7 +68,7 @@ impl Spot for InputExample {
 
         let mouse_opts = DrawOption::default()
             .with_position([spottedcat::Pt::from(20.0), spottedcat::Pt::from(160.0)]);
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &Text::new(
                 "Tip: hold keys for continuous movement; press ESC to reset.",

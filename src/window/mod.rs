@@ -199,6 +199,20 @@ pub(crate) struct App {
     pub(crate) timing: FixedTimestep,
 }
 
+pub(crate) fn make_screen_target(ctx: &Context) -> crate::Image {
+    let (width, height) = ctx.window_logical_size();
+    crate::Image {
+        id: 0,
+        texture_id: 0,
+        x: crate::Pt(0.0),
+        y: crate::Pt(0.0),
+        width,
+        height,
+        pixel_width: width.to_u32_clamped().max(1),
+        pixel_height: height.to_u32_clamped().max(1),
+    }
+}
+
 impl App {
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
@@ -251,7 +265,7 @@ mod tests {
             Self
         }
 
-        fn draw(&mut self, _ctx: &mut Context) {}
+        fn draw(&mut self, _ctx: &mut Context, _screen: crate::Image) {}
 
         fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
     }
@@ -261,7 +275,7 @@ mod tests {
             Self
         }
 
-        fn draw(&mut self, _ctx: &mut Context) {}
+        fn draw(&mut self, _ctx: &mut Context, _screen: crate::Image) {}
 
         fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
     }
@@ -271,7 +285,7 @@ mod tests {
             Self
         }
 
-        fn draw(&mut self, _ctx: &mut Context) {}
+        fn draw(&mut self, _ctx: &mut Context, _screen: crate::Image) {}
 
         fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
     }

@@ -2,6 +2,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum DrawCommand3D {
     Model(
+        u32,
         crate::model::Model,
         DrawOption3D,
         u32,
@@ -9,6 +10,7 @@ pub(crate) enum DrawCommand3D {
         Option<u32>,
     ),
     ModelInstanced(
+        u32,
         crate::model::Model,
         DrawOption3D,
         u32,

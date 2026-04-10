@@ -34,8 +34,8 @@ impl Spot for MyGame {
     }
 
     /// Called every frame for rendering.
-    fn draw(&mut self, ctx: &mut Context) {
-        // Issue draw commands here
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
+        // Issue draw commands here using the provided 'screen' as the target
     }
 
     /// Called when the app enters the foreground (e.g., from background).
@@ -67,7 +67,8 @@ use spottedcat::{Image, DrawOption, Pt};
 // Registering requires the ctx to synchronize with the GPU
 let image = Image::new(ctx, Pt(width), Pt(height), &rgba_data).unwrap();
 
-image.draw(ctx, DrawOption::default()
+// Draw using the target (e.g. screen)
+target.draw(ctx, &image, DrawOption::default()
     .with_position([Pt(100.0), Pt(100.0)])
     .with_scale([2.0, 2.0])
     .with_rotation(45.0f32.to_radians())
@@ -93,7 +94,7 @@ let font_id = spottedcat::register_font(ctx, font_data_vec);
 
 // 2. Create the Text object with content and font_id
 let text = Text::new("Hello World", font_id).with_font_size(Pt(24.0));
-spottedcat::text::draw(ctx, &text, DrawOption::default().with_position([Pt(50.0), Pt(50.0)]));
+target.draw(ctx, &text, DrawOption::default().with_position([Pt(50.0), Pt(50.0)]));
 ```
 
 ## 3. Drawing 3D (Models & Instancing)
@@ -104,7 +105,7 @@ use spottedcat::{Model, DrawOption3D};
 
 let cube = spottedcat::model::create_cube(ctx, 1.0).unwrap();
 // 3D drawing example (if model-3d feature enabled)
-spottedcat::model::draw(ctx, &cube, DrawOption3D::default()
+target.draw(ctx, &cube, DrawOption3D::default()
     .with_position([0.0, 0.0, -5.0])
     .with_rotation([0.0, 1.0, 0.0])); // rotation as [x, y, z] axis
 ```
@@ -113,7 +114,7 @@ spottedcat::model::draw(ctx, &cube, DrawOption3D::default()
 Use this for drawing many copies of the same model efficiently.
 ```rust
 let transforms: Vec<[[f32; 4]; 4]> = vec![...]; // Array of 4x4 matrices
-spottedcat::model::draw_instanced(ctx, &model, DrawOption3D::default(), &transforms);
+spottedcat::model::draw_instanced(ctx, target, &model, DrawOption3D::default(), &transforms);
 ```
 
 ## 4. Input Management

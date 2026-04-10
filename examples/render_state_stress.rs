@@ -75,7 +75,7 @@ impl Spot for RenderStateStress {
         spottedcat::set_camera_target(ctx, 0.0, 0.0, -28.0);
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let columns = 32;
         let rows = 24;
 
@@ -91,7 +91,7 @@ impl Spot for RenderStateStress {
                 let opts = DrawOption3D::default()
                     .with_position([x, y, z])
                     .with_rotation([spin * 0.4, spin, 0.0]);
-                spottedcat::model::draw(ctx, &self.models[model_index], opts);
+                screen.draw(ctx, &self.models[model_index], opts);
             }
         }
 
@@ -102,11 +102,12 @@ impl Spot for RenderStateStress {
                 .with_position([x, 0.0, z])
                 .with_rotation([0.0, self.time * 0.25 + idx as f32 * 0.1, 0.0])
                 .with_opacity(0.35);
-            spottedcat::model::draw(ctx, &self.transparent_plane, opts);
+            screen.draw(ctx, &self.transparent_plane, opts);
         }
 
         spottedcat::model::draw_instanced_shared(
             ctx,
+            screen,
             &self.instanced_cube,
             DrawOption3D::default()
                 .with_position([0.0, -10.0, 0.0])

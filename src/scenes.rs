@@ -85,6 +85,23 @@ pub fn switch_scene_with<T: Spot + 'static, P: Any>(payload: P) {
 ///
 /// Implement this trait on your application state struct to handle lifecycle
 /// events, updates, and drawing.
+///
+/// # Example
+/// ```no_run
+/// use spottedcat::{Context, Spot, Image, DrawOption};
+///
+/// struct MyScene;
+///
+/// impl Spot for MyScene {
+///     fn initialize(ctx: &mut Context) -> Self { Self }
+///
+///     fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) { }
+///
+///     fn draw(&mut self, ctx: &mut Context, screen: Image) {
+///         // Draw to the provided screen
+///     }
+/// }
+/// ```
 pub trait Spot {
     /// Initializes the scene. This is called once when the scene is created.
     fn initialize(ctx: &mut Context) -> Self
@@ -92,7 +109,10 @@ pub trait Spot {
         Self: Sized;
 
     /// Called every frame to draw the scene.
-    fn draw(&mut self, ctx: &mut Context);
+    ///
+    /// The `screen` image represents the primary backbuffer/window. All draw commands
+    /// should be issued via a target image's `draw` method (e.g., `screen.draw(ctx, &image, opts)`).
+    fn draw(&mut self, ctx: &mut Context, screen: crate::Image);
 
     /// Called every frame to update the scene logic.
     ///

@@ -27,7 +27,7 @@
 //!         // Handle logic here
 //!     }
 //!
-//!     fn draw(&mut self, ctx: &mut Context) {
+//!     fn draw(&mut self, ctx: &mut Context, screen: Image) {
 //!         let (w, h) = spottedcat::window_size(ctx);
 //!         
 //!         // Draw image at center
@@ -35,7 +35,7 @@
 //!             .with_position([w / 2.0, h / 2.0])
 //!             .with_scale([2.0, 2.0]);
 //!             
-//!         self.image.draw(ctx, opts);
+//!         screen.draw(ctx, &self.image, opts);
 //!     }
 //!
 //!     fn remove(&mut self, _ctx: &mut Context) {}
@@ -71,7 +71,6 @@ pub mod math;
 #[cfg(feature = "model-3d")]
 pub mod model;
 mod mouse;
-mod packer;
 mod platform;
 mod platform_events;
 mod pt;
@@ -80,7 +79,7 @@ mod shader_opts;
 mod sound;
 mod splash;
 pub mod text;
-mod texture;
+
 mod touch;
 #[cfg(any(feature = "utils", feature = "model-3d", feature = "gltf"))]
 pub mod utils;
@@ -90,9 +89,8 @@ mod window;
 pub use android_activity::AndroidApp;
 pub use assets::*;
 pub use context::Context;
-pub(crate) use context::DrawState;
 pub use controls::*;
-pub use drawable::DrawOption;
+pub use drawable::{DrawOption, Drawable};
 #[cfg(feature = "model-3d")]
 pub use drawable_3d::DrawOption3D;
 #[cfg(feature = "effects")]
@@ -112,6 +110,7 @@ pub use shader_opts::ShaderOpts;
 pub use sound::*;
 pub use splash::OneShotSplash;
 pub use text::Text;
+pub use graphics::texture::Texture;
 pub use touch::{TouchInfo, TouchPhase};
 
 // --- Functional API ---
@@ -148,9 +147,7 @@ pub fn unregister_sound(ctx: &mut Context, sound_id: u32) {
 }
 
 /// Forces pending asset compression work to run immediately.
-pub fn compress_assets(ctx: &mut Context) {
-    assets::compress_assets(ctx);
-}
+
 
 #[cfg(feature = "model-3d")]
 /// Sets camera eye, target and up vectors in one call.
@@ -358,6 +355,7 @@ mod tests {
         let opts = DrawOption::default().with_position([Pt::from(100.0), Pt::from(100.0)]);
         ctx.push(DrawCommand::Image(Box::new(ImageCommand {
             id: img_id,
+            target_texture_id: 0,
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
@@ -375,6 +373,7 @@ mod tests {
             .with_scale([-1.0, 1.0]);
         ctx.push(DrawCommand::Image(Box::new(ImageCommand {
             id: img_id,
+            target_texture_id: 0,
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
@@ -392,6 +391,7 @@ mod tests {
             .with_scale([-1.0, 1.0]);
         ctx.push(DrawCommand::Image(Box::new(ImageCommand {
             id: img_id,
+            target_texture_id: 0,
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
@@ -409,6 +409,7 @@ mod tests {
             .with_scale([1.0, -1.0]);
         ctx.push(DrawCommand::Image(Box::new(ImageCommand {
             id: img_id,
+            target_texture_id: 0,
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
@@ -426,6 +427,7 @@ mod tests {
             .with_scale([-1.0, -1.0]);
         ctx.push(DrawCommand::Image(Box::new(ImageCommand {
             id: img_id,
+            target_texture_id: 0,
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
@@ -437,5 +439,28 @@ mod tests {
             "Both-flipped image at 100,100 should be visible"
         );
         ctx.runtime.draw_list.clear();
+    }
+
+    #[test]
+    fn test_render_target_registration() {
+        let mut ctx = Context::new();
+        let texture = Texture::new_render_target(&mut ctx, Pt::from(100.0), Pt::from(200.0));
+        let image = texture.view();
+
+        assert_eq!(texture.width(), Pt::from(100.0));
+        assert_eq!(texture.height(), Pt::from(200.0));
+        assert_eq!(image.width(), Pt::from(100.0));
+        assert_eq!(image.height(), Pt::from(200.0));
+
+        let texture_entry = ctx
+            .registry
+            .textures
+            .get(texture.id() as usize)
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert!(texture_entry.is_render_target());
+        assert_eq!(texture_entry.pixel_width, 100);
+        assert_eq!(texture_entry.pixel_height, 200);
     }
 }

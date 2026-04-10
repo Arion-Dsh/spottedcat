@@ -196,27 +196,28 @@ impl Text {
         self.max_width
     }
 
-    /// Draws this text to the context with the specified options.
+    /// Returns the logical size of the text in pixels.
     ///
-    /// # Arguments
-    /// * `context` - The drawing context to add this text to
-    /// * `options` - Text drawing options (position, font size, color, scale, font)
+    /// The size is calculated based on the content, font, and font size.
+    /// If `max_width` is set, the height will account for multiple lines.
     ///
     /// # Example
     /// ```no_run
     /// # use spottedcat::{Context, Text, DrawOption};
-    /// # fn example(ctx: &mut Context) {
+    /// # fn example(ctx: &mut Context, screen: spottedcat::Image) {
     /// # const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
     /// # let font_id = spottedcat::register_font(ctx, FONT.to_vec());
+    /// let text = Text::new("Hello, World!", font_id)
+    ///     .with_font_size(spottedcat::Pt::from(32.0));
+    /// let (w, h) = text.measure(ctx);
+    ///
+    /// // Draw to screen
     /// let opts = DrawOption::default()
     ///     .with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
-    /// Text::new("Hello, World!", font_id)
-    ///     .with_font_size(spottedcat::Pt::from(32.0))
-    ///     .draw(ctx, opts);
+    /// screen.draw(ctx, &text, opts);
     /// # }
     /// ```
-    /// Returns the logical size of the text in pixels.
-    pub(crate) fn measure(&self, ctx: &Context) -> (f32, f32) {
+    pub fn measure(&self, ctx: &Context) -> (f32, f32) {
         let (w, h, _) = self.measure_with_y_offset(ctx);
         (w, h)
     }
@@ -227,7 +228,7 @@ impl Text {
     /// align with the measured box. This helps UI vertical centering look correct.
     ///
     /// If max_width is set, text will be wrapped and height will account for multiple lines.
-    pub(crate) fn measure_with_y_offset(&self, ctx: &Context) -> (f32, f32, f32) {
+    pub fn measure_with_y_offset(&self, ctx: &Context) -> (f32, f32, f32) {
         use ab_glyph::{Font as _, FontArc, Glyph, PxScale, ScaleFont as _};
 
         let font_data = match ctx.registry.fonts.get(&self.font_id) {
@@ -504,19 +505,20 @@ impl Text {
         }
     }
 
-    pub(crate) fn draw(&self, ctx: &mut Context, options: DrawOption) {
-        // Draw text at the exact position provided by the caller
-        // The caller is responsible for handling baseline offset if needed
-        ctx.push(crate::drawable::DrawCommand::Text(
-            Box::new(self.clone_for_draw()),
-            options,
-        ));
-    }
 }
 
-/// Draws text to the screen.
-pub fn draw(ctx: &mut Context, text: &Text, options: DrawOption) {
-    text.draw(ctx, options);
+impl crate::Drawable for &Text {
+    type Options = DrawOption;
+
+    fn draw_to(self, ctx: &mut Context, target: crate::Image, options: Self::Options) {
+        ctx.push(crate::drawable::DrawCommand::Text(Box::new(
+            crate::drawable::TextCommand {
+                target_texture_id: ctx.resolve_target_texture_id(target),
+                text: Box::new(self.clone_for_draw()),
+                opts: options,
+            },
+        )));
+    }
 }
 
 /// Returns the measured text size in logical pixels.

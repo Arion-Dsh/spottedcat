@@ -18,3 +18,4 @@ pub(crate) mod shader;
 #[cfg(feature = "model-3d")]
 pub(crate) mod shader_3d;
 pub(crate) mod text_layout;
+pub(crate) mod texture;

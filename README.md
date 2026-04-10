@@ -74,7 +74,7 @@ impl Spot for MyApp {
         // Handle logic here
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: Image) {
         let (w, h) = spottedcat::window_size(ctx);
         
         // Draw image at center
@@ -82,7 +82,7 @@ impl Spot for MyApp {
             .with_position([w / 2.0, h / 2.0])
             .with_scale([2.0, 2.0]);
             
-        self.image.draw(ctx, opts);
+        screen.draw(ctx, &self.image, opts);
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
@@ -136,7 +136,7 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 
 - **`Context`**: Central state for managing draw commands, input, audio, and resources. Hides internal methods to ensure consistency.
 - **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` using logical `Pt` sizes and rendered via `image.draw(ctx, ...)`.
+- **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` and rendered via `target.draw(ctx, &image, ...)`. Use the provided `screen` in `Spot::draw` as the default target.
 - **`Model`**: 3D model handle created via `spottedcat::model::create(...)` and rendered via `spottedcat::model::*`.
 - **`Text`**: High-level text structure for 2D layout.
 - **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
@@ -145,10 +145,14 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 ### API Style
 
 - **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `register_font`, `set_window_size`, `key_down`, `play_sound`), while image creation and drawing live on `Image` methods and model creation lives at `spottedcat::model::create`.
+- **Assets**
+ 
+Forces pending asset rebuild/re-upload to GPU to run immediately with `spottedcat::rebuild_assets(ctx)`.
 - **Resource operations** stay inside their domains:
-  - `Image` methods for image creation, draw, scope, and readiness checks.
-  - `spottedcat::model::*` for model create/draw/instancing/shader draw.
-  - `spottedcat::text::*` for text draw/measure.
+  - `Image` methods for creation, sub-image extraction, and target-based drawing.
+  - `Texture` for managing underlying GPU textures and creating render targets.
+  - `spottedcat::model::*` for model create/draw/instancing/shader draw (via `target.draw`).
+  - `spottedcat::text::*` for text draw/measure (via `target.draw`).
 
 - For encoded PNG/JPEG/WebP bytes, enable the `utils` feature and use `spottedcat::utils::image::from_image(...)` or `from_rgba_image(...)` after decoding with the `image` crate. These helpers preserve pixel dimensions and derive the default logical size from the current `scale_factor`.
 

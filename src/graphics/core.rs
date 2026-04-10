@@ -5,30 +5,20 @@ use crate::ShaderOpts;
 use crate::drawable::DrawCommand;
 use crate::glyph_cache::GlyphCache;
 use crate::image_raw::{ImageRenderer, InstanceData};
-use crate::packer::AtlasPacker;
-use crate::texture::Texture;
 use ab_glyph::FontArc;
 use std::collections::HashMap;
 
 #[cfg(feature = "model-3d")]
 use super::core_3d::Graphics3D;
 
-pub(crate) struct AtlasSlot {
-    pub packer: AtlasPacker,
-    pub texture: Texture,
-    pub bind_group: wgpu::BindGroup,
-}
-
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ResolvedDraw {
-    pub atlas_index: u32,
+    pub texture_id: u32,
     pub bounds: crate::image::Bounds,
     pub uv_rect: [f32; 4],
     pub opts: DrawOption,
     pub shader_id: u32,
     pub shader_opts: ShaderOpts,
-    pub layer: i32,
-    pub draw_index: u64,
 }
 
 #[cfg(feature = "model-3d")]
@@ -45,7 +35,6 @@ pub(crate) struct Graphics {
     pub(crate) image_renderer: ImageRenderer,
     pub(crate) default_pipeline: wgpu::RenderPipeline,
     pub(crate) image_pipelines: HashMap<u32, wgpu::RenderPipeline>,
-    pub(crate) atlases: Vec<AtlasSlot>,
     pub(crate) batch: Vec<InstanceData>,
     pub(crate) font_cache: HashMap<u64, FontArc>,
     pub(crate) glyph_cache: GlyphCache,
@@ -57,7 +46,6 @@ pub(crate) struct Graphics {
     #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
     pub(crate) model_3d: GraphicsModel3dState,
     pub(crate) transparent: bool,
-    pub(crate) draw_index_counter: u64,
 }
 
 impl std::fmt::Debug for Graphics {
@@ -156,17 +144,6 @@ impl Graphics {
 
         let image_pipelines = HashMap::new();
 
-        let atlas_size = 2048;
-        let packer = AtlasPacker::new(atlas_size, atlas_size, 2);
-        let atlas_texture = Texture::create_empty(&device, atlas_size, atlas_size, config.format);
-        let atlas_bind_group =
-            image_renderer.create_texture_bind_group(&device, &atlas_texture.0.view);
-        let atlases = vec![AtlasSlot {
-            packer,
-            texture: atlas_texture,
-            bind_group: atlas_bind_group,
-        }];
-
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("image_shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/image.wgsl").into()),
@@ -225,7 +202,6 @@ impl Graphics {
             image_renderer,
             default_pipeline,
             image_pipelines,
-            atlases,
             batch: Vec::with_capacity(10000),
             font_cache: HashMap::new(),
             glyph_cache: GlyphCache::new(),
@@ -236,7 +212,6 @@ impl Graphics {
             gpu_generation: 0, // This will be set by the platform/app
             model_3d: GraphicsModel3dState::default(),
             transparent,
-            draw_index_counter: 0,
         };
 
         // Default resources will be registered via the Context in App initialization
@@ -273,8 +248,8 @@ impl Graphics {
         drawables: &[DrawCommand],
     ) -> anyhow::Result<()> {
         for drawable in drawables {
-            if let DrawCommand::Text(text, opts) = drawable {
-                self.ensure_text_layout(ctx, text, opts.scale())?;
+            if let DrawCommand::Text(cmd) = drawable {
+                self.ensure_text_layout(ctx, &cmd.text, cmd.opts.scale())?;
             }
         }
 
@@ -325,14 +300,16 @@ impl Graphics {
             self.font_cache.insert(id as u64, font);
         }
 
-        // 3. Restore Images (Atlases)
-        self.dirty_assets = true; // Ensure rebuild does work
-        self.rebuild_atlases(ctx)?;
+        // 3. Restore texture resources
+        self.gpu_generation = ctx.registry.gpu_generation;
+        self.text_shader_id = 1;
+
+        self.dirty_assets = true;
+        self.rebuild_textures(ctx)?;
         self.restore_3d_assets(ctx);
 
-        self.gpu_generation = ctx.registry.gpu_generation;
-
-        self.text_shader_id = 1;
+        // CRITICAL: Immediately process registrations to recreate all assets (including Canvases) for the new device
+        self.process_registrations(ctx)?;
 
         eprintln!(
             "[spot][graphics] Asset restoration complete. generation={}",

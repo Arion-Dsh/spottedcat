@@ -53,42 +53,52 @@ impl Spot for CenteredTextTestSpot {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let width = 300.0;
         let height = 50.0;
 
         // Draw outer image at position (50, 50)
-        let outer_opts = DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]);
+        let outer_pos = [50.0, 50.0];
+        screen.draw(
+            ctx,
+            &self.outer_image,
+            DrawOption::default().with_position([Pt::from(outer_pos[0]), Pt::from(outer_pos[1])]),
+        );
 
-        self.outer_image.with_clip_scope(ctx, outer_opts, |ctx1| {
-            // Draw inner image at (10, 10) position within outer image
-            let inner_opts = DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]);
+        // Draw inner image at (10, 10) position within outer image
+        // Absolute position: (50+10, 50+10) = (60, 60)
+        let inner_pos = [outer_pos[0] + 10.0, outer_pos[1] + 10.0];
+        screen.draw(
+            ctx,
+            &self.inner_image,
+            DrawOption::default().with_position([Pt::from(inner_pos[0]), Pt::from(inner_pos[1])]),
+        );
 
-            self.inner_image.with_clip_scope(ctx1, inner_opts, |ctx2| {
-                // Calculate centered position for text
-                let text_content = "Centered Text";
-                let font_size = Pt::from(20.0);
+        // Calculate centered position for text within the inner image
+        let text_content = "Centered Text";
+        let font_size = Pt::from(20.0);
 
-                // Create text to measure its dimensions including baseline offset
-                let text = spottedcat::Text::new(text_content, self.font_id)
-                    .with_font_size(font_size)
-                    .with_color([0.0, 0.0, 0.0, 1.0]); // Black text
+        // Create text to measure its dimensions
+        let text = spottedcat::Text::new(text_content, self.font_id)
+            .with_font_size(font_size)
+            .with_color([0.0, 0.0, 0.0, 1.0]);
 
-                // Get text dimensions and baseline offset
-                let (text_width, text_height, _) =
-                    spottedcat::text::measure_with_y_offset(ctx2, &text);
+        // Get text dimensions
+        let (text_width, text_height, _) = spottedcat::text::measure_with_y_offset(ctx, &text);
 
-                // Calculate centered position within the inner image
-                let centered_x = (width - text_width) / 2.0;
-                let centered_y = (height - text_height) / 2.0;
+        // Calculate centered position relative to inner image
+        let centered_x = (width - text_width) / 2.0;
+        let centered_y = (height - text_height) / 2.0;
 
-                // Draw text at geometric centered position
-                let text_opts = DrawOption::default()
-                    .with_position([Pt::from(centered_x), Pt::from(centered_y)]);
+        // Absolute text position: inner_pos + centered
+        let text_abs_pos = [inner_pos[0] + centered_x, inner_pos[1] + centered_y];
 
-                spottedcat::text::draw(ctx2, &text, text_opts);
-            });
-        });
+        screen.draw(
+            ctx,
+            &text,
+            DrawOption::default()
+                .with_position([Pt::from(text_abs_pos[0]), Pt::from(text_abs_pos[1])]),
+        );
     }
 
     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}

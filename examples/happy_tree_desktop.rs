@@ -20,13 +20,16 @@ impl Spot for HappyTreeDesktop {
 
     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let (w, h) = spottedcat::window_size(ctx);
         let image_x = (w - self.image.width()) / 2.0;
         let image_y = (h - self.image.height()) / 2.0;
 
-        self.image
-            .draw(ctx, DrawOption::default().with_position([image_x, image_y]));
+        screen.draw(
+            ctx,
+            &self.image,
+            DrawOption::default().with_position([image_x, image_y]),
+        );
 
         let overlay = Text::new(
             format!(
@@ -40,7 +43,7 @@ impl Spot for HappyTreeDesktop {
         .with_font_size(Pt::from(20.0))
         .with_color([0.95, 0.97, 1.0, 1.0]);
 
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &overlay,
             DrawOption::default().with_position([Pt::from(24.0), Pt::from(24.0)]),

@@ -4,7 +4,7 @@ use spottedcat::{
 use wasm_bindgen::prelude::*;
 
 struct WasmDemo {
-    image: Image,
+    happy_tree: Image,
     model: Model,
     rotation: f32,
     title: Text,
@@ -13,20 +13,11 @@ struct WasmDemo {
 
 impl Spot for WasmDemo {
     fn initialize(ctx: &mut Context) -> Self {
-        let mut rgba = vec![0u8; 64 * 64 * 4];
-        for y in 0..64u32 {
-            for x in 0..64u32 {
-                let i = ((y * 64 + x) * 4) as usize;
-                let on = ((x / 8 + y / 8) % 2) == 0;
-                rgba[i] = if on { 255 } else { 30 };
-                rgba[i + 1] = if on { 80 } else { 200 };
-                rgba[i + 2] = if on { 80 } else { 255 };
-                rgba[i + 3] = 255;
-            }
-        }
-
-        let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
-            .expect("failed to create 64x64 test image");
+        const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../../../../assets/happy-tree.png");
+        let img = image::load_from_memory(HAPPY_TREE_BYTES).unwrap();
+        let happy_tree =
+            Image::new(ctx, Pt::from(img.width() as f32), Pt::from(img.height() as f32), &img.to_rgba8())
+                .expect("failed to create happy tree image");
 
         // Include font for WASM demo
         const FONT: &[u8] = include_bytes!("../../../../assets/DejaVuSans.ttf");
@@ -48,7 +39,7 @@ impl Spot for WasmDemo {
         let model = spottedcat::model::create_cube(ctx, 1.0).unwrap();
 
         Self {
-            image,
+            happy_tree,
             model,
             rotation: 0.0,
             title,
@@ -56,36 +47,30 @@ impl Spot for WasmDemo {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
-        let (w, h) = window_size(ctx);
-        let image_scale = if w.as_f32() < 480.0 { 2.0 } else { 3.0 };
-        let image_size = 64.0 * image_scale;
-        let center_x = w.as_f32() * 0.5;
-        let center_y = h.as_f32() * 0.56;
-        let image_x = center_x - image_size * 0.5;
-        let image_y = center_y - image_size * 0.5;
-        let text_x = center_x - 96.0;
-        let title_y = center_y - image_size * 0.5 - 48.0;
-        let subtitle_y = title_y + 28.0;
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
+        let (_w, _h) = window_size(ctx);
 
-        // Draw 3D model
+        // 1. Draw 3D model
         let opts_3d = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0])
             .with_rotation([0.55, 0.75 + self.rotation * 0.45, 0.0]);
-        spottedcat::model::draw(ctx, &self.model, opts_3d);
+        screen.draw(ctx, &self.model, opts_3d);
 
-        let opts = DrawOption::default()
-            .with_position([Pt::from(image_x), Pt::from(image_y)])
-            .with_scale([image_scale, image_scale]);
-        self.image.draw(ctx, opts);
+        // 2. Draw UI directly to screen
+        let title_opts = DrawOption::default().with_position([Pt::from(20.0), Pt::from(20.0)]);
+        screen.draw(ctx, &self.title, title_opts);
 
-        let text_opts =
-            DrawOption::default().with_position([Pt::from(text_x), Pt::from(title_y)]);
-        spottedcat::text::draw(ctx, &self.title, text_opts);
+        let tree_target_width = spottedcat::vw(ctx, 50.0).as_f32();
+        let tree_scale = tree_target_width / self.happy_tree.width().as_f32();
+        let tree_opts = DrawOption::default()
+            .with_position([Pt::from(20.0), Pt::from(70.0)])
+            .with_scale([tree_scale, tree_scale]);
+        screen.draw(ctx, &self.happy_tree, tree_opts);
 
+        let subtitle_y = 70.0 + tree_target_width + 20.0;
         let sub_text_opts =
-            DrawOption::default().with_position([Pt::from(text_x), Pt::from(subtitle_y)]);
-        spottedcat::text::draw(ctx, &self.subtitle, sub_text_opts);
+            DrawOption::default().with_position([Pt::from(20.0), Pt::from(subtitle_y)]);
+        screen.draw(ctx, &self.subtitle, sub_text_opts);
     }
 
     fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) {

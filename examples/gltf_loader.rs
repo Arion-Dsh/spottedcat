@@ -30,12 +30,12 @@ impl Spot for GltfApp {
         self.rotation += dt.as_secs_f32() * 0.5;
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let opts = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0]) // Already at -5 in view space
             .with_rotation([0.0, self.rotation, 0.0]);
 
-        spottedcat::model::draw(ctx, &self.model, opts);
+        screen.draw(ctx, &self.model, opts);
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}

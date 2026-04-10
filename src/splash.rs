@@ -30,7 +30,7 @@ const LOGO_BOTTOM_INSET: usize = 10;
 ///
 ///     fn update(&mut self, _ctx: &mut spottedcat::Context, _dt: std::time::Duration) {}
 ///
-///     fn draw(&mut self, _ctx: &mut spottedcat::Context) {}
+///     fn draw(&mut self, _ctx: &mut spottedcat::Context, _screen: spottedcat::Image) {}
 /// }
 ///
 /// fn main() {
@@ -80,10 +80,10 @@ impl<TNext: Spot + 'static> Spot for OneShotSplash<TNext> {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: Image) {
         match &mut self.inner {
-            OneShotSplashInner::Splash(splash) => splash.draw(ctx),
-            OneShotSplashInner::Next(next) => next.draw(ctx),
+            OneShotSplashInner::Splash(splash) => splash.draw(ctx, screen),
+            OneShotSplashInner::Next(next) => next.draw(ctx, screen),
         }
     }
 
@@ -142,7 +142,7 @@ impl<TNext: Spot + 'static> BrandedSplash<TNext> {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: Image) {
         let (window_w, window_h) = crate::window_size(ctx);
         let window_w = window_w.as_f32();
         let window_h = window_h.as_f32();
@@ -169,8 +169,9 @@ impl<TNext: Spot + 'static> BrandedSplash<TNext> {
             .round();
 
         if let Some(panel) = self.panel {
-            panel.draw(
+            screen.draw(
                 ctx,
+                &panel,
                 DrawOption::default()
                     .with_position([Pt::from(panel_x), Pt::from(panel_y)])
                     .with_opacity(0.35 + 0.65 * intro_eased),
@@ -207,8 +208,9 @@ impl<TNext: Spot + 'static> BrandedSplash<TNext> {
         let wordmark_y = (logo_visual_bottom + gap).round();
 
         if let Some(logo) = self.logo {
-            logo.draw(
+            screen.draw(
                 ctx,
+                &logo,
                 DrawOption::default()
                     .with_position([Pt::from(logo_x), Pt::from(logo_y)])
                     .with_opacity(intro_eased),
@@ -216,8 +218,9 @@ impl<TNext: Spot + 'static> BrandedSplash<TNext> {
         }
 
         if let Some(wordmark) = self.wordmark {
-            wordmark.draw(
+            screen.draw(
                 ctx,
+                &wordmark,
                 DrawOption::default()
                     .with_position([Pt::from(wordmark_x), Pt::from(wordmark_y)])
                     .with_opacity(intro_eased),

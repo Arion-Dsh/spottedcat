@@ -13,14 +13,14 @@ impl Spot for GameplayScene {
 
     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let (window_w, window_h) = spottedcat::window_size(ctx);
 
         let title = Text::new("Main Scene", self.font_id)
             .with_font_size(Pt::from(34.0))
             .with_color([0.95, 0.93, 0.88, 1.0]);
         let title_width = spottedcat::text::measure(ctx, &title).0;
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &title,
             DrawOption::default().with_position([
@@ -36,7 +36,7 @@ impl Spot for GameplayScene {
         .with_font_size(Pt::from(18.0))
         .with_color([0.54, 0.9, 0.84, 1.0]);
         let hint_width = spottedcat::text::measure(ctx, &hint).0;
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &hint,
             DrawOption::default().with_position([

@@ -89,10 +89,11 @@ impl Spot for InstancingTest {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         // Draw 10000 cubes in 1 call!
         spottedcat::model::draw_instanced(
             ctx,
+            screen,
             &self.cube,
             DrawOption3D::default()
                 .with_position([0.0, -10.0, -80.0])
@@ -101,7 +102,7 @@ impl Spot for InstancingTest {
         );
 
         // Draw FPS
-        spottedcat::text::draw(
+        screen.draw(
             ctx,
             &self.fps_text,
             DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),

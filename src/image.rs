@@ -1,7 +1,5 @@
 use crate::Pt;
 
-use std::sync::Arc;
-
 /// Rectangle bounds for defining sub-regions of images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bounds {
@@ -14,26 +12,28 @@ pub struct Bounds {
     /// Height of the bounds.
     pub(crate) height: Pt,
 }
+
 impl Bounds {
     /// Returns the width of the bounds.
     pub fn width(&self) -> Pt {
         self.width
     }
+
     /// Returns the height of the bounds.
     pub fn height(&self) -> Pt {
         self.height
     }
+
     /// Returns the X coordinate of the top-left corner.
     pub fn x(&self) -> Pt {
         self.x
     }
+
     /// Returns the Y coordinate of the top-left corner.
     pub fn y(&self) -> Pt {
         self.y
     }
-}
 
-impl Bounds {
     /// Creates new bounds with the specified dimensions.
     pub fn new(x: Pt, y: Pt, width: Pt, height: Pt) -> Self {
         Self {
@@ -47,11 +47,15 @@ impl Bounds {
 
 /// Handle to an image resource.
 ///
-/// Images are GPU textures that can be drawn to the screen. They are reference-counted
-/// and can be cloned cheaply.
+/// An image references a sub-rectangle of a [`Texture`][crate::Texture].
+/// It can be used as a source for drawing into other images, or as a render target itself.
+///
+/// Use `target.draw(ctx, &source, options)` to draw a source image into a target image.
+/// The `screen` image provided in [`Spot::draw`][crate::Spot::draw] is the default window target.
 #[derive(Debug, Clone, Copy)]
 pub struct Image {
     pub(crate) id: u32,
+    pub(crate) texture_id: u32,
     pub(crate) x: Pt,
     pub(crate) y: Pt,
     pub(crate) width: Pt,
@@ -61,49 +65,71 @@ pub struct Image {
 }
 
 impl Image {
-    /// Creates a new image from RGBA8 data.
-    ///
-    /// `width` and `height` are logical sizes in [`Pt`][crate::Pt]. The pixel
-    /// dimensions used for atlas packing are derived from those logical values.
-    ///
-    /// When starting from encoded image bytes, prefer the helpers in
-    /// [`crate::utils::image`] (behind the `utils` feature) so the original
-    /// pixel dimensions are preserved and the logical size is derived from the
-    /// current scale factor.
+    /// Creates a new texture-backed full image from RGBA8 data.
     pub fn new(
         ctx: &mut crate::Context,
         width: Pt,
         height: Pt,
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
-        Self::new_from_rgba8(ctx, width, height, rgba)
+        Ok(crate::Texture::new(ctx, width, height, rgba)?.view())
     }
 
     /// Returns the logical width of the image.
-    pub fn width(&self) -> Pt {
+    pub fn width(self) -> Pt {
         self.width
     }
+
     /// Returns the logical height of the image.
-    pub fn height(&self) -> Pt {
+    pub fn height(self) -> Pt {
         self.height
     }
+
     /// Returns the internal unique identifier for this image.
-    pub fn id(&self) -> u32 {
+    pub fn id(self) -> u32 {
         self.id
     }
 
-    /// Returns true if the image is ready for rendering.
-    pub fn is_ready(&self, ctx: &crate::Context) -> bool {
+    /// Returns the owning texture identifier.
+    pub fn texture_id(self) -> u32 {
+        self.texture_id
+    }
+
+    /// Returns the full texture that this image samples from.
+    pub fn texture(self, ctx: &crate::Context) -> Option<crate::Texture> {
         ctx.registry
-            .images
-            .get(self.index())
+            .textures
+            .get(self.texture_id as usize)
             .and_then(|v| v.as_ref())
-            .map(|e| e.is_ready())
+            .map(|entry| crate::Texture {
+                id: self.texture_id,
+                default_view_id: entry.default_view_id,
+                width: entry.width,
+                height: entry.height,
+                pixel_width: entry.pixel_width,
+                pixel_height: entry.pixel_height,
+            })
+    }
+
+    /// Returns true if the underlying texture is ready for rendering.
+    pub fn is_ready(self, ctx: &crate::Context) -> bool {
+        ctx.registry
+            .textures
+            .get(self.texture_id as usize)
+            .and_then(|v| v.as_ref())
+            .map(|entry| entry.is_ready(ctx.registry.gpu_generation))
             .unwrap_or(false)
     }
-}
 
-impl Image {
+    pub fn is_render_target(self, ctx: &crate::Context) -> bool {
+        ctx.registry
+            .textures
+            .get(self.texture_id as usize)
+            .and_then(|v| v.as_ref())
+            .map(crate::graphics::texture::TextureEntry::is_render_target)
+            .unwrap_or(false)
+    }
+
     pub(crate) fn index(self) -> usize {
         self.id as usize
     }
@@ -124,30 +150,6 @@ impl std::hash::Hash for Image {
 }
 
 impl Image {
-    /// Errors
-    /// Returns an error if the data length doesn't match width * height * 4.
-    pub(crate) fn new_from_rgba8(
-        ctx: &mut crate::Context,
-        width: Pt,
-        height: Pt,
-        rgba: &[u8],
-    ) -> anyhow::Result<Self> {
-        let pixel_width = width.to_u32_clamped().max(1);
-        let pixel_height = height.to_u32_clamped().max(1);
-        let expected_len = (pixel_width as usize) * (pixel_height as usize) * 4;
-        if rgba.len() != expected_len {
-            anyhow::bail!(
-                "RGBA data length mismatch: expected {} ({}x{}x4), got {}",
-                expected_len,
-                pixel_width,
-                pixel_height,
-                rgba.len()
-            );
-        }
-        let image = ctx.register_image(pixel_width, pixel_height, width, height, rgba);
-        Ok(image)
-    }
-
     #[cfg(feature = "utils")]
     pub(crate) fn new_from_rgba8_with_pixels(
         ctx: &mut crate::Context,
@@ -157,22 +159,20 @@ impl Image {
         height: Pt,
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
-        let expected_len = (pixel_width as usize) * (pixel_height as usize) * 4;
-        if rgba.len() != expected_len {
-            anyhow::bail!(
-                "RGBA data length mismatch: expected {} ({}x{}x4), got {}",
-                expected_len,
+        Ok(
+            crate::Texture::new_from_rgba8_with_pixels(
+                ctx,
                 pixel_width,
                 pixel_height,
-                rgba.len()
-            );
-        }
-        let image = ctx.register_image(pixel_width, pixel_height, width, height, rgba);
-        Ok(image)
+                width,
+                height,
+                rgba,
+            )?
+            .view(),
+        )
     }
 
-    /// Arguments
-    /// * `image` - The source image to copy
+    /// Creates a full-view copy of an existing image.
     pub fn from_image(ctx: &mut crate::Context, image: Image) -> anyhow::Result<Self> {
         Self::sub_image(
             ctx,
@@ -187,23 +187,11 @@ impl Image {
     }
 
     /// Creates a sub-image from a region of an existing image.
-    ///
-    /// The sub-image shares the same GPU texture as the source image but renders
-    /// only the specified region.
-    ///
-    /// # Arguments
-    /// * `image` - The source image
-    /// * `bounds` - The region to extract
-    ///
-    /// # Errors
-    /// Returns an error if the bounds are out of range.
     pub fn sub_image(
         ctx: &mut crate::Context,
         image: Image,
         bounds: Bounds,
     ) -> anyhow::Result<Self> {
-        // Validation: Ensure sub-image bounds are within parent image bounds
-        // Note: We use a small epsilon for float comparisons if needed, but here direct bounds check is usually fine
         if bounds.x.0 < 0.0
             || bounds.y.0 < 0.0
             || bounds.x.0 + bounds.width.0 > image.width.0 + 0.001
@@ -223,8 +211,9 @@ impl Image {
         let id = ctx.register_sub_image(image, bounds)?;
         Ok(Self {
             id,
-            x: bounds.x,
-            y: bounds.y,
+            texture_id: image.texture_id,
+            x: image.x + bounds.x,
+            y: image.y + bounds.y,
             width: bounds.width,
             height: bounds.height,
             pixel_width: ((image.pixel_width as f32) * (bounds.width.0 / image.width.0))
@@ -236,69 +225,45 @@ impl Image {
         })
     }
 
-    /// Draws this image to the context with the specified options.
+    /// Draws a drawable into this image (as a target) with the specified options.
     ///
-    /// # Arguments
-    /// * `context` - The drawing context to add this image to
-    /// * `options` - Drawing options (position, rotation, scale)
-    ///
-    /// # Example
-    /// ```ignore
-    /// # use spottedcat::{Context, Image, DrawOption, Pt};
-    /// # let mut ctx = Context::new();
-    /// # let rgba = vec![255u8; 2 * 2 * 4];
-    /// # let image = Image::new(&mut ctx, Pt::from(2.0), Pt::from(2.0), &rgba).unwrap();
-    /// let mut opts = DrawOption::default();
-    /// opts = opts.with_position([spottedcat::Pt::from(100.0), spottedcat::Pt::from(100.0)]);
-    /// opts = opts.with_scale([2.0, 2.0]);
-    /// image.draw(&mut ctx, opts);
-    /// ```
-    pub fn draw(self, ctx: &mut crate::Context, options: crate::DrawOption) {
-        ctx.push(crate::drawable::DrawCommand::Image(Box::new(
-            crate::drawable::ImageCommand {
-                id: self.id,
-                opts: options,
-                shader_id: 0,
-                shader_opts: crate::ShaderOpts::default(),
-                size: [self.width, self.height],
-            },
-        )));
-    }
-
-    /// Draws this image with a custom image shader registered through the context.
-    pub fn draw_with_shader(
+    /// `options.position()` is interpreted relative to this target image's top-left corner.
+    /// To draw to the screen, use the `screen` image provided in `Spot::draw`.
+    pub fn draw<D: crate::Drawable>(
         self,
         ctx: &mut crate::Context,
+        drawable: D,
+        options: D::Options,
+    ) {
+        drawable.draw_to(ctx, self, options);
+    }
+
+    /// Draws a source image into this target with a custom image shader.
+    ///
+    /// `options.position()` is interpreted relative to this target's top-left corner.
+    pub fn draw_with_shader<S: Into<crate::Image>>(
+        self,
+        ctx: &mut crate::Context,
+        source: S,
         shader_id: u32,
         options: crate::DrawOption,
         shader_opts: crate::ShaderOpts,
     ) {
+        let source = source.into();
+        let target_texture_id = ctx.resolve_target_texture_id(self);
         ctx.push(crate::drawable::DrawCommand::Image(Box::new(
             crate::drawable::ImageCommand {
-                id: self.id,
+                id: source.id,
+                target_texture_id,
                 opts: options,
                 shader_id,
                 shader_opts,
-                size: [self.width, self.height],
+                size: [source.width, source.height],
             },
         )));
     }
 
-    #[allow(dead_code)]
-    pub fn clear(self, ctx: &mut crate::Context, color: [f32; 4]) -> anyhow::Result<()> {
-        ctx.push(crate::drawable::DrawCommand::ClearImage(self.id, color));
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn copy_from(self, ctx: &mut crate::Context, src: Image) -> anyhow::Result<()> {
-        ctx.push(crate::drawable::DrawCommand::CopyImage(self.id, src.id));
-        Ok(())
-    }
-
     /// Returns the source-texture bounds of this image.
-    ///
-    /// For sub-images, this represents the region relative to the parent atlas.
     pub fn bounds(self) -> anyhow::Result<Bounds> {
         Ok(Bounds {
             x: self.x,
@@ -308,9 +273,7 @@ impl Image {
         })
     }
 
-    /// Destroys the image and frees its GPU resources.
-    ///
-    /// Returns true if the image was successfully destroyed.
+    /// Destroys the image.
     pub fn destroy(self, ctx: &mut crate::Context) -> bool {
         ctx.registry
             .images
@@ -318,136 +281,39 @@ impl Image {
             .and_then(|v| v.take())
             .is_some()
     }
-
-    /// Returns the global screen-space bounds of this image when drawn.
-    ///
-    /// # Arguments
-    /// * `options` - The same DrawOption used when calling `draw()`
-    pub(crate) fn screen_bounds(self, options: crate::DrawOption) -> [Pt; 4] {
-        let pos = options.position();
-        let scale = options.scale();
-        let x = pos[0];
-        let y = pos[1];
-        let w = self.width * scale[0];
-        let h = self.height * scale[1];
-        [x, y, w, h]
-    }
-
-    pub fn with_clip_scope_draw<F, D>(
-        self,
-        ctx: &mut crate::Context,
-        options: crate::DrawOption,
-        draw: D,
-        f: F,
-    ) where
-        D: FnOnce(Self, &mut crate::Context, crate::DrawOption),
-        F: FnOnce(&mut crate::Context),
-    {
-        // First, draw the parent image to establish the clip region
-        draw(self, ctx, options);
-
-        // Then set up the clipping state for child elements
-        let parent_opts_abs = if let Some(info) = ctx.last_image_draw_info(self.id) {
-            info.opts
-        } else {
-            let state = ctx.current_draw_state();
-            options.apply_state(&state)
-        };
-
-        let parent_pos_abs = parent_opts_abs.position();
-        let parent_bounds = self.screen_bounds(parent_opts_abs);
-
-        // Get the current origin to calculate relative position
-        let current_origin = ctx.current_draw_state().position;
-        let parent_pos_relative = [
-            parent_pos_abs[0] - current_origin[0],
-            parent_pos_abs[1] - current_origin[1],
-        ];
-
-        let state = crate::DrawState {
-            position: parent_pos_relative,
-            clip: Some([
-                parent_bounds[0],
-                parent_bounds[1],
-                parent_bounds[2],
-                parent_bounds[3],
-            ]),
-            shader_id: ctx.current_draw_state().shader_id,
-            shader_opts: ctx.current_draw_state().shader_opts,
-            layer: 0,
-        };
-
-        ctx.push_state(state);
-        f(ctx);
-        ctx.pop_state();
-    }
-
-    pub fn with_clip_scope<F>(self, ctx: &mut crate::Context, options: crate::DrawOption, f: F)
-    where
-        F: FnOnce(&mut crate::Context),
-    {
-        self.with_clip_scope_draw(ctx, options, |img, ctx, opts| img.draw(ctx, opts), f);
-    }
-
-    pub fn with_shader_scope<F>(
-        self,
-        ctx: &mut crate::Context,
-        shader_id: u32,
-        shader_opts: crate::ShaderOpts,
-        f: F,
-    ) where
-        F: FnOnce(&mut crate::Context),
-    {
-        let state = crate::DrawState {
-            shader_id: Some(shader_id),
-            shader_opts: Some(shader_opts),
-            ..Default::default()
-        };
-        // We do NOT set position or clip here.
-        // position will be (0,0) so it won't shift children.
-        // clip is None, so push_state will retain the current clip.
-
-        ctx.push_state(state);
-        f(ctx);
-        ctx.pop_state();
-    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ImageEntry {
-    pub(crate) atlas_index: Option<u32>,
+    pub(crate) texture_id: u32,
     pub(crate) bounds: Bounds,
-    pub(crate) pixel_width: u32,
-    pub(crate) pixel_height: u32,
-    pub(crate) uv_rect: Option<[f32; 4]>, // [u, v, w, h]
     pub(crate) visible: bool,
-    pub(crate) raw_data: Option<Arc<[u8]>>,
-    pub(crate) parent_id: Option<u32>,
 }
 
 impl ImageEntry {
-    pub(crate) fn new(
-        atlas_index: Option<u32>,
-        bounds: Bounds,
-        pixel_width: u32,
-        pixel_height: u32,
-        uv_rect: Option<[f32; 4]>,
-        raw_data: Option<Arc<[u8]>>,
-        parent_id: Option<u32>,
-    ) -> Self {
+    pub(crate) fn new(texture_id: u32, bounds: Bounds) -> Self {
         Self {
-            atlas_index,
+            texture_id,
             bounds,
-            pixel_width,
-            pixel_height,
-            uv_rect,
             visible: true,
-            raw_data,
-            parent_id,
         }
     }
+}
 
-    pub(crate) fn is_ready(&self) -> bool {
-        self.atlas_index.is_some() && self.uv_rect.is_some()
+impl crate::Drawable for &Image {
+    type Options = crate::DrawOption;
+
+    fn draw_to(self, ctx: &mut crate::Context, target: crate::Image, options: Self::Options) {
+        let target_texture_id = ctx.resolve_target_texture_id(target);
+        ctx.push(crate::drawable::DrawCommand::Image(Box::new(
+            crate::drawable::ImageCommand {
+                id: self.id,
+                target_texture_id,
+                opts: options,
+                shader_id: 0,
+                shader_opts: crate::ShaderOpts::default(),
+                size: [self.width, self.height],
+            },
+        )));
     }
 }

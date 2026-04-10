@@ -5,7 +5,8 @@ use crate::graphics::model_raw::MaterialBindGroupKey;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
 
-use super::core::{AtlasSlot, Graphics};
+use super::core::Graphics;
+use super::image_ops::resolve_image_uv;
 use crate::model::SkinData;
 
 pub(super) struct Render3DConfig<'a> {
@@ -60,7 +61,7 @@ fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 fn resolve_material_texture<'a>(
     images: &[Option<ImageEntry>],
-    atlases: &'a [AtlasSlot],
+    textures: &'a [Option<crate::graphics::texture::TextureEntry>],
     img_id: Option<u32>,
     fallback_id: u32,
 ) -> Option<(u32, [f32; 4], &'a wgpu::TextureView)> {
@@ -68,19 +69,19 @@ fn resolve_material_texture<'a>(
         .filter(|&id| images.get(id as usize).and_then(|v| v.as_ref()).is_some())
         .unwrap_or(fallback_id);
     let entry = images.get(id as usize).and_then(|v| v.as_ref())?;
-    let atlas_index = entry.atlas_index?;
-    let view = &atlases.get(atlas_index as usize)?.texture.0.view;
-    let uv_rect = entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
-    Some((atlas_index, uv_rect, view))
+    let texture_entry = textures.get(entry.texture_id as usize).and_then(|v| v.as_ref())?;
+    let uv_rect = resolve_image_uv(entry, texture_entry);
+    let view = &texture_entry.runtime.gpu_texture.as_ref()?.0.view;
+    Some((entry.texture_id, uv_rect, view))
 }
 
 fn expect_default_material_texture<'a>(
     images: &[Option<ImageEntry>],
-    atlases: &'a [AtlasSlot],
+    textures: &'a [Option<crate::graphics::texture::TextureEntry>],
     image_id: u32,
     label: &str,
 ) -> MaterialTextureBinding<'a> {
-    resolve_material_texture(images, atlases, Some(image_id), image_id).unwrap_or_else(|| {
+    resolve_material_texture(images, textures, Some(image_id), image_id).unwrap_or_else(|| {
         panic!(
             "[spot][render] default {} texture {} is unavailable",
             label, image_id
@@ -90,27 +91,27 @@ fn expect_default_material_texture<'a>(
 
 fn resolve_material_textures<'a>(
     images: &[Option<ImageEntry>],
-    atlases: &'a [AtlasSlot],
+    textures: &'a [Option<crate::graphics::texture::TextureEntry>],
     part: &crate::model::ModelPart,
     white_image_id: u32,
     black_image_id: u32,
     normal_image_id: u32,
 ) -> MaterialTextureSet<'a> {
-    let white = expect_default_material_texture(images, atlases, white_image_id, "white");
-    let black = expect_default_material_texture(images, atlases, black_image_id, "black");
+    let white = expect_default_material_texture(images, textures, white_image_id, "white");
+    let black = expect_default_material_texture(images, textures, black_image_id, "black");
     let normal_default =
-        expect_default_material_texture(images, atlases, normal_image_id, "normal");
+        expect_default_material_texture(images, textures, normal_image_id, "normal");
 
-    let albedo = resolve_material_texture(images, atlases, part.material.albedo, white_image_id)
+    let albedo = resolve_material_texture(images, textures, part.material.albedo, white_image_id)
         .unwrap_or(white);
-    let pbr = resolve_material_texture(images, atlases, part.material.pbr, black_image_id)
+    let pbr = resolve_material_texture(images, textures, part.material.pbr, black_image_id)
         .unwrap_or(black);
-    let normal = resolve_material_texture(images, atlases, part.material.normal, normal_image_id)
+    let normal = resolve_material_texture(images, textures, part.material.normal, normal_image_id)
         .unwrap_or(normal_default);
-    let ao = resolve_material_texture(images, atlases, part.material.occlusion, white_image_id)
+    let ao = resolve_material_texture(images, textures, part.material.occlusion, white_image_id)
         .unwrap_or(white);
     let emissive =
-        resolve_material_texture(images, atlases, part.material.emissive, black_image_id)
+        resolve_material_texture(images, textures, part.material.emissive, black_image_id)
             .unwrap_or(black);
 
     (albedo, pbr, normal, ao, emissive)
@@ -118,7 +119,7 @@ fn resolve_material_textures<'a>(
 
 fn draw_command_3d_is_transparent(command: &DrawCommand3D) -> bool {
     match command {
-        DrawCommand3D::Model(_, opts, ..) | DrawCommand3D::ModelInstanced(_, opts, ..) => {
+        DrawCommand3D::Model(_, _, opts, ..) | DrawCommand3D::ModelInstanced(_, _, opts, ..) => {
             opts.opacity < 1.0
         }
     }
@@ -126,7 +127,7 @@ fn draw_command_3d_is_transparent(command: &DrawCommand3D) -> bool {
 
 fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
     match command {
-        DrawCommand3D::Model(model, _, shader_id, _, skin_id) => DrawCommand3DSortKey {
+        DrawCommand3D::Model(_, model, _, shader_id, _, skin_id) => DrawCommand3DSortKey {
             instanced: false,
             shader_id: *shader_id,
             skin_id: skin_id.unwrap_or(0),
@@ -157,7 +158,8 @@ fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
                 .and_then(|part| part.material.emissive)
                 .unwrap_or(0),
         },
-        DrawCommand3D::ModelInstanced(model, _, shader_id, _, skin_id, _) => DrawCommand3DSortKey {
+        DrawCommand3D::ModelInstanced(_, model, _, shader_id, _, skin_id, _) => {
+            DrawCommand3DSortKey {
             instanced: true,
             shader_id: *shader_id,
             skin_id: skin_id.unwrap_or(0),
@@ -187,12 +189,13 @@ fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
                 .first()
                 .and_then(|part| part.material.emissive)
                 .unwrap_or(0),
-        },
+            }
+        }
     }
 }
 
 impl Graphics {
-    pub(super) fn prepare_3d_command_order(&mut self, ctx: &Context) {
+    pub(super) fn prepare_3d_command_order(&mut self, ctx: &Context, target_texture_id: u32) {
         let model_3d = self.ensure_model_3d();
         model_3d.opaque_draw_indices_3d.clear();
         model_3d.transparent_draw_indices_3d.clear();
@@ -205,6 +208,14 @@ impl Graphics {
             .reserve(ctx.runtime.model_3d.draw_list.len());
 
         for (index, command) in ctx.runtime.model_3d.draw_list.iter().enumerate() {
+            let command_target = match command {
+                DrawCommand3D::Model(target, ..) | DrawCommand3D::ModelInstanced(target, ..) => {
+                    *target
+                }
+            };
+            if command_target != target_texture_id {
+                continue;
+            }
             if draw_command_3d_is_transparent(command) {
                 model_3d.transparent_draw_indices_3d.push(index);
             } else {
@@ -217,7 +228,13 @@ impl Graphics {
             .sort_by_key(|&index| draw_command_3d_sort_key(&ctx.runtime.model_3d.draw_list[index]));
     }
 
-    pub(super) fn render_shadow_pass(&mut self, ctx: &mut Context, width: u32, height: u32) {
+    pub(super) fn render_shadow_pass(
+        &mut self,
+        ctx: &mut Context,
+        width: u32,
+        height: u32,
+        target_texture_id: u32,
+    ) {
         self.ensure_model_3d();
         let mut shadow_encoder =
             self.device
@@ -243,7 +260,6 @@ impl Graphics {
 
             let queue = &self.queue;
             let device = &self.device;
-            let atlases = &self.atlases;
             let model_3d = self.model_3d.as_mut().expect("ensured");
             Self::render_3d_internal(
                 &mut model_3d.model_renderer,
@@ -253,7 +269,7 @@ impl Graphics {
                 &model_3d.gpu_models,
                 &model_3d.gpu_skins,
                 &ctx.registry.images,
-                atlases,
+                &ctx.registry.textures,
                 Render3DConfig {
                     model_pipeline: &model_3d.model_pipeline,
                     instanced_model_pipeline: &model_3d.instanced_model_pipeline,
@@ -273,6 +289,7 @@ impl Graphics {
                 &model_3d.opaque_draw_indices_3d,
                 &model_3d.transparent_draw_indices_3d,
                 true,
+                target_texture_id,
             );
         }
         self.queue.submit(std::iter::once(shadow_encoder.finish()));
@@ -284,10 +301,10 @@ impl Graphics {
         width: u32,
         height: u32,
         rpass: &mut wgpu::RenderPass<'a>,
+        target_texture_id: u32,
     ) {
         let queue = &self.queue;
         let device = &self.device;
-        let atlases = &self.atlases;
         let model_3d = self.model_3d.as_mut().expect("ensured");
         Self::render_3d_internal(
             &mut model_3d.model_renderer,
@@ -297,7 +314,7 @@ impl Graphics {
             &model_3d.gpu_models,
             &model_3d.gpu_skins,
             &ctx.registry.images,
-            atlases,
+            &ctx.registry.textures,
             Render3DConfig {
                 model_pipeline: &model_3d.model_pipeline,
                 instanced_model_pipeline: &model_3d.instanced_model_pipeline,
@@ -317,6 +334,7 @@ impl Graphics {
             &model_3d.opaque_draw_indices_3d,
             &model_3d.transparent_draw_indices_3d,
             false,
+            target_texture_id,
         );
     }
 
@@ -329,13 +347,14 @@ impl Graphics {
         models: &[Option<MeshData>],
         skins: &[Option<SkinData>],
         images: &[Option<ImageEntry>],
-        atlases: &[AtlasSlot],
+        textures: &[Option<crate::graphics::texture::TextureEntry>],
         config: Render3DConfig,
         rpass: &mut wgpu::RenderPass<'a>,
         ctx: &Context,
         opaque_draw_indices: &[usize],
         transparent_draw_indices: &[usize],
         is_shadow_pass: bool,
+        target_texture_id: u32,
     ) {
         let mut camera = ctx.runtime.model_3d.camera;
         camera.aspect = config.width as f32 / config.height as f32;
@@ -381,7 +400,17 @@ impl Graphics {
             .map(|&index| &ctx.runtime.model_3d.draw_list[index])
         {
             match command {
-                DrawCommand3D::Model(model, opts, shader_id, shader_opts, skin_id_cmd) => {
+                DrawCommand3D::Model(
+                    command_target_texture_id,
+                    model,
+                    opts,
+                    shader_id,
+                    shader_opts,
+                    skin_id_cmd,
+                ) => {
+                    if *command_target_texture_id != target_texture_id {
+                        continue;
+                    }
                     let model_mat = crate::math::mat4::from_translation(opts.position);
                     let rot_mat = crate::math::mat4::from_rotation(opts.rotation);
                     let scale_mat = crate::math::mat4::from_scale(opts.scale);
@@ -442,7 +471,7 @@ impl Graphics {
                             if !is_shadow_pass {
                                 let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
                                     images,
-                                    atlases,
+                                    textures,
                                     part,
                                     config.white_image_id,
                                     config.black_image_id,
@@ -501,11 +530,11 @@ impl Graphics {
                                             )
                                         });
                                     let material_key = MaterialBindGroupKey {
-                                        atlas_indices: [
+                                        texture_source_ids: [
                                             albedo.0, pbr.0, normal.0, ao.0, emissive.0,
                                         ],
                                     };
-                                    let tex_bg = model_renderer.texture_bind_group_for_atlases(
+                                    let tex_bg = model_renderer.texture_bind_group_for_materials(
                                         device,
                                         material_key,
                                         [albedo.2, pbr.2, normal.2, ao.2, emissive.2],
@@ -535,6 +564,7 @@ impl Graphics {
                     }
                 }
                 DrawCommand3D::ModelInstanced(
+                    command_target_texture_id,
                     model,
                     opts,
                     shader_id,
@@ -542,6 +572,9 @@ impl Graphics {
                     skin_id_cmd,
                     transforms,
                 ) => {
+                    if *command_target_texture_id != target_texture_id {
+                        continue;
+                    }
                     let model_mat = crate::math::mat4::from_translation(opts.position);
                     let rot_mat = crate::math::mat4::from_rotation(opts.rotation);
                     let scale_mat = crate::math::mat4::from_scale(opts.scale);
@@ -607,7 +640,7 @@ impl Graphics {
                             if !is_shadow_pass {
                                 let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
                                     images,
-                                    atlases,
+                                    textures,
                                     part,
                                     config.white_image_id,
                                     config.black_image_id,
@@ -670,11 +703,11 @@ impl Graphics {
                                             )
                                         });
                                     let material_key = MaterialBindGroupKey {
-                                        atlas_indices: [
+                                        texture_source_ids: [
                                             albedo.0, pbr.0, normal.0, ao.0, emissive.0,
                                         ],
                                     };
-                                    let tex_bg = model_renderer.texture_bind_group_for_atlases(
+                                    let tex_bg = model_renderer.texture_bind_group_for_materials(
                                         device,
                                         material_key,
                                         [albedo.2, pbr.2, normal.2, ao.2, emissive.2],

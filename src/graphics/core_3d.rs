@@ -5,7 +5,8 @@ use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
 use crate::model::{Bone, SkinData, Vertex};
 
-use super::core::{AtlasSlot, Graphics};
+use super::core::Graphics;
+use super::image_ops::resolve_image_uv;
 
 type MaterialTextureBinding<'a> = (u32, [f32; 4], &'a wgpu::TextureView);
 type MaterialTextureSet<'a> = (
@@ -18,7 +19,7 @@ type MaterialTextureSet<'a> = (
 
 fn resolve_material_texture<'a>(
     images: &[Option<ImageEntry>],
-    atlases: &'a [AtlasSlot],
+    textures: &'a [Option<crate::graphics::texture::TextureEntry>],
     img_id: Option<u32>,
     fallback_id: u32,
 ) -> Option<MaterialTextureBinding<'a>> {
@@ -26,19 +27,19 @@ fn resolve_material_texture<'a>(
         .filter(|&id| images.get(id as usize).and_then(|v| v.as_ref()).is_some())
         .unwrap_or(fallback_id);
     let entry = images.get(id as usize).and_then(|v| v.as_ref())?;
-    let atlas_index = entry.atlas_index?;
-    let view = &atlases.get(atlas_index as usize)?.texture.0.view;
-    let uv_rect = entry.uv_rect.unwrap_or([0.0, 0.0, 1.0, 1.0]);
-    Some((atlas_index, uv_rect, view))
+    let texture_entry = textures.get(entry.texture_id as usize).and_then(|v| v.as_ref())?;
+    let uv_rect = resolve_image_uv(entry, texture_entry);
+    let view = &texture_entry.runtime.gpu_texture.as_ref()?.0.view;
+    Some((entry.texture_id, uv_rect, view))
 }
 
 fn expect_default_material_texture<'a>(
     images: &[Option<ImageEntry>],
-    atlases: &'a [AtlasSlot],
+    textures: &'a [Option<crate::graphics::texture::TextureEntry>],
     image_id: u32,
     label: &str,
 ) -> MaterialTextureBinding<'a> {
-    resolve_material_texture(images, atlases, Some(image_id), image_id).unwrap_or_else(|| {
+    resolve_material_texture(images, textures, Some(image_id), image_id).unwrap_or_else(|| {
         panic!(
             "[spot][graphics] default {} texture {} is unavailable during prewarm",
             label, image_id
@@ -48,27 +49,27 @@ fn expect_default_material_texture<'a>(
 
 fn resolve_material_textures<'a>(
     images: &[Option<ImageEntry>],
-    atlases: &'a [AtlasSlot],
+    textures: &'a [Option<crate::graphics::texture::TextureEntry>],
     part: &crate::model::ModelPart,
     white_image_id: u32,
     black_image_id: u32,
     normal_image_id: u32,
 ) -> MaterialTextureSet<'a> {
-    let white = expect_default_material_texture(images, atlases, white_image_id, "white");
-    let black = expect_default_material_texture(images, atlases, black_image_id, "black");
+    let white = expect_default_material_texture(images, textures, white_image_id, "white");
+    let black = expect_default_material_texture(images, textures, black_image_id, "black");
     let normal_default =
-        expect_default_material_texture(images, atlases, normal_image_id, "normal");
+        expect_default_material_texture(images, textures, normal_image_id, "normal");
 
-    let albedo = resolve_material_texture(images, atlases, part.material.albedo, white_image_id)
+    let albedo = resolve_material_texture(images, textures, part.material.albedo, white_image_id)
         .unwrap_or(white);
-    let pbr = resolve_material_texture(images, atlases, part.material.pbr, black_image_id)
+    let pbr = resolve_material_texture(images, textures, part.material.pbr, black_image_id)
         .unwrap_or(black);
-    let normal = resolve_material_texture(images, atlases, part.material.normal, normal_image_id)
+    let normal = resolve_material_texture(images, textures, part.material.normal, normal_image_id)
         .unwrap_or(normal_default);
-    let ao = resolve_material_texture(images, atlases, part.material.occlusion, white_image_id)
+    let ao = resolve_material_texture(images, textures, part.material.occlusion, white_image_id)
         .unwrap_or(white);
     let emissive =
-        resolve_material_texture(images, atlases, part.material.emissive, black_image_id)
+        resolve_material_texture(images, textures, part.material.emissive, black_image_id)
             .unwrap_or(black);
 
     (albedo, pbr, normal, ao, emissive)
@@ -729,27 +730,25 @@ impl Graphics {
             self.ensure_model_3d();
             for command in &ctx.runtime.model_3d.draw_list {
                 let model = match command {
-                    DrawCommand3D::Model(model, ..) | DrawCommand3D::ModelInstanced(model, ..) => {
-                        model
-                    }
+                    DrawCommand3D::Model(_, model, ..)
+                    | DrawCommand3D::ModelInstanced(_, model, ..) => model,
                 };
 
                 for part in model.parts.iter() {
                     let device = &self.device;
-                    let atlases = &self.atlases;
                     let model_3d = self.model_3d.as_mut().expect("ensured above");
                     let (albedo, pbr, normal, ao, emissive) = resolve_material_textures(
                         &ctx.registry.images,
-                        atlases,
+                        &ctx.registry.textures,
                         part,
                         model_3d.white_image_id,
                         model_3d.black_image_id,
                         model_3d.normal_image_id,
                     );
                     let material_key = crate::graphics::model_raw::MaterialBindGroupKey {
-                        atlas_indices: [albedo.0, pbr.0, normal.0, ao.0, emissive.0],
+                        texture_source_ids: [albedo.0, pbr.0, normal.0, ao.0, emissive.0],
                     };
-                    let _ = model_3d.model_renderer.texture_bind_group_for_atlases(
+                    let _ = model_3d.model_renderer.texture_bind_group_for_materials(
                         device,
                         material_key,
                         [albedo.2, pbr.2, normal.2, ao.2, emissive.2],

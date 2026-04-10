@@ -29,11 +29,11 @@ fn main() {
             Self { texts }
         }
 
-        fn draw(&mut self, ctx: &mut Context) {
+        fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
             for (i, text) in self.texts.iter().enumerate() {
                 let opts = DrawOption::default()
                     .with_position([Pt::from(50.0), Pt::from(50.0 + i as f32 * 40.0)]);
-                spottedcat::text::draw(ctx, text, opts);
+                screen.draw(ctx, text, opts);
             }
         }
 

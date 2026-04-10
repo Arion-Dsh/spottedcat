@@ -2920,6 +2920,7 @@ name = "wasm_demo"
 version = "0.5.2"
 dependencies = [
  "console_error_panic_hook",
+ "image",
  "spottedcat",
  "wasm-bindgen",
  "web-sys",

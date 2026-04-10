@@ -34,12 +34,13 @@ impl Spot for AsyncLoadingExample {
         }
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         // Draw Image 1
         if let Some(img) = self.image1 {
             if img.is_ready(ctx) {
-                img.draw(
+                screen.draw(
                     ctx,
+                    &img,
                     DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]),
                 );
             } else {
@@ -51,8 +52,9 @@ impl Spot for AsyncLoadingExample {
         // Draw Image 2
         if let Some(img) = self.image2 {
             if img.is_ready(ctx) {
-                img.draw(
+                screen.draw(
                     ctx,
+                    &img,
                     DrawOption::default().with_position([Pt::from(200.0), Pt::from(50.0)]),
                 );
             } else {

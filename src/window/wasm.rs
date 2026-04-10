@@ -1,5 +1,5 @@
 use super::App;
-use crate::{Pt, platform};
+use crate::platform;
 use wasm_bindgen::JsCast;
 
 // PlatformData is now defined in desktop.rs to share winit ApplicationHandler logic.

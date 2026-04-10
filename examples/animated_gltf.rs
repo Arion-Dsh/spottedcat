@@ -106,9 +106,10 @@ impl Spot for AnimatedGltfApp {
         self.actor.update(ctx, dt_sec);
     }
 
-    fn draw(&mut self, ctx: &mut Context) {
-        self.actor.draw(
+    fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
+        screen.draw(
             ctx,
+            &self.actor,
             DrawOption3D::default()
                 .with_position([0.0, 0.0, 0.0])
                 .with_rotation([0.0, self.yaw, 0.0])

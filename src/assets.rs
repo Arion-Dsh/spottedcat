@@ -25,10 +25,10 @@ pub fn unregister_font(ctx: &mut Context, font_id: u32) {
     }
 }
 
-/// Forces pending asset compression work to run immediately.
-pub fn compress_assets(ctx: &mut Context) {
+/// Forces pending asset rebuild/re-upload to GPU to run immediately.
+pub fn rebuild_assets(ctx: &mut Context) {
     if let Some(mut g) = ctx.runtime.graphics.take() {
-        let _ = g.compress_assets(ctx);
+        let _ = g.rebuild_textures(ctx);
         ctx.runtime.graphics = Some(g);
     }
 }
