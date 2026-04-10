@@ -399,6 +399,7 @@ pub(crate) struct TextureEntry {
     pub(crate) pixel_height: u32,
     pub(crate) default_view_id: u32,
     pub(crate) render_target: bool,
+    pub(crate) dynamic_atlas: bool,
     pub(crate) raw_data: Option<Arc<[u8]>>,
     pub(crate) runtime: TextureRuntimeData,
 }
@@ -434,6 +435,32 @@ impl TextureEntry {
             pixel_height,
             default_view_id,
             render_target: false,
+            dynamic_atlas: false,
+            raw_data: Some(raw_data),
+            runtime: TextureRuntimeData {
+                gpu_texture: None,
+                bind_group: None,
+                generation: 0,
+            },
+        }
+    }
+
+    pub(crate) fn new_dynamic_atlas(
+        width: Pt,
+        height: Pt,
+        pixel_width: u32,
+        pixel_height: u32,
+        default_view_id: u32,
+        raw_data: Arc<[u8]>,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            pixel_width,
+            pixel_height,
+            default_view_id,
+            render_target: false,
+            dynamic_atlas: true,
             raw_data: Some(raw_data),
             runtime: TextureRuntimeData {
                 gpu_texture: None,
@@ -457,6 +484,7 @@ impl TextureEntry {
             pixel_height,
             default_view_id,
             render_target: true,
+            dynamic_atlas: false,
             raw_data: None,
             runtime: TextureRuntimeData {
                 gpu_texture: None,

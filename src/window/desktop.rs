@@ -288,6 +288,10 @@ impl App {
             return;
         };
 
+        // Update interpolation alpha for this render frame
+        let alpha = self.timing.alpha();
+        self.ctx.set_draw_alpha(alpha);
+
         self.ctx.begin_frame();
         let screen = super::make_screen_target(&self.ctx);
         if let Some(spot) = self.scene.spot_mut() {
@@ -443,13 +447,12 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.apply_pending_window_requests();
-
         if take_quit_request() {
             event_loop.exit();
             return;
         }
 
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        // Run logic updates with fixed timestep (capped at 8 updates to prevent spiral of death)
         self.timing.run_updates(8, |dt| {
             #[cfg(all(target_os = "ios", feature = "sensors"))]
             if let Some(state) = self.platform.sensor_state.as_ref() {
@@ -463,28 +466,11 @@ impl ApplicationHandler for App {
             self.ctx.input_mut().end_frame();
         });
 
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        // Always request a redraw to allow dynamic rendering (following screen refresh rate)
         self.request_redraw();
 
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let updates = self.timing.run_updates(8, |dt| {
-            #[cfg(all(target_os = "ios", feature = "sensors"))]
-            if let Some(state) = self.platform.sensor_state.as_ref() {
-                state.poll(&mut self.ctx.input_mut());
-            }
-
-            self.ctx.set_delta_time(dt);
-            if let Some(spot) = self.scene.spot_mut() {
-                spot.update(&mut self.ctx, dt);
-            }
-            self.ctx.input_mut().end_frame();
-        });
-
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        if updates > 0 {
-            self.request_redraw();
-        }
-        event_loop.set_control_flow(ControlFlow::WaitUntil(self.timing.next_deadline()));
+        // Use Poll to ensure we can redraw as fast as V-Sync/OS allows
+        event_loop.set_control_flow(ControlFlow::Poll);
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {

@@ -35,6 +35,7 @@ pub(crate) struct ContextRuntime {
     pub(crate) audio: Option<AudioSystem>,
     pub(crate) delta_time: std::time::Duration,
     pub(crate) total_elapsed: std::time::Duration,
+    pub(crate) draw_alpha: f32,
     pub(crate) pending_window_title: Option<String>,
     pub(crate) pending_cursor_visible: Option<bool>,
     pub(crate) pending_fullscreen: Option<bool>,
@@ -53,6 +54,7 @@ impl ContextRuntime {
             audio: None,
             delta_time: std::time::Duration::from_secs(0),
             total_elapsed: std::time::Duration::from_secs(0),
+            draw_alpha: 0.0,
             pending_window_title: None,
             pending_cursor_visible: None,
             pending_fullscreen: None,
@@ -123,6 +125,10 @@ impl Context {
         self.runtime.total_elapsed = self.runtime.total_elapsed.saturating_add(dt);
     }
 
+    pub(crate) fn set_draw_alpha(&mut self, alpha: f32) {
+        self.runtime.draw_alpha = alpha;
+    }
+
     /// Returns the time elapsed since the last frame.
     pub(crate) fn delta_time(&self) -> std::time::Duration {
         self.runtime.delta_time
@@ -131,6 +137,12 @@ impl Context {
     /// Returns the total time elapsed since the engine started.
     pub(crate) fn total_elapsed(&self) -> std::time::Duration {
         self.runtime.total_elapsed
+    }
+
+    /// Returns the interpolation factor (0.0 to 1.0) between the previous and current logic update.
+    /// This is useful for smooth rendering at frame rates higher than the update rate.
+    pub fn draw_interpolation(&self) -> f32 {
+        self.runtime.draw_alpha
     }
 
     pub(crate) fn with_audio<R>(&mut self, f: impl FnOnce(&mut AudioSystem) -> R) -> Option<R> {

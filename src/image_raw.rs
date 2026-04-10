@@ -29,11 +29,13 @@ impl Default for ImageTransform {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable, Default)]
 pub struct InstanceData {
     pub pos: [f32; 2],
     pub rotation: f32,
+    pub _pad1: f32,
     pub size: [f32; 2],
+    pub _pad2: [f32; 2],
     pub uv_rect: [f32; 4],
 }
 
@@ -50,11 +52,27 @@ pub struct EngineGlobals {
 }
 
 impl InstanceData {
-    const ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-        0 => Float32x2, // pos
-        1 => Float32,   // rotation
-        2 => Float32x2, // size
-        3 => Float32x4, // uv_rect
+    const ATTRS: [wgpu::VertexAttribute; 4] = [
+        wgpu::VertexAttribute {
+            offset: 0,
+            shader_location: 0,
+            format: wgpu::VertexFormat::Float32x2,
+        },
+        wgpu::VertexAttribute {
+            offset: 8,
+            shader_location: 1,
+            format: wgpu::VertexFormat::Float32,
+        },
+        wgpu::VertexAttribute {
+            offset: 16,
+            shader_location: 2,
+            format: wgpu::VertexFormat::Float32x2,
+        },
+        wgpu::VertexAttribute {
+            offset: 32,
+            shader_location: 3,
+            format: wgpu::VertexFormat::Float32x4,
+        },
     ];
 
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {

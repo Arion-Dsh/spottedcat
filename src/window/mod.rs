@@ -93,6 +93,10 @@ impl FixedTimestep {
             None => now,
         }
     }
+
+    pub(crate) fn alpha(&self) -> f32 {
+        (self.lag.as_secs_f64() / self.step.as_secs_f64()).min(1.0) as f32
+    }
 }
 
 pub(crate) struct SceneHost {

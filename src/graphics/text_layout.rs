@@ -152,6 +152,7 @@ impl Graphics {
                         rotation: 0.0,
                         size: [w, h],
                         uv_rect: resolve_image_uv(img_entry, texture_entry),
+                        ..Default::default()
                     },
                     image_id: img_id,
                 });

@@ -45,6 +45,15 @@ impl Graphics {
                     usage,
                     1,
                 )
+            } else if entry.dynamic_atlas {
+                GpuTexture::create_empty_with_usage_and_mips(
+                    &self.device,
+                    entry.pixel_width,
+                    entry.pixel_height,
+                    self.config.format,
+                    usage,
+                    1,
+                )
             } else {
                 GpuTexture::create_empty_with_usage(
                     &self.device,
@@ -93,7 +102,9 @@ impl Graphics {
                     },
                 );
 
-                texture.generate_mipmaps(&self.device, &self.queue);
+                if !entry.dynamic_atlas {
+                    texture.generate_mipmaps(&self.device, &self.queue);
+                }
             }
 
             let bind_group = self

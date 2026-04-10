@@ -16,6 +16,7 @@ struct Node {
 
 impl Node {
     fn insert_node(&mut self, rect_w: i32, rect_h: i32) -> Option<(i32, i32)> {
+        // If we are already split, recurse into children
         if self.split {
             if let Some(left) = self.left.as_mut() {
                 if let Some(pos) = left.insert_node(rect_w, rect_h) {
@@ -28,90 +29,59 @@ impl Node {
             return None;
         }
 
+        // If this node is used or too small, fail
         if self.is_end || self.w < rect_w || self.h < rect_h {
             return None;
         }
 
-        self.split = true;
-
+        // If perfect fit, use it
         if self.w == rect_w && self.h == rect_h {
             self.is_end = true;
             return Some((self.x, self.y));
         }
 
+        // Otherwise split this node
+        self.split = true;
+
         let dw = self.w - rect_w;
         let dh = self.h - rect_h;
 
-        let mut left_node;
-        let down_node;
-        let right_node;
-
         if dw > dh {
-            left_node = Node {
-                x: self.x,
-                y: self.y,
-                w: self.w,
-                h: self.h - rect_h,
-                split: true,
-                ..Default::default()
-            };
-            down_node = Node {
-                x: self.x,
-                y: self.y + rect_h,
-                w: self.w - rect_w,
-                h: self.h - rect_h,
-                ..Default::default()
-            };
-            right_node = Node {
-                x: self.x + rect_w,
-                y: self.y,
-                w: self.w - rect_w,
-                h: self.h,
-                ..Default::default()
-            };
-        } else {
-            left_node = Node {
+            // Split horizontally (left and right columns)
+            self.left = Some(Box::new(Node {
                 x: self.x,
                 y: self.y,
                 w: rect_w,
                 h: self.h,
-                split: true,
                 ..Default::default()
-            };
-            down_node = Node {
+            }));
+            self.right = Some(Box::new(Node {
+                x: self.x + rect_w,
+                y: self.y,
+                w: dw,
+                h: self.h,
+                ..Default::default()
+            }));
+        } else {
+            // Split vertically (top and bottom rows)
+            self.left = Some(Box::new(Node {
+                x: self.x,
+                y: self.y,
+                w: self.w,
+                h: rect_h,
+                ..Default::default()
+            }));
+            self.right = Some(Box::new(Node {
                 x: self.x,
                 y: self.y + rect_h,
                 w: self.w,
-                h: self.h - rect_h,
+                h: dh,
                 ..Default::default()
-            };
-            right_node = Node {
-                x: self.x + rect_w,
-                y: self.y,
-                w: self.w - rect_w,
-                h: rect_h,
-                ..Default::default()
-            };
+            }));
         }
 
-        let rect_x = right_node.x - rect_w;
-        let rect_y = down_node.y - rect_h;
-
-        let mut final_rect = Node {
-            x: rect_x,
-            y: rect_y,
-            w: rect_w,
-            h: rect_h,
-            is_end: true,
-            ..Default::default()
-        };
-
-        left_node.left = Some(Box::new(std::mem::take(&mut final_rect)));
-        left_node.right = Some(Box::new(down_node));
-        self.left = Some(Box::new(left_node));
-        self.right = Some(Box::new(right_node));
-
-        Some((rect_x, rect_y))
+        // Always put the item into the newly created left node
+        self.left.as_mut().unwrap().insert_node(rect_w, rect_h)
     }
 }
 
@@ -169,7 +139,7 @@ impl DynamicAtlas {
         h_px: u32,
         rgba: &[u8],
     ) -> anyhow::Result<Image> {
-        let padding = 1;
+        let padding = 2;
         let total_w = w_px + padding;
         let total_h = h_px + padding;
 
@@ -177,11 +147,13 @@ impl DynamicAtlas {
             anyhow::bail!("Region too large for atlas: {}x{}", w_px, h_px);
         }
 
-        // Try current page
-        if let Some(page_idx) = self.find_page_for_region(total_w, total_h) {
+        // Try to fit in existing pages
+        for page_idx in 0..self.pages.len() {
             let page = &mut self.pages[page_idx];
-            if let Some((x, y)) = page.packer.insert(total_w as i32, total_h as i32) {
-                return self.write_to_page(registry, scale_factor, page_idx, x as u32, y as u32, logical_w, logical_h, w_px, h_px, rgba);
+            if page.pixel_width >= total_w && page.pixel_height >= total_h {
+                if let Some((x, y)) = page.packer.insert(total_w as i32, total_h as i32) {
+                    return self.write_to_page(registry, scale_factor, page_idx, x as u32, y as u32, logical_w, logical_h, w_px, h_px, rgba);
+                }
             }
         }
 
@@ -196,15 +168,6 @@ impl DynamicAtlas {
         } else {
             anyhow::bail!("Failed to insert region into new atlas page");
         }
-    }
-
-    fn find_page_for_region(&self, w: u32, h: u32) -> Option<usize> {
-        for (i, page) in self.pages.iter().enumerate() {
-            if page.pixel_width >= w && page.pixel_height >= h {
-                return Some(i);
-            }
-        }
-        None
     }
 
     fn create_page(
@@ -228,7 +191,7 @@ impl DynamicAtlas {
         while registry.textures.len() <= texture_id as usize {
             registry.textures.push(None);
         }
-        registry.textures[texture_id as usize] = Some(crate::graphics::texture::TextureEntry::new_sampled(
+        registry.textures[texture_id as usize] = Some(crate::graphics::texture::TextureEntry::new_dynamic_atlas(
             logical_w,
             logical_h,
             w_px,
@@ -289,6 +252,7 @@ impl DynamicAtlas {
         // Update the texture data in Registry
         if let Some(entry) = registry.textures.get_mut(page.texture_id as usize).and_then(|v| v.as_mut()) {
             entry.raw_data = Some(Arc::from(page.buffer.as_slice()));
+            entry.runtime.generation = 0; // Force re-upload
             registry.dirty_assets = true;
         }
 

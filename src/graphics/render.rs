@@ -211,6 +211,7 @@ impl Graphics {
                     resolved.bounds.height.as_f32() * opts.scale()[1],
                 ],
                 uv_rect: resolved.uv_rect,
+                ..Default::default()
             });
         }
 

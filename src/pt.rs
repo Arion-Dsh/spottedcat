@@ -57,7 +57,6 @@ impl Pt {
     pub(crate) fn from_physical_px(px: f64, scale_factor: f64) -> Self {
         let v = px / scale_factor;
         let v = if v.is_finite() { v } else { 0.0 };
-        let v = v.round();
         Pt(v as f32)
     }
 
