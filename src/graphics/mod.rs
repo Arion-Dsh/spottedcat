@@ -6,6 +6,7 @@
 pub(crate) mod core;
 #[cfg(feature = "model-3d")]
 pub(crate) mod core_3d;
+pub(crate) mod atlas;
 pub(crate) mod font;
 pub(crate) mod image_ops;
 #[cfg(feature = "model-3d")]

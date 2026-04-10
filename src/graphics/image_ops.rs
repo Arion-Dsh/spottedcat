@@ -133,13 +133,13 @@ pub(crate) fn resolve_image_uv(
     image_entry: &crate::image::ImageEntry,
     texture_entry: &crate::graphics::texture::TextureEntry,
 ) -> [f32; 4] {
-    let full_w = texture_entry.width.as_f32().max(1.0);
-    let full_h = texture_entry.height.as_f32().max(1.0);
+    let full_w = texture_entry.pixel_width as f32;
+    let full_h = texture_entry.pixel_height as f32;
     [
-        image_entry.bounds.x.as_f32() / full_w,
-        image_entry.bounds.y.as_f32() / full_h,
-        image_entry.bounds.width.as_f32() / full_w,
-        image_entry.bounds.height.as_f32() / full_h,
+        image_entry.pixel_bounds.x as f32 / full_w,
+        image_entry.pixel_bounds.y as f32 / full_h,
+        image_entry.pixel_bounds.width as f32 / full_w,
+        image_entry.pixel_bounds.height as f32 / full_h,
     ]
 }
 

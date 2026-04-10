@@ -1,10 +1,10 @@
 //! Font registration and glyph rendering.
 
 use crate::glyph_cache::GlyphEntry;
-use crate::pt::Pt;
 use ab_glyph::FontArc;
 
 use super::core::Graphics;
+use crate::Pt;
 
 // Font management is now handled by the Context for persistence.
 // Graphics only caches the parsed FontArc for performance.
@@ -68,13 +68,14 @@ impl Graphics {
             }
         });
 
-        let image = ctx.register_image(
-            glyph_width,
-            glyph_height,
-            Pt::from(glyph_width as f32),
-            Pt::from(glyph_height as f32),
-            &rgba_data,
-        );
+        let scale_factor = ctx.scale_factor();
+        let logical_w = Pt::from_physical_px(glyph_width as f64, scale_factor);
+        let logical_h = Pt::from_physical_px(glyph_height as f64, scale_factor);
+        let image = self
+            .font_atlas
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Font atlas not initialized"))?
+            .add_region(&mut ctx.registry, scale_factor, logical_w, logical_h, glyph_width, glyph_height, &rgba_data)?;
 
         Ok(GlyphEntry {
             image,

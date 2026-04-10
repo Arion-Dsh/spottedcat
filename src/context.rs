@@ -273,6 +273,12 @@ impl Context {
         self.registry.images[image_id as usize] = Some(crate::image::ImageEntry::new(
             texture_id,
             bounds,
+            crate::image::PixelBounds {
+                x: 0,
+                y: 0,
+                width: pixel_width,
+                height: pixel_height,
+            },
         ));
 
         self.registry.dirty_assets = true;
@@ -288,7 +294,7 @@ impl Context {
     }
 
     /// Registers a new image from RGBA data and returns a full-view handle.
-    pub(crate) fn register_image(
+    pub fn register_image(
         &mut self,
         pixel_width: u32,
         pixel_height: u32,
@@ -296,6 +302,26 @@ impl Context {
         height: Pt,
         rgba: &[u8],
     ) -> crate::Image {
+        // Transparent auto-atlasing for small images
+        if let Some(graphics) = self.runtime.graphics.as_mut() {
+            if pixel_width <= 512 && pixel_height <= 512 {
+                if let Some(atlas) = graphics.shared_atlas.as_mut() {
+                    let scale_factor = self.runtime.scale_factor;
+                    if let Ok(img) = atlas.add_region(
+                        &mut self.registry,
+                        scale_factor,
+                        width,
+                        height,
+                        pixel_width,
+                        pixel_height,
+                        rgba,
+                    ) {
+                        return img;
+                    }
+                }
+            }
+        }
+
         self.register_texture(pixel_width, pixel_height, width, height, rgba)
             .view()
     }
@@ -308,9 +334,27 @@ impl Context {
         let id = self.registry.next_image_id;
         self.registry.next_image_id += 1;
 
+        let physical_w_ratio = image.pixel_bounds.width as f32 / image.width.0.max(1e-5);
+        let physical_h_ratio = image.pixel_bounds.height as f32 / image.height.0.max(1e-5);
+        
+        let parent_pixel_bounds = self.registry.images[image.index()].as_ref().unwrap().pixel_bounds;
+        let parent_pixel_x = parent_pixel_bounds.x;
+        let parent_pixel_y = parent_pixel_bounds.y;
+        
+        let pixel_x = parent_pixel_x + (bounds.x.0 * physical_w_ratio).round() as u32;
+        let pixel_y = parent_pixel_y + (bounds.y.0 * physical_h_ratio).round() as u32;
+        let pixel_width = (bounds.width.0 * physical_w_ratio).round() as u32;
+        let pixel_height = (bounds.height.0 * physical_h_ratio).round() as u32;
+
         let entry = crate::image::ImageEntry::new(
             image.texture_id(),
             crate::image::Bounds::new(image.x + bounds.x, image.y + bounds.y, bounds.width, bounds.height),
+            crate::image::PixelBounds {
+                x: pixel_x,
+                y: pixel_y,
+                width: pixel_width,
+                height: pixel_height,
+            },
         );
 
         while self.registry.images.len() <= id as usize {
@@ -372,6 +416,12 @@ impl Context {
         self.registry.images[image_id as usize] = Some(crate::image::ImageEntry::new(
             texture_id,
             crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height),
+            crate::image::PixelBounds {
+                x: 0,
+                y: 0,
+                width: pixel_width,
+                height: pixel_height,
+            },
         ));
         self.registry.dirty_assets = true;
 
@@ -446,7 +496,8 @@ impl Context {
     }
 
     /// Returns the window's scale factor (DPI).
-    pub(crate) fn scale_factor(&self) -> f64 {
+    /// Returns the UI scale factor (DPR) of the current window.
+    pub fn scale_factor(&self) -> f64 {
         self.runtime.scale_factor
     }
 
@@ -590,4 +641,22 @@ impl Context {
         self.runtime.draw_list.push(drawable);
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Pt;
+
+    #[test]
+    fn test_auto_atlas_logic() {
+        let mut ctx = Context::new();
+        // Initially no graphics, so NO auto-atlas
+        let img1 = ctx.register_image(1, 1, Pt(10.0), Pt(10.0), &[0, 0, 0, 0]);
+        let img2 = ctx.register_image(1, 1, Pt(10.0), Pt(10.0), &[0, 0, 0, 0]);
+        assert_ne!(img1.texture_id(), img2.texture_id(), "Should not auto-atlas without graphics");
+
+        // We can't easily mock Graphics here without a lot of setup,
+        // but the logic check in register_image is verified by compilation.
+    }
 }

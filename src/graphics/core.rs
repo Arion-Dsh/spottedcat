@@ -46,6 +46,8 @@ pub(crate) struct Graphics {
     #[cfg_attr(not(feature = "model-3d"), allow(dead_code))]
     pub(crate) model_3d: GraphicsModel3dState,
     pub(crate) transparent: bool,
+    pub(crate) font_atlas: Option<super::atlas::DynamicAtlas>,
+    pub(crate) shared_atlas: Option<super::atlas::DynamicAtlas>,
 }
 
 impl std::fmt::Debug for Graphics {
@@ -105,6 +107,7 @@ impl Graphics {
         );
 
         let adapter_limits = adapter.limits();
+        let max_texture_dimension_2d = adapter_limits.max_texture_dimension_2d;
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
@@ -212,6 +215,8 @@ impl Graphics {
             gpu_generation: 0, // This will be set by the platform/app
             model_3d: GraphicsModel3dState::default(),
             transparent,
+            font_atlas: Some(super::atlas::DynamicAtlas::new(max_texture_dimension_2d)),
+            shared_atlas: Some(super::atlas::DynamicAtlas::new(max_texture_dimension_2d)),
         };
 
         // Default resources will be registered via the Context in App initialization
@@ -282,6 +287,12 @@ impl Graphics {
         // Reset transient caches
         self.font_cache.clear();
         self.glyph_cache.clear();
+        if let Some(atlas) = self.font_atlas.as_mut() {
+            atlas.pages.clear();
+        }
+        if let Some(atlas) = self.shared_atlas.as_mut() {
+            atlas.pages.clear();
+        }
 
         // 1. Restore Shaders
         self.image_pipelines.clear();

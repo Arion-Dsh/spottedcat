@@ -208,8 +208,12 @@ pub(crate) fn make_screen_target(ctx: &Context) -> crate::Image {
         y: crate::Pt(0.0),
         width,
         height,
-        pixel_width: width.to_u32_clamped().max(1),
-        pixel_height: height.to_u32_clamped().max(1),
+        pixel_bounds: crate::image::PixelBounds {
+            x: 0,
+            y: 0,
+            width: width.to_u32_clamped().max(1),
+            height: height.to_u32_clamped().max(1),
+        },
     }
 }
 

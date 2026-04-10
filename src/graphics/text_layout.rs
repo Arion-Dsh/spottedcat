@@ -49,7 +49,8 @@ impl Graphics {
             font
         };
 
-        let px_size = text.font_size.as_f32().max(1.0);
+        let scale_factor = ctx.scale_factor();
+        let px_size = (text.font_size.as_f32() * scale_factor as f32).max(1.0);
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
 
@@ -83,7 +84,7 @@ impl Graphics {
         let descent = scaled.descent();
         let line_height = ascent - descent + scaled.line_gap();
 
-        caret_pos[1] += Pt::from(y_offset - ascent);
+        caret_pos[1] += Pt::from_physical_px((y_offset - ascent) as f64, scale_factor);
 
         let sx = image_scale[0];
         let sy = image_scale[1];
@@ -92,13 +93,13 @@ impl Graphics {
 
         for line in lines {
             let mut prev: Option<ab_glyph::GlyphId> = None;
-            let baseline_y = caret_pos[1] + Pt::from(ascent);
+            let baseline_y = caret_pos[1] + Pt::from_physical_px(ascent as f64, scale_factor);
 
             for ch in line.chars() {
                 let glyph_id = scaled.glyph_id(ch);
 
                 if let Some(p) = prev {
-                    caret_pos[0] += Pt::from(scaled.kern(p, glyph_id));
+                    caret_pos[0] += Pt::from_physical_px(scaled.kern(p, glyph_id) as f64, scale_factor);
                 }
                 prev = Some(glyph_id);
 
@@ -116,7 +117,7 @@ impl Graphics {
                     self.glyph_cache.insert(cache_key, e.clone());
                     e
                 } else {
-                    caret_pos[0] += Pt::from(scaled.h_advance(glyph_id));
+                    caret_pos[0] += Pt::from_physical_px(scaled.h_advance(glyph_id) as f64, scale_factor);
                     continue;
                 };
 
@@ -124,12 +125,12 @@ impl Graphics {
                 let img_entry = if let Some(Some(e)) = ctx.registry.images.get(img_id as usize) {
                     e
                 } else {
-                    caret_pos[0] += Pt::from(entry.advance);
+                    caret_pos[0] += Pt::from_physical_px(entry.advance as f64, scale_factor);
                     continue;
                 };
 
-                let draw_x = caret_pos[0] + Pt::from(entry.offset[0]);
-                let draw_y = baseline_y + Pt::from(entry.offset[1]);
+                let draw_x = caret_pos[0] + Pt::from_physical_px(entry.offset[0] as f64, scale_factor);
+                let draw_y = baseline_y + Pt::from_physical_px(entry.offset[1] as f64, scale_factor);
 
                 let rel_x = draw_x.as_f32() * sx;
                 let rel_y = draw_y.as_f32() * sy;
@@ -141,7 +142,7 @@ impl Graphics {
                 {
                     e
                 } else {
-                    caret_pos[0] += Pt::from(entry.advance);
+                    caret_pos[0] += Pt::from_physical_px(entry.advance as f64, scale_factor);
                     continue;
                 };
 
@@ -155,10 +156,10 @@ impl Graphics {
                     image_id: img_id,
                 });
 
-                caret_pos[0] += Pt::from(entry.advance);
+                caret_pos[0] += Pt::from_physical_px(entry.advance as f64, scale_factor);
             }
             caret_pos[0] = Pt(0.0);
-            caret_pos[1] += Pt::from(line_height);
+            caret_pos[1] += Pt::from_physical_px(line_height as f64, scale_factor);
         }
 
         let new_layout = TextLayout {

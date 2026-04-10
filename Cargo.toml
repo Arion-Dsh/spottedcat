@@ -124,9 +124,12 @@ path = "examples/model_test.rs"
 required-features = ["model-3d"]
 
 [[example]]
-name = "render_state_stress"
-path = "examples/render_state_stress.rs"
-required-features = ["model-3d"]
+name = "atlas_subimage_move_test"
+path = "examples/atlas_subimage_move_test.rs"
+required-features = ["utils"]
+[[example]]
+name = "auto_atlas_verify"
+path = "examples/auto_atlas_verify.rs"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]

@@ -4,13 +4,22 @@ use crate::Pt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Bounds {
     /// X coordinate of the top-left corner.
-    pub(crate) x: Pt,
+    pub x: Pt,
     /// Y coordinate of the top-left corner.
-    pub(crate) y: Pt,
+    pub y: Pt,
     /// Width of the bounds.
-    pub(crate) width: Pt,
+    pub width: Pt,
     /// Height of the bounds.
-    pub(crate) height: Pt,
+    pub height: Pt,
+}
+
+/// Rectangle bounds in pure physical GPU pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PixelBounds {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Bounds {
@@ -60,8 +69,7 @@ pub struct Image {
     pub(crate) y: Pt,
     pub(crate) width: Pt,
     pub(crate) height: Pt,
-    pub(crate) pixel_width: u32,
-    pub(crate) pixel_height: u32,
+    pub(crate) pixel_bounds: PixelBounds,
 }
 
 impl Image {
@@ -72,7 +80,9 @@ impl Image {
         height: Pt,
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
-        Ok(crate::Texture::new(ctx, width, height, rgba)?.view())
+        let pixel_width = width.0.round() as u32;
+        let pixel_height = height.0.round() as u32;
+        Ok(ctx.register_image(pixel_width, pixel_height, width, height, rgba))
     }
 
     /// Returns the logical width of the image.
@@ -95,44 +105,16 @@ impl Image {
         self.texture_id
     }
 
-    /// Returns the full texture that this image samples from.
-    pub fn texture(self, ctx: &crate::Context) -> Option<crate::Texture> {
-        ctx.registry
-            .textures
-            .get(self.texture_id as usize)
-            .and_then(|v| v.as_ref())
-            .map(|entry| crate::Texture {
-                id: self.texture_id,
-                default_view_id: entry.default_view_id,
-                width: entry.width,
-                height: entry.height,
-                pixel_width: entry.pixel_width,
-                pixel_height: entry.pixel_height,
-            })
-    }
 
-    /// Returns true if the underlying texture is ready for rendering.
-    pub fn is_ready(self, ctx: &crate::Context) -> bool {
-        ctx.registry
-            .textures
-            .get(self.texture_id as usize)
-            .and_then(|v| v.as_ref())
-            .map(|entry| entry.is_ready(ctx.registry.gpu_generation))
-            .unwrap_or(false)
-    }
-
-    pub fn is_render_target(self, ctx: &crate::Context) -> bool {
-        ctx.registry
-            .textures
-            .get(self.texture_id as usize)
-            .and_then(|v| v.as_ref())
-            .map(crate::graphics::texture::TextureEntry::is_render_target)
-            .unwrap_or(false)
+    /// Returns the physical pixel bounds of the image in the texture or atlas.
+    pub fn pixel_bounds(self) -> PixelBounds {
+        self.pixel_bounds
     }
 
     pub(crate) fn index(self) -> usize {
         self.id as usize
     }
+
 }
 
 impl PartialEq for Image {
@@ -150,6 +132,26 @@ impl std::hash::Hash for Image {
 }
 
 impl Image {
+    pub(crate) fn new_at_bounds(
+        id: u32,
+        texture_id: u32,
+        x: Pt,
+        y: Pt,
+        width: Pt,
+        height: Pt,
+        pixel_bounds: PixelBounds,
+    ) -> Self {
+        Self {
+            id,
+            texture_id,
+            x,
+            y,
+            width,
+            height,
+            pixel_bounds,
+        }
+    }
+
     #[cfg(feature = "utils")]
     pub(crate) fn new_from_rgba8_with_pixels(
         ctx: &mut crate::Context,
@@ -216,12 +218,7 @@ impl Image {
             y: image.y + bounds.y,
             width: bounds.width,
             height: bounds.height,
-            pixel_width: ((image.pixel_width as f32) * (bounds.width.0 / image.width.0))
-                .round()
-                .max(1.0) as u32,
-            pixel_height: ((image.pixel_height as f32) * (bounds.height.0 / image.height.0))
-                .round()
-                .max(1.0) as u32,
+            pixel_bounds: ctx.registry.images[id as usize].as_ref().unwrap().pixel_bounds,
         })
     }
 
@@ -264,13 +261,13 @@ impl Image {
     }
 
     /// Returns the source-texture bounds of this image.
-    pub fn bounds(self) -> anyhow::Result<Bounds> {
-        Ok(Bounds {
+    pub fn bounds(self) -> Bounds {
+        Bounds {
             x: self.x,
             y: self.y,
             width: self.width,
             height: self.height,
-        })
+        }
     }
 
     /// Destroys the image.
@@ -287,14 +284,20 @@ impl Image {
 pub(crate) struct ImageEntry {
     pub(crate) texture_id: u32,
     pub(crate) bounds: Bounds,
+    pub(crate) pixel_bounds: PixelBounds,
     pub(crate) visible: bool,
 }
 
 impl ImageEntry {
-    pub(crate) fn new(texture_id: u32, bounds: Bounds) -> Self {
+    pub(crate) fn new(
+        texture_id: u32,
+        bounds: Bounds,
+        pixel_bounds: PixelBounds,
+    ) -> Self {
         Self {
             texture_id,
             bounds,
+            pixel_bounds,
             visible: true,
         }
     }

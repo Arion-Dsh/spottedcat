@@ -46,8 +46,12 @@ impl Texture {
             y: Pt(0.0),
             width: self.width,
             height: self.height,
-            pixel_width: self.pixel_width,
-            pixel_height: self.pixel_height,
+            pixel_bounds: crate::image::PixelBounds {
+                x: 0,
+                y: 0,
+                width: self.pixel_width,
+                height: self.pixel_height,
+            },
         }
     }
 
