@@ -148,6 +148,7 @@ impl Image {
         Ok(image)
     }
 
+    #[cfg(feature = "utils")]
     pub(crate) fn new_from_rgba8_with_pixels(
         ctx: &mut crate::Context,
         pixel_width: u32,
