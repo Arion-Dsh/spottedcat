@@ -161,11 +161,13 @@ impl App {
 
         if let Some(surface) = self.surface.as_ref() {
             // Check if we can reuse an existing graphics device
-            if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+            if self.ctx.has_graphics() {
                 // Increment GPU generation to force asset sync after re-init/resume
-                self.ctx.registry.gpu_generation += 1;
+                self.ctx.bump_gpu_generation();
 
-                g.resize(surface, size.0, size.1);
+                if let Some(g) = self.ctx.graphics_mut() {
+                    g.resize(surface, size.0, size.1);
+                }
                 eprintln!("[spot][android] Reusing existing graphics device for new surface.");
                 crate::android::logcat_info(
                     "reused existing graphics device for resumed/new surface",
@@ -173,16 +175,14 @@ impl App {
                 // Graphics already initialized and reconfigured, no need for heavy init
                 self.init_state = platform::GraphicsInitState::Ready(Box::new(None));
 
-                self.ctx.set_window_logical_size(
-                    Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                    Pt::from_physical_px(size.1 as f64, self.scale_factor),
-                );
+                self.ctx
+                    .update_window_metrics_physical(size.0, size.1, self.scale_factor);
                 return;
             }
         }
 
         // Increment GPU generation to force asset sync after re-init
-        self.ctx.registry.gpu_generation += 1;
+        self.ctx.bump_gpu_generation();
 
         // If we get here, we don't have a global device yet, so start fresh init
         self.init_state = platform::GraphicsInitState::NotStarted;
@@ -195,10 +195,8 @@ impl App {
             self.window_config.transparent,
         );
 
-        self.ctx.set_window_logical_size(
-            Pt::from_physical_px(size.0 as f64, self.scale_factor),
-            Pt::from_physical_px(size.1 as f64, self.scale_factor),
-        );
+        self.ctx
+            .update_window_metrics_physical(size.0, size.1, self.scale_factor);
 
         eprintln!("[spot][android] Graphics initialization started for new surface.");
         crate::android::logcat_info("graphics initialization started for native surface");
@@ -235,7 +233,7 @@ impl App {
             self.apply_pending_window_requests();
 
             let has_drawable_scene = self.scene.has_active_scene()
-                && self.ctx.runtime.graphics.is_some()
+                && self.ctx.has_graphics()
                 && (self.platform.floating_surface.is_some() || self.surface.is_some());
             let poll_timeout = if has_drawable_scene && self.platform.redraw_requested {
                 Duration::ZERO
@@ -289,14 +287,15 @@ impl App {
                             };
                             self.platform.floating_surface = Some(surface);
                             if let Some(surface) = self.platform.floating_surface.as_ref() {
-                                if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                                if let Some(g) = self.ctx.graphics_mut() {
                                     g.resize(surface, size.0, size.1);
                                 }
                             }
                             // Also update context size to match floating window for now
-                            self.ctx.set_window_logical_size(
-                                Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                                Pt::from_physical_px(size.1 as f64, self.scale_factor),
+                            self.ctx.update_window_metrics_physical(
+                                size.0,
+                                size.1,
+                                self.scale_factor,
                             );
                             self.request_redraw();
                         }
@@ -350,6 +349,8 @@ impl App {
                     PollEvent::Main(MainEvent::TerminateWindow { .. }) => {
                         eprintln!("[spot][android] TerminateWindow");
                         crate::android::logcat_warn("MainEvent::TerminateWindow");
+                        self.ctx.clear_transient_input();
+                        self.ctx.clear_transient_state();
                         self.surface.take();
                         self.platform.native_window.take();
                     }
@@ -362,12 +363,13 @@ impl App {
                                 size.0, size.1
                             ));
                             if size.0 > 0 && size.1 > 0 {
-                                if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                                if let Some(g) = self.ctx.graphics_mut() {
                                     g.resize(surface, size.0, size.1);
                                 }
-                                self.ctx.set_window_logical_size(
-                                    Pt::from_physical_px(size.0 as f64, self.scale_factor),
-                                    Pt::from_physical_px(size.1 as f64, self.scale_factor),
+                                self.ctx.update_window_metrics_physical(
+                                    size.0,
+                                    size.1,
+                                    self.scale_factor,
                                 );
                                 self.request_redraw();
                             }
@@ -402,6 +404,9 @@ impl App {
                             );
                         }
 
+                        self.ctx.clear_transient_input();
+                        self.ctx.clear_transient_state();
+
                         if crate::android::floating_window_enabled() {
                             if let Some(service_class) =
                                 crate::android::floating_window_service_class()
@@ -430,7 +435,7 @@ impl App {
 
                         if crate::android::floating_window_enabled() {
                             // Only opt into floating mode when the host app explicitly enables it.
-                            if self.ctx.runtime.graphics.is_some() {
+                            if self.ctx.has_graphics() {
                                 if let Some(factory) = crate::android::get_floating_scene_factory()
                                 {
                                     self.scene.remove_current(&mut self.ctx);
@@ -448,6 +453,8 @@ impl App {
                         if let Some(spot) = self.scene.spot_mut() {
                             spot.suspended(&mut self.ctx);
                         }
+                        self.ctx.clear_transient_input();
+                        self.ctx.clear_transient_state();
                         #[cfg(feature = "sensors")]
                         self.disable_high_frequency_sensors();
                     }
@@ -517,14 +524,14 @@ impl App {
                 let graphics_finalized = graphics_opt.is_some();
                 let was_floating_scene = self.scene.is_floating_scene();
                 if let Some(g) = graphics_opt {
-                    self.ctx.runtime.graphics = Some(g);
+                    self.ctx.attach_graphics(g);
                 }
                 if graphics_finalized && !graphics_finalized_logged {
                     crate::android::logcat_info("graphics initialization finalized successfully");
                     graphics_finalized_logged = true;
                 }
                 if graphics_finalized || was_floating_scene || self.scene.needs_initial_scene() {
-                    if self.ctx.runtime.graphics.is_some() {
+                    if self.ctx.has_graphics() {
                         self.scene.restore_root_scene(&mut self.ctx);
 
                         if graphics_finalized {
@@ -767,7 +774,7 @@ impl App {
 
                 // Render to ACTIVE surface
                 // If floating surface exists, we are in floating mode, prioritize it.
-                let mut graphics = self.ctx.runtime.graphics.take();
+                let mut graphics = self.ctx.detach_graphics();
                 let draw_result = if let Some(surface) = self.platform.floating_surface.as_ref() {
                     graphics
                         .as_mut()
@@ -779,7 +786,9 @@ impl App {
                 } else {
                     None
                 };
-                self.ctx.runtime.graphics = graphics;
+                if let Some(graphics) = graphics {
+                    self.ctx.attach_graphics(graphics);
+                }
 
                 if let Some(Err(e)) = draw_result {
                     crate::android::logcat_warn(&format!("draw_context failed with {:?}", e));
@@ -820,7 +829,7 @@ impl App {
                 // Force Android driver to reclaim memory by polling with Wait.
                 // This addresses the memory leak (~0.8MB/10s at 60FPS) observed on Android
                 // even with minimal rendering.
-                if let Some(g) = self.ctx.runtime.graphics.as_mut() {
+                if let Some(g) = self.ctx.graphics_mut() {
                     g.poll_device(true);
                 }
 

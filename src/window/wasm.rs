@@ -69,15 +69,13 @@ impl App {
 
         if !graphics_matches
             && let Some(surface) = self.surface.as_ref()
-            && let Some(g) = self.ctx.runtime.graphics.as_mut()
+            && let Some(g) = self.ctx.graphics_mut()
         {
             g.resize(surface, w, h);
         }
 
-        self.ctx.set_window_logical_size(
-            Pt::from_physical_px(w as f64, self.scale_factor),
-            Pt::from_physical_px(h as f64, self.scale_factor),
-        );
+        self.ctx
+            .update_window_metrics_physical(w, h, self.scale_factor);
 
         // Ensure winit is aware of the effective surface size too.
         window.request_redraw();

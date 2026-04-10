@@ -94,6 +94,11 @@ path = "examples/gltf_loader.rs"
 required-features = ["gltf"]
 
 [[example]]
+name = "animated_gltf"
+path = "examples/animated_gltf.rs"
+required-features = ["gltf"]
+
+[[example]]
 name = "billboard"
 path = "examples/billboard.rs"
 required-features = ["model-3d"]

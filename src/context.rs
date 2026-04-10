@@ -187,6 +187,19 @@ impl Context {
         self.runtime.window_logical_size = (w, h);
     }
 
+    pub(crate) fn update_window_metrics_physical(
+        &mut self,
+        width: u32,
+        height: u32,
+        scale_factor: f64,
+    ) {
+        self.set_scale_factor(scale_factor);
+        self.set_window_logical_size(
+            Pt::from_physical_px(width as f64, scale_factor),
+            Pt::from_physical_px(height as f64, scale_factor),
+        );
+    }
+
     pub(crate) fn set_window_title(&mut self, title: impl Into<String>) {
         self.runtime.pending_window_title = Some(title.into());
     }
@@ -369,6 +382,17 @@ impl Context {
         self.runtime.last_image_opts.clear();
     }
 
+    pub(crate) fn clear_transient_state(&mut self) {
+        self.begin_frame();
+        self.runtime.pending_window_title = None;
+        self.runtime.pending_cursor_visible = None;
+        self.runtime.pending_fullscreen = None;
+    }
+
+    pub(crate) fn clear_transient_input(&mut self) {
+        self.runtime.input.clear_transient_state();
+    }
+
     pub(crate) fn input(&self) -> &InputManager {
         &self.runtime.input
     }
@@ -379,6 +403,29 @@ impl Context {
 
     pub(crate) fn set_scale_factor(&mut self, scale_factor: f64) {
         self.runtime.scale_factor = scale_factor;
+    }
+
+    pub(crate) fn graphics_mut(&mut self) -> Option<&mut Graphics> {
+        self.runtime.graphics.as_mut()
+    }
+
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub(crate) fn has_graphics(&self) -> bool {
+        self.runtime.graphics.is_some()
+    }
+
+    pub(crate) fn attach_graphics(&mut self, graphics: Graphics) {
+        self.runtime.graphics = Some(graphics);
+    }
+
+    pub(crate) fn detach_graphics(&mut self) -> Option<Graphics> {
+        self.runtime.graphics.take()
+    }
+
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub(crate) fn bump_gpu_generation(&mut self) {
+        self.registry.gpu_generation = self.registry.gpu_generation.saturating_add(1);
+        self.registry.dirty_assets = true;
     }
 
     /// Returns the window's scale factor (DPI).

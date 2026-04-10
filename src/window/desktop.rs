@@ -50,11 +50,8 @@ impl PlatformData {
 
 impl App {
     fn sync_window_metrics(&mut self, width: u32, height: u32) {
-        self.ctx.set_scale_factor(self.scale_factor);
-        self.ctx.set_window_logical_size(
-            Pt::from_physical_px(width as f64, self.scale_factor),
-            Pt::from_physical_px(height as f64, self.scale_factor),
-        );
+        self.ctx
+            .update_window_metrics_physical(width, height, self.scale_factor);
     }
 
     fn request_redraw(&self) {
@@ -172,7 +169,7 @@ impl App {
 
                 if let platform::GraphicsInitState::Ready(_) = self.init_state
                     && let Some(surface) = self.surface.as_ref()
-                    && let Some(g) = self.ctx.runtime.graphics.as_mut()
+                    && let Some(g) = self.ctx.graphics_mut()
                 {
                     g.resize(surface, size.width, size.height);
                 }
@@ -195,7 +192,7 @@ impl App {
                 self.surface = Some(surface);
 
                 if let Some(surface) = self.surface.as_ref()
-                    && let Some(g) = self.ctx.runtime.graphics.as_mut()
+                    && let Some(g) = self.ctx.graphics_mut()
                 {
                     g.resize(surface, size.width, size.height);
                 }
@@ -258,7 +255,7 @@ impl App {
         }
 
         if let Some(graphics) = platform::finalize_graphics(&mut self.init_state) {
-            self.ctx.runtime.graphics = Some(graphics);
+            self.ctx.attach_graphics(graphics);
             self.scene.initialize_if_missing(&mut self.ctx);
         }
     }
@@ -298,11 +295,13 @@ impl App {
 
         self.scene.apply_pending_switch(&mut self.ctx);
 
-        let mut graphics = self.ctx.runtime.graphics.take();
+        let mut graphics = self.ctx.detach_graphics();
         let draw_result = graphics
             .as_mut()
             .map(|g| g.draw_context(surface, &mut self.ctx));
-        self.ctx.runtime.graphics = graphics;
+        if let Some(graphics) = graphics {
+            self.ctx.attach_graphics(graphics);
+        }
 
         if let Some(Err(error)) = draw_result {
             self.handle_surface_error(event_loop, error);
@@ -362,6 +361,8 @@ impl ApplicationHandler for App {
         if let Some(spot) = self.scene.spot_mut() {
             spot.suspended(&mut self.ctx);
         }
+        self.ctx.clear_transient_input();
+        self.ctx.clear_transient_state();
         #[cfg(all(target_os = "ios", feature = "sensors"))]
         if let Some(state) = self.platform.sensor_state.as_ref() {
             state.disable();
@@ -383,7 +384,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(new_size) => {
                 if let Some(surface) = self.surface.as_ref()
-                    && let Some(g) = self.ctx.runtime.graphics.as_mut()
+                    && let Some(g) = self.ctx.graphics_mut()
                 {
                     g.resize(surface, new_size.width, new_size.height);
                 }

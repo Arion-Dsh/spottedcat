@@ -262,23 +262,32 @@ impl InputManager {
         }
     }
 
+    pub(crate) fn clear_transient_state(&mut self) {
+        self.keys_down = [0u64; Key::WORDS];
+        self.keys_pressed = [0u64; Key::WORDS];
+        self.keys_released = [0u64; Key::WORDS];
+        self.mouse_down = 0;
+        self.mouse_pressed = 0;
+        self.mouse_released = 0;
+        self.mouse_other_down.clear();
+        self.mouse_other_pressed.clear();
+        self.mouse_other_released.clear();
+        self.cursor_position = None;
+        self.scroll_delta = (0.0, 0.0);
+        self.text_input.clear();
+        self.ime_preedit = None;
+        self.touches.clear();
+        #[cfg(feature = "sensors")]
+        {
+            self.step_detected = false;
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) fn handle_focus(&mut self, focused: bool) {
         self.focused = focused;
         if !focused {
-            self.keys_down = [0u64; Key::WORDS];
-            self.keys_pressed = [0u64; Key::WORDS];
-            self.keys_released = [0u64; Key::WORDS];
-            self.mouse_down = 0;
-            self.mouse_pressed = 0;
-            self.mouse_released = 0;
-            self.mouse_other_down.clear();
-            self.mouse_other_pressed.clear();
-            self.mouse_other_released.clear();
-
-            self.text_input.clear();
-            self.ime_preedit = None;
-            self.touches.clear();
+            self.clear_transient_state();
         }
     }
 
@@ -486,6 +495,18 @@ mod tests {
 
         input.handle_focus(false);
 
+        assert!(input.touches().is_empty());
+    }
+
+    #[test]
+    fn clear_transient_state_preserves_focus_flag() {
+        let mut input = InputManager::new();
+        input.handle_focus(true);
+        input.handle_touch_raw(7, (Pt::from(12.0), Pt::from(24.0)), TouchPhase::Started);
+
+        input.clear_transient_state();
+
+        assert!(input.is_focused());
         assert!(input.touches().is_empty());
     }
 }

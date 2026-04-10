@@ -1,6 +1,7 @@
 use crate::platform;
 use crate::scenes::{SceneFactory, ScenePayloadTypeId, Spot, take_scene_switch_request};
 use crate::{Context, WindowConfig};
+use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -190,7 +191,7 @@ pub(crate) struct App {
     pub(crate) platform: PlatformData,
     pub(crate) instance: wgpu::Instance,
     pub(crate) surface: Option<wgpu::Surface<'static>>,
-    pub(crate) ctx: Context,
+    pub(crate) ctx: Pin<Box<Context>>,
     pub(crate) scene: SceneHost,
     pub(crate) window_config: WindowConfig,
     pub(crate) init_state: GraphicsInitState,
@@ -207,7 +208,7 @@ impl App {
             platform: PlatformData::new(),
             instance,
             surface: None,
-            ctx: Context::new(),
+            ctx: Box::pin(Context::new()),
             scene: SceneHost::new::<T>(),
             window_config,
             init_state: GraphicsInitState::NotStarted,
@@ -226,7 +227,7 @@ impl App {
             platform: PlatformData::new_wasm(canvas_id),
             instance,
             surface: None,
-            ctx: Context::new(),
+            ctx: Box::pin(Context::new()),
             scene: SceneHost::new::<T>(),
             window_config,
             init_state: GraphicsInitState::NotStarted,
@@ -323,5 +324,16 @@ mod tests {
 
         assert!(ctx.get_resource::<PayloadA>().is_none());
         assert!(ctx.get_resource::<ScenePayloadTypeId>().is_none());
+    }
+
+    #[test]
+    fn app_context_address_stays_stable_when_app_moves() {
+        let app = App::new::<RootScene>(crate::WindowConfig::default());
+        let before_move = app.ctx.as_ref().get_ref() as *const Context;
+
+        let app = Some(app).unwrap();
+        let after_move = app.ctx.as_ref().get_ref() as *const Context;
+
+        assert_eq!(before_move, after_move);
     }
 }
