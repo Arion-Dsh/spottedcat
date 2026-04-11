@@ -152,7 +152,18 @@ impl DynamicAtlas {
             let page = &mut self.pages[page_idx];
             if page.pixel_width >= total_w && page.pixel_height >= total_h {
                 if let Some((x, y)) = page.packer.insert(total_w as i32, total_h as i32) {
-                    return self.write_to_page(registry, scale_factor, page_idx, x as u32, y as u32, logical_w, logical_h, w_px, h_px, rgba);
+                    return self.write_to_page(
+                        registry,
+                        scale_factor,
+                        page_idx,
+                        x as u32,
+                        y as u32,
+                        logical_w,
+                        logical_h,
+                        w_px,
+                        h_px,
+                        rgba,
+                    );
                 }
             }
         }
@@ -164,7 +175,18 @@ impl DynamicAtlas {
         let page_idx = self.create_page(registry, scale_factor, new_w, new_h);
         let page = &mut self.pages[page_idx];
         if let Some((x, y)) = page.packer.insert(total_w as i32, total_h as i32) {
-            self.write_to_page(registry, scale_factor, page_idx, x as u32, y as u32, logical_w, logical_h, w_px, h_px, rgba)
+            self.write_to_page(
+                registry,
+                scale_factor,
+                page_idx,
+                x as u32,
+                y as u32,
+                logical_w,
+                logical_h,
+                w_px,
+                h_px,
+                rgba,
+            )
         } else {
             anyhow::bail!("Failed to insert region into new atlas page");
         }
@@ -191,14 +213,15 @@ impl DynamicAtlas {
         while registry.textures.len() <= texture_id as usize {
             registry.textures.push(None);
         }
-        registry.textures[texture_id as usize] = Some(crate::graphics::texture::TextureEntry::new_dynamic_atlas(
-            logical_w,
-            logical_h,
-            w_px,
-            h_px,
-            image_id,
-            std::sync::Arc::from(buffer.as_slice()),
-        ));
+        registry.textures[texture_id as usize] =
+            Some(crate::graphics::texture::TextureEntry::new_dynamic_atlas(
+                logical_w,
+                logical_h,
+                w_px,
+                h_px,
+                image_id,
+                std::sync::Arc::from(buffer.as_slice()),
+            ));
 
         let bounds = crate::image::Bounds::new(Pt(0.0), Pt(0.0), logical_w, logical_h);
         while registry.images.len() <= image_id as usize {
@@ -242,23 +265,67 @@ impl DynamicAtlas {
         rgba: &[u8],
     ) -> anyhow::Result<Image> {
         let page = &mut self.pages[page_idx];
-        
+        let inner_x = x + 1;
+        let inner_y = y + 1;
+
         for row in 0..h {
             let src_idx = (row * w * 4) as usize;
-            let dst_idx = ((y + row) * page.pixel_width + x) as usize * 4;
-            page.buffer[dst_idx..dst_idx + (w * 4) as usize].copy_from_slice(&rgba[src_idx..src_idx + (w * 4) as usize]);
+            let dst_idx = ((inner_y + row) * page.pixel_width + inner_x) as usize * 4;
+            page.buffer[dst_idx..dst_idx + (w * 4) as usize]
+                .copy_from_slice(&rgba[src_idx..src_idx + (w * 4) as usize]);
         }
 
+        for row in 0..h {
+            let src_idx = (row * w * 4) as usize;
+            let dst_y = inner_y + row;
+            let left_dst_idx = (dst_y * page.pixel_width + inner_x - 1) as usize * 4;
+            let right_dst_idx = (dst_y * page.pixel_width + inner_x + w) as usize * 4;
+            page.buffer[left_dst_idx..left_dst_idx + 4]
+                .copy_from_slice(&rgba[src_idx..src_idx + 4]);
+            let last_pixel = src_idx + ((w - 1) * 4) as usize;
+            page.buffer[right_dst_idx..right_dst_idx + 4]
+                .copy_from_slice(&rgba[last_pixel..last_pixel + 4]);
+        }
+
+        let top_dst_idx = ((inner_y - 1) * page.pixel_width + inner_x) as usize * 4;
+        page.buffer[top_dst_idx..top_dst_idx + (w * 4) as usize]
+            .copy_from_slice(&rgba[..(w * 4) as usize]);
+
+        let bottom_src_idx = ((h - 1) * w * 4) as usize;
+        let bottom_dst_idx = ((inner_y + h) * page.pixel_width + inner_x) as usize * 4;
+        page.buffer[bottom_dst_idx..bottom_dst_idx + (w * 4) as usize]
+            .copy_from_slice(&rgba[bottom_src_idx..bottom_src_idx + (w * 4) as usize]);
+
+        let top_left = &rgba[..4];
+        let top_right_idx = ((w - 1) * 4) as usize;
+        let top_right = &rgba[top_right_idx..top_right_idx + 4];
+        let bottom_left = &rgba[bottom_src_idx..bottom_src_idx + 4];
+        let bottom_right_idx = bottom_src_idx + ((w - 1) * 4) as usize;
+        let bottom_right = &rgba[bottom_right_idx..bottom_right_idx + 4];
+
+        let top_left_dst_idx = ((inner_y - 1) * page.pixel_width + inner_x - 1) as usize * 4;
+        page.buffer[top_left_dst_idx..top_left_dst_idx + 4].copy_from_slice(top_left);
+        let top_right_dst_idx = ((inner_y - 1) * page.pixel_width + inner_x + w) as usize * 4;
+        page.buffer[top_right_dst_idx..top_right_dst_idx + 4].copy_from_slice(top_right);
+        let bottom_left_dst_idx = ((inner_y + h) * page.pixel_width + inner_x - 1) as usize * 4;
+        page.buffer[bottom_left_dst_idx..bottom_left_dst_idx + 4].copy_from_slice(bottom_left);
+        let bottom_right_dst_idx = ((inner_y + h) * page.pixel_width + inner_x + w) as usize * 4;
+        page.buffer[bottom_right_dst_idx..bottom_right_dst_idx + 4].copy_from_slice(bottom_right);
+
         // Update the texture data in Registry
-        if let Some(entry) = registry.textures.get_mut(page.texture_id as usize).and_then(|v| v.as_mut()) {
+        if let Some(entry) = registry
+            .textures
+            .get_mut(page.texture_id as usize)
+            .and_then(|v| v.as_mut())
+        {
             entry.raw_data = Some(Arc::from(page.buffer.as_slice()));
             entry.runtime.generation = 0; // Force re-upload
             registry.dirty_assets = true;
         }
 
         let scale_factor = scale_factor.max(1.0);
-        let logical_x = Pt::from_physical_px(x as f64, scale_factor);
-        let logical_y = Pt::from_physical_px(y as f64, scale_factor);
+        let logical_x = Pt::from_physical_px(inner_x as f64, scale_factor);
+        let logical_y = Pt::from_physical_px(inner_y as f64, scale_factor);
 
         // Manual sub-image registration
         let view_id = registry.next_image_id;
@@ -268,8 +335,8 @@ impl DynamicAtlas {
             page.texture_id,
             crate::image::Bounds::new(logical_x, logical_y, logical_w, logical_h),
             crate::image::PixelBounds {
-                x,
-                y,
+                x: inner_x,
+                y: inner_y,
                 width: w,
                 height: h,
             },
@@ -289,8 +356,8 @@ impl DynamicAtlas {
             width: logical_w,
             height: logical_h,
             pixel_bounds: crate::image::PixelBounds {
-                x,
-                y,
+                x: inner_x,
+                y: inner_y,
                 width: w,
                 height: h,
             },

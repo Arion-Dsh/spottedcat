@@ -113,16 +113,22 @@ impl Interpolatable for [f32; 4] {
 /// ### Example
 ///
 /// ```rust
-/// use spottedcat::{Spot, Context, Image, DrawOption, Pt};
+/// use spottedcat::{Context, DrawOption, Image, Pt, Spot};
 /// use spottedcat::math::Interpolated;
 ///
 /// struct Player {
 ///     pos: Interpolated<[f32; 2]>,
+///     sprite: Image,
 /// }
 ///
 /// impl Spot for Player {
-///     fn initialize(_ctx: &mut Context) -> Self {
-///         Self { pos: Interpolated::new([0.0, 0.0]) }
+///     fn initialize(ctx: &mut Context) -> Self {
+///         let sprite = Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255])
+///             .unwrap();
+///         Self {
+///             pos: Interpolated::new([0.0, 0.0]),
+///             sprite,
+///         }
 ///     }
 ///
 ///     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {
@@ -134,7 +140,11 @@ impl Interpolatable for [f32; 4] {
 ///     fn draw(&mut self, ctx: &mut Context, screen: Image) {
 ///         // Read the smoothly interpolated value for the current render frame
 ///         let pos = self.pos.value(ctx);
-///         screen.draw(ctx, &ctx.registry.images[1].unwrap().id, DrawOption::new().with_position(pos));
+///         screen.draw(
+///             ctx,
+///             &self.sprite,
+///             DrawOption::default().with_position([Pt::from(pos[0]), Pt::from(pos[1])]),
+///         );
 ///     }
 /// }
 /// ```
@@ -204,7 +214,8 @@ impl<T: Interpolatable + Copy> Interpolated<T> {
 
     /// Returns the interpolated value based on the current context's draw interpolation.
     pub fn value(&self, ctx: &crate::Context) -> T {
-        self.previous.interpolate(self.current, ctx.draw_interpolation())
+        self.previous
+            .interpolate(self.current, ctx.draw_interpolation())
     }
 }
 
@@ -235,7 +246,7 @@ mod tests {
         let q1 = Quat::identity();
         // 90 degree rotation around Z
         let q2 = Quat([0.0, 0.0, 0.70710677, 0.70710677]);
-        
+
         let mid = q1.interpolate(q2, 0.5);
         // Should be roughly 45 degrees
         assert!(mid.0[2] > 0.0 && mid.0[2] < 0.7071);

@@ -1,4 +1,4 @@
-.PHONY: clean test check
+.PHONY: clean test check check-examples
 
 clean:
 	@echo "Running cleanup script..."
@@ -11,3 +11,7 @@ test:
 check:
 	@echo "Running cargo check..."
 	@cargo check
+
+check-examples:
+	@echo "Running example checks..."
+	@bash scripts/check_examples.sh

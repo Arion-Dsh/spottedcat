@@ -1,6 +1,6 @@
 use crate::Pt;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 static NEXT_GPU_TEXTURE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -420,6 +420,17 @@ impl std::fmt::Debug for TextureRuntimeData {
 }
 
 impl TextureEntry {
+    pub(crate) const SAMPLED_IMAGE_FORMAT: wgpu::TextureFormat =
+        wgpu::TextureFormat::Rgba8UnormSrgb;
+
+    pub(crate) fn gpu_format(&self, surface_format: wgpu::TextureFormat) -> wgpu::TextureFormat {
+        if self.render_target {
+            surface_format
+        } else {
+            Self::SAMPLED_IMAGE_FORMAT
+        }
+    }
+
     pub(crate) fn new_sampled(
         width: Pt,
         height: Pt,
@@ -500,5 +511,39 @@ impl TextureEntry {
 
     pub(crate) fn is_render_target(&self) -> bool {
         self.render_target
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TextureEntry;
+    use crate::Pt;
+    use std::sync::Arc;
+
+    #[test]
+    fn sampled_textures_do_not_inherit_surface_format() {
+        let entry = TextureEntry::new_sampled(
+            Pt::from(1.0),
+            Pt::from(1.0),
+            1,
+            1,
+            0,
+            Arc::from([255, 0, 0, 128]),
+        );
+
+        assert_eq!(
+            entry.gpu_format(wgpu::TextureFormat::Rgb10a2Unorm),
+            TextureEntry::SAMPLED_IMAGE_FORMAT
+        );
+    }
+
+    #[test]
+    fn render_targets_keep_surface_format() {
+        let entry = TextureEntry::new_render_target(Pt::from(1.0), Pt::from(1.0), 1, 1, 0);
+
+        assert_eq!(
+            entry.gpu_format(wgpu::TextureFormat::Rgb10a2Unorm),
+            wgpu::TextureFormat::Rgb10a2Unorm
+        );
     }
 }

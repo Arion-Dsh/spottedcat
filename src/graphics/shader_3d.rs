@@ -1,4 +1,4 @@
-use crate::model::Vertex;
+use crate::model::RawVertex;
 
 use super::core::Graphics;
 
@@ -79,7 +79,7 @@ impl Graphics {
                     module: &model_shader,
                     entry_point: Some("vs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    buffers: &[Vertex::layout()],
+                    buffers: &[RawVertex::layout()],
                 },
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -128,7 +128,7 @@ impl Graphics {
                         entry_point: Some("vs_main"),
                         compilation_options: wgpu::PipelineCompilationOptions::default(),
                         buffers: &[
-                            Vertex::layout(),
+                            RawVertex::layout(),
                             wgpu::VertexBufferLayout {
                                 array_stride: 64,
                                 step_mode: wgpu::VertexStepMode::Instance,
@@ -231,7 +231,7 @@ impl Graphics {
                 module: &standard_shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::layout()],
+                buffers: &[RawVertex::layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -269,7 +269,7 @@ impl Graphics {
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[
-                    Vertex::layout(),
+                    RawVertex::layout(),
                     wgpu::VertexBufferLayout {
                         array_stride: 64,
                         step_mode: wgpu::VertexStepMode::Instance,

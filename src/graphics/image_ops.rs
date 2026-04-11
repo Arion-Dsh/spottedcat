@@ -1,17 +1,15 @@
-use crate::platform;
 use crate::graphics::texture::GpuTexture;
+use crate::platform;
 
 use super::core::Graphics;
 
-
-
 impl Graphics {
     pub(crate) fn process_registrations(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
-        let has_pending = ctx
-            .registry
-            .textures
-            .iter()
-            .any(|opt| opt.as_ref().map(|e| !e.is_ready(self.gpu_generation)).unwrap_or(false));
+        let has_pending = ctx.registry.textures.iter().any(|opt| {
+            opt.as_ref()
+                .map(|e| !e.is_ready(self.gpu_generation))
+                .unwrap_or(false)
+        });
         if !self.dirty_assets && !has_pending {
             return Ok(());
         }
@@ -35,13 +33,14 @@ impl Graphics {
                     | wgpu::TextureUsages::COPY_SRC
                     | wgpu::TextureUsages::RENDER_ATTACHMENT
             };
+            let format = entry.gpu_format(self.config.format);
 
             let texture = if entry.is_render_target() {
                 GpuTexture::create_empty_with_usage_and_mips(
                     &self.device,
                     entry.pixel_width,
                     entry.pixel_height,
-                    self.config.format,
+                    format,
                     usage,
                     1,
                 )
@@ -50,7 +49,7 @@ impl Graphics {
                     &self.device,
                     entry.pixel_width,
                     entry.pixel_height,
-                    self.config.format,
+                    format,
                     usage,
                     1,
                 )
@@ -59,7 +58,7 @@ impl Graphics {
                     &self.device,
                     entry.pixel_width,
                     entry.pixel_height,
-                    self.config.format,
+                    format,
                     usage,
                 )
             };
@@ -120,8 +119,6 @@ impl Graphics {
         Ok(())
     }
 
-
-
     pub(crate) fn rebuild_textures(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
         self.dirty_assets = false;
         #[cfg(feature = "model-3d")]
@@ -137,7 +134,6 @@ impl Graphics {
 
         self.process_registrations(ctx)
     }
-
 }
 
 pub(crate) fn resolve_image_uv(
@@ -146,6 +142,7 @@ pub(crate) fn resolve_image_uv(
 ) -> [f32; 4] {
     let full_w = texture_entry.pixel_width as f32;
     let full_h = texture_entry.pixel_height as f32;
+
     [
         image_entry.pixel_bounds.x as f32 / full_w,
         image_entry.pixel_bounds.y as f32 / full_h,
@@ -153,5 +150,3 @@ pub(crate) fn resolve_image_uv(
         image_entry.pixel_bounds.height as f32 / full_h,
     ]
 }
-
-

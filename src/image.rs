@@ -105,6 +105,15 @@ impl Image {
         self.texture_id
     }
 
+    /// Returns whether the backing texture has been uploaded and is ready for drawing.
+    pub fn is_ready(self, ctx: &crate::Context) -> bool {
+        ctx.registry
+            .textures
+            .get(self.texture_id as usize)
+            .and_then(|v| v.as_ref())
+            .map(|entry| entry.is_ready(ctx.registry.gpu_generation))
+            .unwrap_or(false)
+    }
 
     /// Returns the physical pixel bounds of the image in the texture or atlas.
     pub fn pixel_bounds(self) -> PixelBounds {
@@ -114,7 +123,6 @@ impl Image {
     pub(crate) fn index(self) -> usize {
         self.id as usize
     }
-
 }
 
 impl PartialEq for Image {
@@ -132,7 +140,6 @@ impl std::hash::Hash for Image {
 }
 
 impl Image {
-
     #[cfg(feature = "utils")]
     pub(crate) fn new_from_rgba8_with_pixels(
         ctx: &mut crate::Context,
@@ -142,17 +149,15 @@ impl Image {
         height: Pt,
         rgba: &[u8],
     ) -> anyhow::Result<Self> {
-        Ok(
-            crate::Texture::new_from_rgba8_with_pixels(
-                ctx,
-                pixel_width,
-                pixel_height,
-                width,
-                height,
-                rgba,
-            )?
-            .view(),
-        )
+        Ok(crate::Texture::new_from_rgba8_with_pixels(
+            ctx,
+            pixel_width,
+            pixel_height,
+            width,
+            height,
+            rgba,
+        )?
+        .view())
     }
 
     /// Creates a full-view copy of an existing image.
@@ -199,7 +204,10 @@ impl Image {
             y: image.y + bounds.y,
             width: bounds.width,
             height: bounds.height,
-            pixel_bounds: ctx.registry.images[id as usize].as_ref().unwrap().pixel_bounds,
+            pixel_bounds: ctx.registry.images[id as usize]
+                .as_ref()
+                .unwrap()
+                .pixel_bounds,
         })
     }
 
@@ -270,11 +278,7 @@ pub(crate) struct ImageEntry {
 }
 
 impl ImageEntry {
-    pub(crate) fn new(
-        texture_id: u32,
-        bounds: Bounds,
-        pixel_bounds: PixelBounds,
-    ) -> Self {
+    pub(crate) fn new(texture_id: u32, bounds: Bounds, pixel_bounds: PixelBounds) -> Self {
         Self {
             texture_id,
             bounds,

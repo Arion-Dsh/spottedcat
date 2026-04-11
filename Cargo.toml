@@ -2,6 +2,7 @@
 name = "spottedcat"
 version = "0.9.0"
 edition = "2024"
+autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/arion-dsh/spottedcat"
@@ -68,8 +69,20 @@ name = "input_example"
 path = "examples/input_example.rs"
 
 [[example]]
+name = "async_loading_example"
+path = "examples/async_loading_example.rs"
+
+[[example]]
+name = "audio_test"
+path = "examples/audio_test.rs"
+
+[[example]]
 name = "centered_text_test"
 path = "examples/centered_text_test.rs"
+
+[[example]]
+name = "flip_test"
+path = "examples/flip_test.rs"
 
 [[example]]
 name = "seven_level_test"
@@ -127,9 +140,15 @@ required-features = ["model-3d"]
 name = "atlas_subimage_move_test"
 path = "examples/atlas_subimage_move_test.rs"
 required-features = ["utils"]
+
 [[example]]
-name = "auto_atlas_verify"
-path = "examples/auto_atlas_verify.rs"
+name = "render_state_stress"
+path = "examples/render_state_stress.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "touch_test"
+path = "examples/touch_test.rs"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]

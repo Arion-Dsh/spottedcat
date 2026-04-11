@@ -277,7 +277,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, -s, s],
@@ -286,7 +285,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, s, s],
@@ -295,7 +293,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, s, s],
@@ -304,7 +301,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, -s, -s],
@@ -313,7 +309,6 @@ impl Model {
                 tangent: [-1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, s, -s],
@@ -322,7 +317,6 @@ impl Model {
                 tangent: [-1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, s, -s],
@@ -331,7 +325,6 @@ impl Model {
                 tangent: [-1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, -s, -s],
@@ -340,7 +333,6 @@ impl Model {
                 tangent: [-1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, s, -s],
@@ -349,7 +341,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, s, s],
@@ -358,7 +349,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, s, s],
@@ -367,7 +357,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, s, -s],
@@ -376,7 +365,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, -s, -s],
@@ -385,7 +373,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, -s, -s],
@@ -394,7 +381,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, -s, s],
@@ -403,7 +389,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, -s, s],
@@ -412,7 +397,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, -s, -s],
@@ -421,7 +405,6 @@ impl Model {
                 tangent: [0.0, 0.0, -1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, s, -s],
@@ -430,7 +413,6 @@ impl Model {
                 tangent: [0.0, 0.0, -1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, s, s],
@@ -439,7 +421,6 @@ impl Model {
                 tangent: [0.0, 0.0, -1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [s, -s, s],
@@ -448,7 +429,6 @@ impl Model {
                 tangent: [0.0, 0.0, -1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, -s, -s],
@@ -457,7 +437,6 @@ impl Model {
                 tangent: [0.0, 0.0, 1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, -s, s],
@@ -466,7 +445,6 @@ impl Model {
                 tangent: [0.0, 0.0, 1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, s, s],
@@ -475,7 +453,6 @@ impl Model {
                 tangent: [0.0, 0.0, 1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-s, s, -s],
@@ -484,7 +461,6 @@ impl Model {
                 tangent: [0.0, 0.0, 1.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
         ];
 
@@ -514,7 +490,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [hw, -hh, 0.0],
@@ -523,7 +498,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [hw, hh, 0.0],
@@ -532,7 +506,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
             Vertex {
                 pos: [-hw, hh, 0.0],
@@ -541,7 +514,6 @@ impl Model {
                 tangent: [1.0, 0.0, 0.0],
                 joint_indices: [0; 4],
                 joint_weights: [0.0; 4],
-                ..Default::default()
             },
         ];
 
@@ -582,7 +554,6 @@ impl Model {
                     tangent,
                     joint_indices: [0; 4],
                     joint_weights: [0.0; 4],
-                    ..Default::default()
                 });
             }
         }
@@ -701,25 +672,49 @@ impl Model {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Vertex {
+    pub pos: [f32; 3],
+    pub uv: [f32; 2],
+    pub normal: [f32; 3],
+    pub tangent: [f32; 3],
+    pub joint_indices: [u32; 4],
+    pub joint_weights: [f32; 4],
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, PartialEq, Default)]
-pub struct Vertex {
+pub(crate) struct RawVertex {
     pub pos: [f32; 3],          // 0..12
-    pub _pad1: f32,             // 12..16
+    _pad1: f32,                 // 12..16
     pub uv: [f32; 2],           // 16..24
-    pub _pad2: [f32; 2],        // 24..32
+    _pad2: [f32; 2],            // 24..32
     pub normal: [f32; 3],       // 32..44
-    pub _pad3: f32,             // 44..48
+    _pad3: f32,                 // 44..48
     pub tangent: [f32; 3],      // 48..60
-    pub _pad4: f32,             // 60..64
+    _pad4: f32,                 // 60..64
     pub joint_indices: [u32; 4], // 64..80
     pub joint_weights: [f32; 4], // 80..96
 }
 
-impl Vertex {
+impl From<Vertex> for RawVertex {
+    fn from(v: Vertex) -> Self {
+        Self {
+            pos: v.pos,
+            uv: v.uv,
+            normal: v.normal,
+            tangent: v.tangent,
+            joint_indices: v.joint_indices,
+            joint_weights: v.joint_weights,
+            ..Default::default()
+        }
+    }
+}
+
+impl RawVertex {
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<RawVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
@@ -759,8 +754,8 @@ impl Vertex {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MeshDataPersistent {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
+    pub(crate) vertices: Vec<RawVertex>,
+    pub(crate) indices: Vec<u32>,
 }
 
 /// Creates a model from vertex/index data.

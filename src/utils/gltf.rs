@@ -401,7 +401,6 @@ fn import_gltf(ctx: &mut crate::Context, data: &[u8]) -> anyhow::Result<Imported
                         joints[3] as u32,
                     ],
                     joint_weights: weights,
-                    ..Default::default()
                 });
             }
 

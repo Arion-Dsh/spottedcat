@@ -1,0 +1,24 @@
+name: Example Checks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check examples
+        run: bash scripts/check_examples.sh

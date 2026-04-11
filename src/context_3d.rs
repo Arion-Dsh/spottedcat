@@ -96,7 +96,7 @@ impl Context {
         let id = self.registry.model_3d.next_mesh_id;
         self.registry.model_3d.next_mesh_id += 1;
         let mesh_data = crate::model::MeshDataPersistent {
-            vertices: vertices.to_vec(),
+            vertices: vertices.iter().map(|&v| v.into()).collect(),
             indices: indices.to_vec(),
         };
 

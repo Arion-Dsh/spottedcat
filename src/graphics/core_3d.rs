@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::drawable::DrawCommand3D;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
 use crate::image::ImageEntry;
-use crate::model::{Bone, SkinData, Vertex};
+use crate::model::{Bone, RawVertex, SkinData};
 
 use super::core::Graphics;
 use super::image_ops::resolve_image_uv;
@@ -384,7 +384,7 @@ impl Graphics {
                 module: &model_shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::layout()],
+                buffers: &[RawVertex::layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -430,7 +430,7 @@ impl Graphics {
                     entry_point: Some("vs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &[
-                        Vertex::layout(),
+                        RawVertex::layout(),
                         wgpu::VertexBufferLayout {
                             array_stride: 64,
                             step_mode: wgpu::VertexStepMode::Instance,
@@ -527,7 +527,7 @@ impl Graphics {
                 module: &shadow_shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Vertex::layout()],
+                buffers: &[RawVertex::layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -557,7 +557,7 @@ impl Graphics {
                     entry_point: Some("vs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &[
-                        Vertex::layout(),
+                        RawVertex::layout(),
                         wgpu::VertexBufferLayout {
                             array_stride: std::mem::size_of::<[[f32; 4]; 4]>()
                                 as wgpu::BufferAddress,

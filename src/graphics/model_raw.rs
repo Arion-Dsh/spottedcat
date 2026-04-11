@@ -1,4 +1,4 @@
-use crate::model::{SceneGlobals, Vertex};
+use crate::model::{RawVertex, SceneGlobals};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 
@@ -619,7 +619,7 @@ pub struct MeshData {
 }
 
 impl MeshData {
-    pub fn new(device: &wgpu::Device, vertices: &[Vertex], indices: &[u32]) -> Self {
+    pub fn new(device: &wgpu::Device, vertices: &[RawVertex], indices: &[u32]) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("mesh_vertex_buffer"),
             size: std::mem::size_of_val(vertices) as u64,
@@ -641,7 +641,7 @@ impl MeshData {
         }
     }
 
-    pub fn upload(&self, queue: &wgpu::Queue, vertices: &[Vertex], indices: &[u32]) {
+    pub fn upload(&self, queue: &wgpu::Queue, vertices: &[RawVertex], indices: &[u32]) {
         queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
         queue.write_buffer(&self.index_buffer, 0, bytemuck::cast_slice(indices));
     }
