@@ -758,6 +758,10 @@ impl App {
                     first_draw_logged = true;
                 }
                 self.platform.redraw_requested = false;
+                // Update interpolation alpha for this render frame
+                let alpha = self.timing.alpha();
+                self.ctx.set_draw_alpha(alpha);
+
                 // Initialize frame context
                 self.ctx.begin_frame();
                 if let Some(spot) = self.scene.spot_mut() {

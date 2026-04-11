@@ -39,6 +39,11 @@ pub(crate) use self::android::PlatformData;
 ))]
 pub(crate) use self::desktop::PlatformData;
 
+/// A helper for running game logic at a fixed frequency while rendering at a variable rate.
+///
+/// It maintains a 'lag' accumulator of elapsed time and executes updates in discrete steps.
+/// This decoupling allows the game simulation to remain deterministic and consistent
+/// regardless of the display refresh rate.
 pub(crate) struct FixedTimestep {
     previous: Option<Instant>,
     lag: Duration,

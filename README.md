@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.8.0"
+spottedcat = "0.9.0"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.8.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.9.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
@@ -139,6 +139,7 @@ For comprehensive guidance on generating games and working with the `spottedcat`
 - **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` and rendered via `target.draw(ctx, &image, ...)`. Use the provided `screen` in `Spot::draw` as the default target.
 - **`Model`**: 3D model handle created via `spottedcat::model::create(...)` and rendered via `spottedcat::model::*`.
 - **`Text`**: High-level text structure for 2D layout.
+- **`Interpolated<T>`**: Wrapper for game state that provides smooth interpolation between fixed logic updates.
 - **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
 - **`DrawOption3D`**: Configuration for 3D model placement (position, rotation, scale).
 
@@ -179,6 +180,28 @@ Step semantics are intentionally limited to "today" for cross-platform consisten
 ### Model 3D
 
 The `model-3d` feature gates the 3D model stack, including `Model`, `DrawOption3D`, custom model shaders, mesh loaders, and lighting. This feature is **disabled by default** to minimize the engine's footprint when only 2D features are needed.
+
+## Performance & Timing
+
+Spottedcat uses a decoupled main loop to ensure consistent game logic across different hardware while maintaining smooth visuals:
+
+- **Fixed-Step Update (`UPS`)**: `Spot::update` is called at a fixed frequency (defaults to 60Hz). All physics and gameplay logic should happen here. The `dt` provided is constant.
+- **Variable-Rate Draw (`FPS`)**: `Spot::draw` is called as fast as the display refresh rate or OS allows.
+- **State Interpolation**: To prevent "stutter" when FPS and UPS don't match, use the `Interpolated<T>` wrapper for game state (like positions). It automatically smooths out values in `draw` calls using the engine's internal interpolation factor.
+
+```rust
+// In your Spot implementation
+fn draw(&mut self, ctx: &mut Context, screen: Image) {
+    // value(ctx) returns the smoothly interpolated position
+    let pos = self.player_pos.value(ctx); 
+    screen.draw(ctx, &self.player_img, DrawOption::new().with_position(pos));
+}
+```
+
+## Advanced 2D Features
+
+### Automatic Texture Atlasing
+For performance efficiency, Spottedcat automatically manages small images (<512px) in a shared internal texture atlas. This reduces GPU state changes and draw calls under the hood without requiring any manual sprite sheet management from the developer.
 
 ## Custom Shaders
 

@@ -132,25 +132,6 @@ impl std::hash::Hash for Image {
 }
 
 impl Image {
-    pub(crate) fn new_at_bounds(
-        id: u32,
-        texture_id: u32,
-        x: Pt,
-        y: Pt,
-        width: Pt,
-        height: Pt,
-        pixel_bounds: PixelBounds,
-    ) -> Self {
-        Self {
-            id,
-            texture_id,
-            x,
-            y,
-            width,
-            height,
-            pixel_bounds,
-        }
-    }
 
     #[cfg(feature = "utils")]
     pub(crate) fn new_from_rgba8_with_pixels(

@@ -140,7 +140,13 @@ impl Context {
     }
 
     /// Returns the interpolation factor (0.0 to 1.0) between the previous and current logic update.
-    /// This is useful for smooth rendering at frame rates higher than the update rate.
+    ///
+    /// This factor represents how far along we are between the most recent logic `update`
+    /// and the next scheduled update. It is used to calculate intermediate positions
+    /// for smooth rendering at frame rates higher than the update rate (e.g., 60Hz logic 
+    /// on a 144Hz display).
+    ///
+    /// Usually, this is used automatically the [`Interpolated`][crate::math::Interpolated] wrapper.
     pub fn draw_interpolation(&self) -> f32 {
         self.runtime.draw_alpha
     }

@@ -1,7 +1,7 @@
 //! Centralized 3D math utilities using ultraviolet internally.
 //! All public APIs use standard Rust arrays to hide implementation details.
 
-use ultraviolet::{Lerp, Slerp};
+use ultraviolet::Slerp;
 
 /// 4x4 Matrix operations.
 pub mod mat4 {
@@ -109,6 +109,35 @@ impl Interpolatable for [f32; 4] {
 ///
 /// It keeps track of the 'previous' and 'current' values and automatically
 /// performs linear interpolation when requested.
+///
+/// ### Example
+///
+/// ```rust
+/// use spottedcat::{Spot, Context, Image, DrawOption, Pt};
+/// use spottedcat::math::Interpolated;
+///
+/// struct Player {
+///     pos: Interpolated<[f32; 2]>,
+/// }
+///
+/// impl Spot for Player {
+///     fn initialize(_ctx: &mut Context) -> Self {
+///         Self { pos: Interpolated::new([0.0, 0.0]) }
+///     }
+///
+///     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {
+///         // Update the target value. Previous becomes current.
+///         let next_x = self.pos.target()[0] + 1.0;
+///         self.pos.update([next_x, 0.0]);
+///     }
+///
+///     fn draw(&mut self, ctx: &mut Context, screen: Image) {
+///         // Read the smoothly interpolated value for the current render frame
+///         let pos = self.pos.value(ctx);
+///         screen.draw(ctx, &ctx.registry.images[1].unwrap().id, DrawOption::new().with_position(pos));
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Interpolated<T> {
     current: T,

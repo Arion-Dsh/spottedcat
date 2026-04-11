@@ -2,7 +2,9 @@
 //!
 //! Spottedcat is a lightweight cross-platform 2D/3D game engine built with Rust and wgpu.
 //! It provides a simple API for rendering, input, audio, text, and scene management across desktop, web, iOS, and Android.
-//! Designed for fast prototyping and creative interactive projects, it aims to stay small, practical, and easy to use.
+//!
+//! The engine uses a decoupled main loop with a fixed-step update (UPS) for logic and a variable refresh rate (FPS) for rendering,
+//! combined with built-in state interpolation for smooth visuals.
 //!
 //! ## Basic Example
 //!
@@ -280,7 +282,7 @@ pub fn mouse_pos(ctx: &Context) -> Option<(Pt, Pt)> {
     ctx.input().cursor_position()
 }
 
-/// Alias for [`mouse_pos`][crate::mouse_pos].
+/// Alias for [`mouse_pos`].
 pub fn cursor_position(ctx: &Context) -> Option<(Pt, Pt)> {
     mouse_pos(ctx)
 }

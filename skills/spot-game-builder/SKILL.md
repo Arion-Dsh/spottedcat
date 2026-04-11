@@ -79,9 +79,10 @@ Typical shape:
 1. `initialize`
 Load or register assets, set camera/light/fog defaults, and create the initial state.
 2. `update`
-Read input, advance simulation with `dt.as_secs_f32()`, and queue scene changes if needed.
+Read input and advance simulation. This runs at a **fixed frequency** (usually 60Hz), so `dt` is constant. All physics/logic should be here.
 3. `draw`
-Issue all draw calls for the frame using the provided `screen: Image` as the target (e.g., `screen.draw(ctx, &self.image, opts)`). Keep gameplay mutation out of rendering unless the pattern is trivial and already established in the repo.
+Issue draw calls for the frame. This runs at the **display refresh rate** (variable). Use `ctx.draw_interpolation()` or `Interpolated<T>` for smooth movement.
+Keep gameplay mutation out of rendering unless the pattern is trivial and already established in the repo.
 4. `resumed` / `suspended`
 Use when platform lifecycle matters, especially on mobile.
 5. `remove`
@@ -99,6 +100,7 @@ Honor these rules:
 ### 6. Map common game needs to `spottedcat`
 
 - sprite or HUD element -> `Image::new` plus `target.draw(ctx, &image, opts)`
+- smooth movement -> use `Interpolated<T>` for positions/rotations and read via `.value(ctx)` in `draw`
 - on-screen text -> `register_font`, `Text::new`, `target.draw(ctx, &text, opts)`
 - player movement -> `key_down`, `key_pressed`, `mouse_down`, `mouse_pos`, `touches`
 - simple sound feedback -> `register_sound` + `play_sound`, or `play_sine` for fast smoke tests
