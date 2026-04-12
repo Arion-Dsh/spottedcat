@@ -73,7 +73,9 @@ impl Spot for AnimatedGltfApp {
         for idx in 0..actor.clip_count() {
             eprintln!("[animated_gltf] clip {idx}: {:?}", actor.clip_name(idx));
         }
-        eprintln!("[animated_gltf] controls: [ and ] switch clips, 1-9 jump clips, Space pause/play, Left/Right rotate");
+        eprintln!(
+            "[animated_gltf] controls: [ and ] switch clips, 1-9 jump clips, Space pause/play, Left/Right rotate"
+        );
 
         Self { actor, yaw: 0.0 }
     }
@@ -122,7 +124,9 @@ impl Spot for AnimatedGltfApp {
 
 fn main() {
     let path = std::env::args().nth(1).unwrap_or_else(|| {
-        eprintln!("usage: cargo run --example animated_gltf --features gltf -- <path-to-model.glb>");
+        eprintln!(
+            "usage: cargo run --example animated_gltf --features gltf -- <path-to-model.glb>"
+        );
         std::process::exit(2);
     });
     let _ = MODEL_PATH.set(path);

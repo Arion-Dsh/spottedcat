@@ -1,4 +1,10 @@
 use bytemuck::{Pod, Zeroable};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct ExtraTextureBindGroupKey {
+    pub texture_ids: [u32; 4],
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
@@ -87,6 +93,7 @@ impl InstanceData {
 pub struct ImageRenderer {
     pub(crate) sampler: wgpu::Sampler,
     pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,
+    pub(crate) extra_texture_bind_group_layout: wgpu::BindGroupLayout,
     pub(crate) user_globals_bind_group_layout: wgpu::BindGroupLayout,
     pub(crate) engine_globals_bind_group_layout: wgpu::BindGroupLayout,
     pub(crate) user_globals_bind_group: wgpu::BindGroup,
@@ -103,6 +110,7 @@ pub struct ImageRenderer {
     pub(crate) instance_stride: u32,
     next_instance: u32,
     max_instances: u32,
+    extra_texture_bind_groups: HashMap<ExtraTextureBindGroupKey, wgpu::BindGroup>,
 }
 
 impl ImageRenderer {
@@ -172,6 +180,59 @@ impl ImageRenderer {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let extra_texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("image_extra_texture_bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
@@ -257,6 +318,7 @@ impl ImageRenderer {
         Self {
             sampler,
             texture_bind_group_layout,
+            extra_texture_bind_group_layout,
             user_globals_bind_group_layout,
             engine_globals_bind_group_layout,
             user_globals_bind_group,
@@ -273,6 +335,7 @@ impl ImageRenderer {
             instance_stride,
             next_instance: 0,
             max_instances,
+            extra_texture_bind_groups: HashMap::new(),
         }
     }
 
@@ -353,6 +416,60 @@ impl ImageRenderer {
         })
     }
 
+    fn create_extra_texture_bind_group(
+        &self,
+        device: &wgpu::Device,
+        texture_views: [&wgpu::TextureView; 4],
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("image_extra_texture_bg"),
+            layout: &self.extra_texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(texture_views[0]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(texture_views[1]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(texture_views[2]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(texture_views[3]),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        })
+    }
+
+    pub fn extra_texture_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        texture_ids: [u32; 4],
+        texture_views: [&wgpu::TextureView; 4],
+    ) -> wgpu::BindGroup {
+        let key = ExtraTextureBindGroupKey { texture_ids };
+        if !self.extra_texture_bind_groups.contains_key(&key) {
+            let bind_group = self.create_extra_texture_bind_group(device, texture_views);
+            self.extra_texture_bind_groups.insert(key, bind_group);
+        }
+        self.extra_texture_bind_groups
+            .get(&key)
+            .expect("extra texture bind group must exist after insertion")
+            .clone()
+    }
+
+    pub fn clear_extra_texture_bind_group_cache(&mut self) {
+        self.extra_texture_bind_groups.clear();
+    }
+
     pub fn begin_frame(&mut self) {
         self.next_instance = 0;
         self.next_user_globals = 0;
@@ -389,6 +506,7 @@ impl ImageRenderer {
         pass: &mut wgpu::RenderPass<'rp>,
         pipeline: &'rp wgpu::RenderPipeline,
         texture_bind_group: &wgpu::BindGroup,
+        extra_texture_bind_group: Option<&wgpu::BindGroup>,
         instance_range: std::ops::Range<u32>,
         user_globals_offset: u32,
         engine_globals_offset: u32,
@@ -401,8 +519,22 @@ impl ImageRenderer {
         let end = instance_range.end as u64 * self.instance_stride as u64;
         pass.set_vertex_buffer(0, self.instance_buffer.slice(start..end));
         pass.set_bind_group(0, texture_bind_group, &[]);
-        pass.set_bind_group(1, &self.user_globals_bind_group, &[user_globals_offset]);
-        pass.set_bind_group(2, &self.engine_globals_bind_group, &[engine_globals_offset]);
+        let globals_group_index = if let Some(extra_texture_bind_group) = extra_texture_bind_group {
+            pass.set_bind_group(1, extra_texture_bind_group, &[]);
+            2
+        } else {
+            1
+        };
+        pass.set_bind_group(
+            globals_group_index,
+            &self.user_globals_bind_group,
+            &[user_globals_offset],
+        );
+        pass.set_bind_group(
+            globals_group_index + 1,
+            &self.engine_globals_bind_group,
+            &[engine_globals_offset],
+        );
         let instance_count = instance_range.end - instance_range.start;
         pass.draw(0..4, 0..instance_count);
     }

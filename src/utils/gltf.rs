@@ -218,7 +218,8 @@ impl AnimatedModel {
             return;
         };
 
-        let sample_time = sample_time_for_clip(self.current_time_sec, clip.duration_sec, self.looping);
+        let sample_time =
+            sample_time_for_clip(self.current_time_sec, clip.duration_sec, self.looping);
         let mut local_transforms = skin.default_transforms.clone();
 
         for (node_idx, track) in &clip.channels.translation_tracks {
@@ -254,7 +255,6 @@ impl AnimatedModel {
 
         ctx.update_bone_matrices(skin.skin_id, &bone_matrices);
     }
-
 }
 
 impl crate::Drawable for &AnimatedModel {

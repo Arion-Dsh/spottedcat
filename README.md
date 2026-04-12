@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.9.1"
+spottedcat = "0.9.2"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.9.1", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.9.2", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
@@ -205,25 +205,26 @@ For performance efficiency, Spottedcat automatically manages small images (<512p
 
 ## Custom Shaders
 
-You can inject custom WGSL code into the fragment shader using `register_image_shader` (2D) and `register_model_shader` (3D).
+You can register custom WGSL shaders for `Image` rendering with `register_image_shader_desc` (2D) and custom full WGSL model shaders with `register_model_shader` (3D).
 
-### 3D Shader Exposed Variables
+For the current 2D `Image` shader contract, including full WGSL registration, `group/binding` layout, `screen/history` inputs, and `ShaderOpts` mapping, see [`docs/image-shader.md`](docs/image-shader.md).
 
-When using custom shaders for 3D models, your code is injected at `USER_FS_HOOK` at the end of the fragment shader. The following variables are available to read or modify:
+For the current 3D `Model` shader contract, including `group/binding` layout and required entry points, see [`docs/model-shader.md`](docs/model-shader.md).
 
-- `final_color: vec4<f32>`: The computed PBR color (RGB) and opacity (A). You can modify this to change the final output.
-- `in: VertexOutput`: Contains `in.uv`, `in.normal`, `in.world_pos`, and `in.clip_position`.
-- `user_globals: array<vec4<f32>, 16>`: Custom uniform data passed from your Rust code via `ShaderOpts`.
-- `scene: SceneGlobals`: Contains `scene.camera_pos`, `scene.ambient_color`, and `scene.lights`.
-- `model_globals: ModelGlobals`: Contains `model_globals.mvp`, `model_globals.model`, `model_globals.extra` (x: opacity), and UV transforms.
-- **Textures** (with `s_sampler`): `t_albedo`, `t_pbr`, `t_normal`, `t_ao`, `t_emissive`.
+To avoid writing full WGSL from scratch, use the built-in template helpers:
 
-Example 3D shader hook:
-```wgsl
-// Make the model pulse based on the extra opacity parameter
-let pulse = (sin(model_globals.extra.x * 10.0) + 1.0) * 0.5;
-final_color = vec4<f32>(final_color.rgb * pulse, final_color.a);
-```
+- `spottedcat::image_shader_template()`
+- `spottedcat::model_shader_template()`
+
+The recommended 2D path is `spottedcat::ImageShaderTemplate` plus `spottedcat::register_image_shader_template(...)`, which exposes explicit `shared`, `vertex_body`, and `fragment_body` slots.
+
+The recommended 3D path is `spottedcat::ModelShaderTemplate` plus `spottedcat::register_model_shader_template(...)`, which exposes `shared` and `fragment_body` slots on top of the engine's fixed model pipeline contract.
+
+### 3D Shader Layout
+
+Custom 3D model shaders now use full WGSL sources. See [`docs/model-shader.md`](docs/model-shader.md) for the binding layout, required vertex inputs, and entry-point names.
+
+See `examples/image_shader_template.rs` and `examples/metal_sphere.rs` for template-based examples, and `examples/advanced_image_shader_full.rs` plus `examples/advanced_model_shader_full.rs` for the advanced full-WGSL path.
 
 ## Platform Support
 

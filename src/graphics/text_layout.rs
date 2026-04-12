@@ -99,7 +99,8 @@ impl Graphics {
                 let glyph_id = scaled.glyph_id(ch);
 
                 if let Some(p) = prev {
-                    caret_pos[0] += Pt::from_physical_px(scaled.kern(p, glyph_id) as f64, scale_factor);
+                    caret_pos[0] +=
+                        Pt::from_physical_px(scaled.kern(p, glyph_id) as f64, scale_factor);
                 }
                 prev = Some(glyph_id);
 
@@ -117,7 +118,8 @@ impl Graphics {
                     self.glyph_cache.insert(cache_key, e.clone());
                     e
                 } else {
-                    caret_pos[0] += Pt::from_physical_px(scaled.h_advance(glyph_id) as f64, scale_factor);
+                    caret_pos[0] +=
+                        Pt::from_physical_px(scaled.h_advance(glyph_id) as f64, scale_factor);
                     continue;
                 };
 
@@ -129,8 +131,10 @@ impl Graphics {
                     continue;
                 };
 
-                let draw_x = caret_pos[0] + Pt::from_physical_px(entry.offset[0] as f64, scale_factor);
-                let draw_y = baseline_y + Pt::from_physical_px(entry.offset[1] as f64, scale_factor);
+                let draw_x =
+                    caret_pos[0] + Pt::from_physical_px(entry.offset[0] as f64, scale_factor);
+                let draw_y =
+                    baseline_y + Pt::from_physical_px(entry.offset[1] as f64, scale_factor);
 
                 let rel_x = draw_x.as_f32() * sx;
                 let rel_y = draw_y.as_f32() * sy;
@@ -214,6 +218,9 @@ impl Graphics {
 
                 self.resolved_draws.push(ResolvedDraw {
                     texture_id: img_entry.texture_id,
+                    extra_inputs: [super::core::ResolvedImageShaderInput::Texture(
+                        img_entry.texture_id,
+                    ); 4],
                     bounds: img_entry.bounds,
                     uv_rect: resolve_image_uv(img_entry, texture_entry),
                     opts: glyph_opts,

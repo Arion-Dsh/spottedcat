@@ -12,18 +12,29 @@ impl Spot for SevenLevelNestTestSpot {
 
         // Level 1-7 - Render targets
         for _ in 0..6 {
-            images.push(spottedcat::Texture::new_render_target(ctx, Pt::from(200.0), Pt::from(200.0)).view());
+            images.push(
+                spottedcat::Texture::new_render_target(ctx, Pt::from(200.0), Pt::from(200.0))
+                    .view(),
+            );
         }
         // Final level at half size
-        images.push(spottedcat::Texture::new_render_target(ctx, Pt::from(100.0), Pt::from(100.0)).view());
+        images.push(
+            spottedcat::Texture::new_render_target(ctx, Pt::from(100.0), Pt::from(100.0)).view(),
+        );
 
         // Load default font
         const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
         let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
-        let white_image = spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255]).expect("Failed to create white image");
+        let white_image =
+            spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255])
+                .expect("Failed to create white image");
 
-        Self { images, white_image, font_id }
+        Self {
+            images,
+            white_image,
+            font_id,
+        }
     }
 
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
@@ -45,7 +56,8 @@ impl Spot for SevenLevelNestTestSpot {
                 ctx,
                 &self.white_image,
                 1, // Built-in tint shader
-                DrawOption::default().with_scale([target.width().as_f32(), target.height().as_f32()]),
+                DrawOption::default()
+                    .with_scale([target.width().as_f32(), target.height().as_f32()]),
                 spottedcat::ShaderOpts::default().with_color(colors[i]),
             );
         }

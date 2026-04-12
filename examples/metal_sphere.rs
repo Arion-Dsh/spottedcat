@@ -1,4 +1,7 @@
-use spottedcat::{Context, DrawOption3D, Model, ShaderOpts, Spot, WindowConfig};
+use spottedcat::{
+    Context, DrawOption3D, Model, ModelShaderTemplate, ShaderOpts, Spot, WindowConfig,
+    register_model_shader_template,
+};
 use std::time::Duration;
 
 struct MetalSphere {
@@ -12,24 +15,31 @@ impl Spot for MetalSphere {
         // 1. Create a smooth sphere
         let sphere = spottedcat::model::create_sphere(ctx, 1.0).unwrap();
 
-        // 2. Register a custom "metallic" shader
-        // It uses the normal to calculate specular reflection
-        let shader_src = r#"
-            fn user_fs_hook() {
-                // N and V are available in the fs_main scope of model.wgsl
-                let light_dir = normalize(scene.lights[0].position.xyz);
-                let half_dir = normalize(V + light_dir);
-                
-                let diff_val = max(dot(N, light_dir), 0.0);
-                let spec = pow(max(dot(N, half_dir), 0.0), 32.0);
-                
-                let base_color = vec3<f32>(0.8, 0.8, 0.9); // Silver-ish
-                let final_rgb = base_color * (diff_val * 0.5 + 0.2) + vec3<f32>(spec);
-                
-                final_color = vec4<f32>(final_rgb, final_color.a);
-            }
-        "#;
-        let shader_id = spottedcat::register_model_shader(ctx, shader_src);
+        // 2. Register a metallic shader from the model template API.
+        let shader_id = register_model_shader_template(
+            ctx,
+            ModelShaderTemplate::new()
+                .with_shared(
+                    r#"
+fn tint(c: vec3<f32>) -> vec3<f32> {
+    return c * vec3<f32>(0.92, 0.96, 1.0);
+}
+"#,
+                )
+                .with_fragment_body(
+                    r#"
+let N = normalize(in.normal);
+let V = normalize(scene.camera_pos.xyz - in.world_pos);
+let light_dir = normalize(scene.lights[0].position.xyz);
+let half_dir = normalize(V + light_dir);
+let diff = max(dot(N, light_dir), 0.0);
+let spec = pow(max(dot(N, half_dir), 0.0), 64.0);
+let fresnel = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+let final_rgb = tint(src.rgb) * (0.18 + diff * 0.72) + vec3<f32>(spec * (1.2 + fresnel));
+return vec4<f32>(final_rgb, src.a * model_globals.extra.x);
+"#,
+                ),
+        );
 
         Self {
             sphere,

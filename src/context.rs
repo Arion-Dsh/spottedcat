@@ -3,6 +3,7 @@ use crate::audio::AudioSystem;
 use crate::context_3d::{Model3dRegistry, Model3dRuntime};
 use crate::drawable::DrawCommand;
 use crate::graphics::core::Graphics;
+use crate::image_shader::ImageShaderDesc;
 use crate::input::InputManager;
 use crate::pt::Pt;
 
@@ -70,7 +71,7 @@ pub(crate) struct ResourceRegistry {
     #[cfg(feature = "model-3d")]
     pub(crate) model_3d: Model3dRegistry,
     pub(crate) fonts: HashMap<u32, Vec<u8>>,
-    pub(crate) image_shaders: HashMap<u32, String>,
+    pub(crate) image_shaders: HashMap<u32, ImageShaderDesc>,
     pub(crate) next_texture_id: u32,
     pub(crate) next_image_id: u32,
     pub(crate) next_font_id: u32,
@@ -143,7 +144,7 @@ impl Context {
     ///
     /// This factor represents how far along we are between the most recent logic `update`
     /// and the next scheduled update. It is used to calculate intermediate positions
-    /// for smooth rendering at frame rates higher than the update rate (e.g., 60Hz logic 
+    /// for smooth rendering at frame rates higher than the update rate (e.g., 60Hz logic
     /// on a 144Hz display).
     ///
     /// Usually, this is used automatically the [`Interpolated`][crate::math::Interpolated] wrapper.
@@ -161,13 +162,8 @@ impl Context {
         #[cfg(feature = "model-3d")]
         self.register_image(1, 1, Pt::from(1.0), Pt::from(1.0), &[128, 128, 255, 255]); // ID 3 (Normal)
 
-        let text_shader_src = r#"
-            fn user_fs_hook() {
-                let tint = user_globals[0];
-                color = vec4<f32>(color.rgb * tint.rgb, color.a * tint.a);
-            }
-        "#;
-        self.register_image_shader(text_shader_src);
+        let text_shader_src = include_str!("shaders/text_tint.wgsl");
+        self.register_image_shader_desc(ImageShaderDesc::from_wgsl(text_shader_src));
     }
 
     pub(crate) fn set_window_logical_size(&mut self, width: Pt, height: Pt) {
@@ -275,14 +271,15 @@ impl Context {
         while self.registry.textures.len() <= texture_id as usize {
             self.registry.textures.push(None);
         }
-        self.registry.textures[texture_id as usize] = Some(crate::graphics::texture::TextureEntry::new_sampled(
-            width,
-            height,
-            pixel_width,
-            pixel_height,
-            image_id,
-            std::sync::Arc::from(rgba),
-        ));
+        self.registry.textures[texture_id as usize] =
+            Some(crate::graphics::texture::TextureEntry::new_sampled(
+                width,
+                height,
+                pixel_width,
+                pixel_height,
+                image_id,
+                std::sync::Arc::from(rgba),
+            ));
 
         let bounds = crate::image::Bounds::new(Pt(0.0), Pt(0.0), width, height);
         while self.registry.images.len() <= image_id as usize {
@@ -354,11 +351,14 @@ impl Context {
 
         let physical_w_ratio = image.pixel_bounds.width as f32 / image.width.0.max(1e-5);
         let physical_h_ratio = image.pixel_bounds.height as f32 / image.height.0.max(1e-5);
-        
-        let parent_pixel_bounds = self.registry.images[image.index()].as_ref().unwrap().pixel_bounds;
+
+        let parent_pixel_bounds = self.registry.images[image.index()]
+            .as_ref()
+            .unwrap()
+            .pixel_bounds;
         let parent_pixel_x = parent_pixel_bounds.x;
         let parent_pixel_y = parent_pixel_bounds.y;
-        
+
         let pixel_x = parent_pixel_x + (bounds.x.0 * physical_w_ratio).round() as u32;
         let pixel_y = parent_pixel_y + (bounds.y.0 * physical_h_ratio).round() as u32;
         let pixel_width = (bounds.width.0 * physical_w_ratio).round() as u32;
@@ -366,7 +366,12 @@ impl Context {
 
         let entry = crate::image::ImageEntry::new(
             image.texture_id(),
-            crate::image::Bounds::new(image.x + bounds.x, image.y + bounds.y, bounds.width, bounds.height),
+            crate::image::Bounds::new(
+                image.x + bounds.x,
+                image.y + bounds.y,
+                bounds.width,
+                bounds.height,
+            ),
             crate::image::PixelBounds {
                 x: pixel_x,
                 y: pixel_y,
@@ -391,12 +396,10 @@ impl Context {
         id
     }
 
-    pub(crate) fn register_image_shader(&mut self, user_functions: &str) -> u32 {
+    pub(crate) fn register_image_shader_desc(&mut self, desc: ImageShaderDesc) -> u32 {
         let id = self.registry.next_image_shader_id;
         self.registry.next_image_shader_id += 1;
-        self.registry
-            .image_shaders
-            .insert(id, user_functions.to_string());
+        self.registry.image_shaders.insert(id, desc);
         self.registry.dirty_assets = true;
         id
     }
@@ -418,15 +421,14 @@ impl Context {
         while self.registry.textures.len() <= texture_id as usize {
             self.registry.textures.push(None);
         }
-        self.registry.textures[texture_id as usize] = Some(
-            crate::graphics::texture::TextureEntry::new_render_target(
+        self.registry.textures[texture_id as usize] =
+            Some(crate::graphics::texture::TextureEntry::new_render_target(
                 width,
                 height,
                 pixel_width,
                 pixel_height,
                 image_id,
-            ),
-        );
+            ));
 
         while self.registry.images.len() <= image_id as usize {
             self.registry.images.push(None);
@@ -632,7 +634,6 @@ impl Context {
                 }
                 return;
             }
-
         }
 
         if std::env::var("SPOT_DEBUG_DRAW").is_ok() {
@@ -658,7 +659,6 @@ impl Context {
 
         self.runtime.draw_list.push(drawable);
     }
-
 }
 
 #[cfg(test)]
@@ -672,7 +672,11 @@ mod tests {
         // Initially no graphics, so NO auto-atlas
         let img1 = ctx.register_image(1, 1, Pt(10.0), Pt(10.0), &[0, 0, 0, 0]);
         let img2 = ctx.register_image(1, 1, Pt(10.0), Pt(10.0), &[0, 0, 0, 0]);
-        assert_ne!(img1.texture_id(), img2.texture_id(), "Should not auto-atlas without graphics");
+        assert_ne!(
+            img1.texture_id(),
+            img2.texture_id(),
+            "Should not auto-atlas without graphics"
+        );
 
         // We can't easily mock Graphics here without a lot of setup,
         // but the logic check in register_image is verified by compilation.

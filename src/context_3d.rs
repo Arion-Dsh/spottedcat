@@ -108,14 +108,16 @@ impl Context {
         id
     }
 
-    /// Registers a custom WGSL shader block for 3D model rendering.
-    pub fn register_model_shader(&mut self, user_functions: &str) -> u32 {
+    /// Registers a full WGSL shader for 3D model rendering.
+    ///
+    /// Custom model shaders must define `vs_main`, `vs_main_instanced`, and `fs_main`.
+    pub fn register_model_shader(&mut self, wgsl_source: &str) -> u32 {
         let id = self.registry.model_3d.next_model_shader_id;
         self.registry.model_3d.next_model_shader_id += 1;
         self.registry
             .model_3d
             .model_shaders
-            .insert(id, user_functions.to_string());
+            .insert(id, wgsl_source.to_string());
         self.registry.dirty_assets = true;
         id
     }

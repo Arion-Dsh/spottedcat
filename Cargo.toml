@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.9.1"
+version = "0.9.2"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -85,6 +85,14 @@ name = "flip_test"
 path = "examples/flip_test.rs"
 
 [[example]]
+name = "advanced_image_shader_full"
+path = "examples/advanced_image_shader_full.rs"
+
+[[example]]
+name = "image_shader_template"
+path = "examples/image_shader_template.rs"
+
+[[example]]
 name = "seven_level_test"
 path = "examples/seven_level_test.rs"
 
@@ -133,6 +141,11 @@ required-features = ["model-3d"]
 [[example]]
 name = "metal_sphere"
 path = "examples/metal_sphere.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "advanced_model_shader_full"
+path = "examples/advanced_model_shader_full.rs"
 required-features = ["model-3d"]
 
 [[example]]

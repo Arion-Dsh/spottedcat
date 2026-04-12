@@ -75,7 +75,15 @@ impl Graphics {
             .font_atlas
             .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Font atlas not initialized"))?
-            .add_region(&mut ctx.registry, scale_factor, logical_w, logical_h, glyph_width, glyph_height, &rgba_data)?;
+            .add_region(
+                &mut ctx.registry,
+                scale_factor,
+                logical_w,
+                logical_h,
+                glyph_width,
+                glyph_height,
+                &rgba_data,
+            )?;
 
         Ok(GlyphEntry {
             image,
