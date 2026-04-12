@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -96,6 +96,10 @@ path = "examples/text_performance_test.rs"
 name = "happy_tree_desktop"
 path = "examples/happy_tree_desktop.rs"
 required-features = ["utils"]
+
+[[example]]
+name = "rgb_image"
+path = "examples/rgb_image.rs"
 
 [[example]]
 name = "one_shot_splash"

@@ -81,6 +81,7 @@ Notes:
 Quick local graphics checks:
 
 - Run `cargo run --example happy_tree_desktop --features utils` to verify encoded image loading on desktop, including the scale-factor-derived default logical size shown in the overlay text.
+- Run `cargo run --example rgb_image` to verify raw `Image::new(...)` RGBA channel order using three solid bars: red, green, and blue.
 - Run `cargo run --example fog_world --features model-3d,effects` to verify distance fog plus height fog on a simple 3D scene before testing the same shaders on Android.
 - Fog parameters are grouped by intent:
   - Physical controls: `with_strength`, `with_distance`, `with_height`
