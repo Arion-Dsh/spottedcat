@@ -1,4 +1,75 @@
-use spottedcat::{Context, DrawOption, Image, Pt, ShaderOpts, Spot, Text, WindowConfig};
+use spottedcat::{
+    Context, DrawOption, Image, ImageShaderDesc, Pt, ShaderOpts, Spot, Text, WindowConfig,
+    register_image_shader_desc,
+};
+
+const FILL_SHADER_SRC: &str = r#"
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+
+@group(1) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;
+
+struct EngineGlobals {
+    screen: vec4<f32>,
+    opacity: f32,
+    shader_opacity: f32,
+    scale_factor: f32,
+    _padding: f32,
+};
+
+@group(2) @binding(0) var<uniform> _sp_internal: EngineGlobals;
+
+struct VsIn {
+    @builtin(vertex_index) vertex_index: u32,
+    @location(0) pos: vec2<f32>,
+    @location(1) rotation: f32,
+    @location(2) size: vec2<f32>,
+    @location(3) uv_rect: vec4<f32>,
+};
+
+struct VsOut {
+    @builtin(position) clip_pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(in: VsIn) -> VsOut {
+    var out: VsOut;
+    var pos_arr = array<vec2<f32>, 4>(vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(-1.0, 1.0), vec2<f32>(1.0, 1.0));
+    var uv_arr = array<vec2<f32>, 4>(vec2<f32>(0.0, 1.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0));
+
+    let local_pos = pos_arr[in.vertex_index];
+    let uv = uv_arr[in.vertex_index];
+    let sw_inv_2 = _sp_internal.screen.x;
+    let sh_inv_2 = _sp_internal.screen.y;
+    let sw_inv = _sp_internal.screen.z;
+    let sh_inv = _sp_internal.screen.w;
+    let tx = in.pos.x * sw_inv_2 - 1.0;
+    let ty = 1.0 - in.pos.y * sh_inv_2;
+    let sx = in.size.x * sw_inv;
+    let sy = in.size.y * sh_inv;
+    let c = cos(in.rotation);
+    let s = sin(in.rotation);
+    let dx = tx - (c * sx * -1.0 - s * sy * 1.0);
+    let dy = ty - (s * sx * -1.0 + c * sy * 1.0);
+
+    out.clip_pos = vec4<f32>(
+        local_pos.x * (c * sx) + local_pos.y * (-s * sy) + dx,
+        local_pos.x * (s * sx) + local_pos.y * (c * sy) + dy,
+        0.0,
+        1.0,
+    );
+    out.uv = vec2<f32>(in.uv_rect.x + uv.x * in.uv_rect.z, in.uv_rect.y + uv.y * in.uv_rect.w);
+    return out;
+}
+
+@fragment
+fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
+    let src = textureSample(tex, samp, in.uv);
+    let fill_color = user_globals[0];
+    return vec4<f32>(fill_color.rgb, src.a * fill_color.a * _sp_internal.opacity * _sp_internal.shader_opacity);
+}
+"#;
 
 struct FlipTest {
     image: Image,
@@ -19,13 +90,8 @@ impl Spot for FlipTest {
             .with_font_size(Pt::from(16.0))
             .with_color([1.0, 1.0, 1.0, 1.0]);
 
-        let fill_shader_src = r#"
-            fn user_fs_hook() {
-                let fill_color = user_globals[0];
-                color = vec4<f32>(fill_color.rgb, color.a * fill_color.a);
-            }
-        "#;
-        let yellow_shader_id = spottedcat::register_image_shader(ctx, fill_shader_src);
+        let yellow_shader_id =
+            register_image_shader_desc(ctx, ImageShaderDesc::from_wgsl(FILL_SHADER_SRC));
 
         Self {
             image,

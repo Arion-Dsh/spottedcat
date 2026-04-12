@@ -1,4 +1,4 @@
-use crate::Pt;
+use crate::{ImageShaderBindings, Pt};
 
 /// Rectangle bounds for defining sub-regions of images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -235,6 +235,26 @@ impl Image {
         options: crate::DrawOption,
         shader_opts: crate::ShaderOpts,
     ) {
+        self.draw_with_shader_bindings(
+            ctx,
+            source,
+            shader_id,
+            options,
+            shader_opts,
+            ImageShaderBindings::default(),
+        );
+    }
+
+    /// Draws a source image into this target with custom image shader bindings.
+    pub fn draw_with_shader_bindings<S: Into<crate::Image>>(
+        self,
+        ctx: &mut crate::Context,
+        source: S,
+        shader_id: u32,
+        options: crate::DrawOption,
+        shader_opts: crate::ShaderOpts,
+        shader_bindings: ImageShaderBindings,
+    ) {
         let source = source.into();
         let target_texture_id = ctx.resolve_target_texture_id(self);
         ctx.push(crate::drawable::DrawCommand::Image(Box::new(
@@ -244,6 +264,7 @@ impl Image {
                 opts: options,
                 shader_id,
                 shader_opts,
+                shader_bindings,
                 size: [source.width, source.height],
             },
         )));
@@ -300,6 +321,7 @@ impl crate::Drawable for &Image {
                 opts: options,
                 shader_id: 0,
                 shader_opts: crate::ShaderOpts::default(),
+                shader_bindings: ImageShaderBindings::default(),
                 size: [self.width, self.height],
             },
         )));

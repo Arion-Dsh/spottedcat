@@ -2,47 +2,6 @@ use crate::model::RawVertex;
 
 use super::core::Graphics;
 
-fn inject_user_hooks(base_template: &str, user_functions: &str) -> String {
-    let mut combined_shader = base_template.to_string();
-
-    if let Some(vs_start) = user_functions.find("fn user_vs_hook") {
-        let vs_body_start = user_functions[vs_start..]
-            .find('{')
-            .map(|i| vs_start + i + 1)
-            .unwrap_or(vs_start);
-        let vs_end = user_functions[vs_body_start..]
-            .find("fn user_fs_hook")
-            .map(|rel| vs_body_start + rel)
-            .unwrap_or(user_functions.len());
-        let vs_body_end = user_functions[..vs_end].rfind('}').unwrap_or(vs_end);
-        let vs_src = user_functions[vs_body_start..vs_body_end].trim();
-        if !vs_src.is_empty() {
-            let marker = "// USER_VS_HOOK";
-            if let Some(pos) = combined_shader.rfind(marker) {
-                combined_shader.insert_str(pos + marker.len(), &format!("\n{{\n{}\n}}", vs_src));
-            }
-        }
-    }
-
-    if let Some(fs_start) = user_functions.find("fn user_fs_hook") {
-        let fs_body_start = user_functions[fs_start..]
-            .find('{')
-            .map(|i| fs_start + i + 1)
-            .unwrap_or(fs_start);
-        let fs_end = user_functions.len();
-        let fs_body_end = user_functions[..fs_end].rfind('}').unwrap_or(fs_end);
-        let fs_src = user_functions[fs_body_start..fs_body_end].trim();
-        if !fs_src.is_empty() {
-            let marker = "// USER_FS_HOOK";
-            if let Some(pos) = combined_shader.rfind(marker) {
-                combined_shader.insert_str(pos + marker.len(), &format!("\n{{\n{}\n}}", fs_src));
-            }
-        }
-    }
-
-    combined_shader
-}
-
 impl Graphics {
     pub(crate) fn create_default_model_pipelines(
         &self,
@@ -188,29 +147,18 @@ impl Graphics {
         (model_pipeline, instanced_model_pipeline)
     }
 
-    pub(crate) fn restore_model_shader(&mut self, shader_id: u32, user_functions: &str) {
-        self.create_custom_model_pipelines(shader_id, user_functions);
+    pub(crate) fn restore_model_shader(&mut self, shader_id: u32, wgsl_source: &str) {
+        self.create_custom_model_pipelines(shader_id, wgsl_source);
     }
 
-    fn create_custom_model_pipelines(&mut self, shader_id: u32, user_functions: &str) {
+    fn create_custom_model_pipelines(&mut self, shader_id: u32, wgsl_source: &str) {
         self.ensure_model_3d();
         let device = &self.device;
         let format = self.config.format;
         let model_3d = self.model_3d.as_mut().expect("ensured");
-        let standard_shader_src =
-            inject_user_hooks(include_str!("../shaders/model.wgsl"), user_functions);
-        let instanced_shader_src = inject_user_hooks(
-            include_str!("../shaders/model_instanced.wgsl"),
-            user_functions,
-        );
-
-        let standard_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("custom_model_shader"),
-            source: wgpu::ShaderSource::Wgsl(standard_shader_src.into()),
-        });
-        let instanced_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("custom_model_instanced_shader"),
-            source: wgpu::ShaderSource::Wgsl(instanced_shader_src.into()),
+            source: wgpu::ShaderSource::Wgsl(wgsl_source.into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -228,7 +176,7 @@ impl Graphics {
             label: Some("custom_model_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &standard_shader,
+                module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[RawVertex::layout()],
@@ -248,7 +196,7 @@ impl Graphics {
             }),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &standard_shader,
+                module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
@@ -265,8 +213,8 @@ impl Graphics {
             label: Some("custom_instanced_model_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &instanced_shader,
-                entry_point: Some("vs_main"),
+                module: &shader,
+                entry_point: Some("vs_main_instanced"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[
                     RawVertex::layout(),
@@ -313,7 +261,7 @@ impl Graphics {
             }),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &instanced_shader,
+                module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {

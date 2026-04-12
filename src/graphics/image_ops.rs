@@ -121,6 +121,7 @@ impl Graphics {
 
     pub(crate) fn rebuild_textures(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
         self.dirty_assets = false;
+        self.image_renderer.clear_extra_texture_bind_group_cache();
         #[cfg(feature = "model-3d")]
         if let Some(model_3d) = self.model_3d_mut() {
             model_3d.model_renderer.clear_texture_bind_group_cache();

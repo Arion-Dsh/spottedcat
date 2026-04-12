@@ -66,6 +66,7 @@ mod glyph_cache;
 mod graphics;
 pub mod image;
 mod image_raw;
+mod image_shader;
 mod input;
 mod key;
 mod launch;
@@ -78,6 +79,7 @@ mod platform_events;
 mod pt;
 mod scenes;
 mod shader_opts;
+mod shader_templates;
 mod sound;
 mod splash;
 pub mod text;
@@ -98,7 +100,11 @@ pub use drawable_3d::DrawOption3D;
 #[cfg(feature = "effects")]
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
 
+pub use graphics::texture::Texture;
 pub use image::{Bounds, Image};
+pub use image_shader::{
+    ImageShaderBindings, ImageShaderBlendMode, ImageShaderDesc, ImageShaderInput,
+};
 pub use input::InputManager;
 pub use key::Key;
 pub use launch::{WindowConfig, run};
@@ -109,10 +115,26 @@ pub use platform_events::PlatformEvent;
 pub use pt::Pt;
 pub use scenes::{Spot, quit, switch_scene, switch_scene_with};
 pub use shader_opts::ShaderOpts;
+pub use shader_templates::{
+    ImageShaderTemplate, ModelShaderTemplate, image_shader_template, model_shader_template,
+};
+
+pub type ImageShaderTemplateBuilder = shader_templates::ImageShaderTemplate;
+pub type ModelShaderTemplateBuilder = shader_templates::ModelShaderTemplate;
+
+#[cfg(test)]
+mod export_smoke_tests {
+    #[test]
+    fn image_template_exports_exist() {
+        let _ = super::image_shader_template();
+        let _ = super::ImageShaderTemplate::new();
+        let _fn_ptr: fn(&mut super::Context, super::ImageShaderTemplate) -> u32 =
+            super::register_image_shader_template;
+    }
+}
 pub use sound::*;
 pub use splash::OneShotSplash;
 pub use text::Text;
-pub use graphics::texture::Texture;
 pub use touch::{TouchInfo, TouchPhase};
 
 // --- Functional API ---
@@ -122,11 +144,20 @@ pub fn register_font(ctx: &mut Context, font_data: Vec<u8>) -> u32 {
     ctx.register_font(font_data)
 }
 
-/// Registers a custom WGSL fragment shader extension for image rendering.
-///
-/// The shader should define a `user_fs_hook()` function to modify the output color.
-pub fn register_shader(ctx: &mut Context, user_functions: &str) -> u32 {
-    ctx.register_image_shader(user_functions)
+/// Registers a custom image shader using the descriptor API.
+pub fn register_image_shader_desc(ctx: &mut Context, desc: ImageShaderDesc) -> u32 {
+    ctx.register_image_shader_desc(desc)
+}
+
+/// Registers an image shader generated from the template API.
+pub fn register_image_shader_template(ctx: &mut Context, template: ImageShaderTemplate) -> u32 {
+    ctx.register_image_shader_desc(template.build_desc())
+}
+
+#[cfg(feature = "model-3d")]
+/// Registers a model shader generated from the template API.
+pub fn register_model_shader_template(ctx: &mut Context, template: ModelShaderTemplate) -> u32 {
+    ctx.register_model_shader(&template.build())
 }
 
 /// Creates a logical point value ([`Pt`][crate::Pt]) from a scalar.
@@ -149,7 +180,6 @@ pub fn unregister_sound(ctx: &mut Context, sound_id: u32) {
 }
 
 /// Forces pending asset compression work to run immediately.
-
 
 #[cfg(feature = "model-3d")]
 /// Sets camera eye, target and up vectors in one call.
@@ -361,6 +391,7 @@ mod tests {
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
+            shader_bindings: ImageShaderBindings::default(),
             size: img_size,
         })));
         assert_eq!(
@@ -379,6 +410,7 @@ mod tests {
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
+            shader_bindings: ImageShaderBindings::default(),
             size: img_size,
         })));
         assert_eq!(
@@ -397,6 +429,7 @@ mod tests {
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
+            shader_bindings: ImageShaderBindings::default(),
             size: img_size,
         })));
         assert_eq!(
@@ -415,6 +448,7 @@ mod tests {
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
+            shader_bindings: ImageShaderBindings::default(),
             size: img_size,
         })));
         assert_eq!(
@@ -433,6 +467,7 @@ mod tests {
             opts,
             shader_id: 0,
             shader_opts: ShaderOpts::default(),
+            shader_bindings: ImageShaderBindings::default(),
             size: img_size,
         })));
         assert_eq!(

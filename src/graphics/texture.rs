@@ -1,6 +1,6 @@
 use crate::Pt;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_GPU_TEXTURE_ID: AtomicU64 = AtomicU64::new(1);
 

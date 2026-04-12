@@ -504,7 +504,6 @@ impl Text {
             ),
         }
     }
-
 }
 
 impl crate::Drawable for &Text {

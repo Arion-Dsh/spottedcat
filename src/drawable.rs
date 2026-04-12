@@ -3,6 +3,7 @@ use crate::ShaderOpts;
 use crate::Text;
 #[cfg(feature = "model-3d")]
 pub(crate) use crate::drawable_3d::DrawCommand3D;
+use crate::image_shader::ImageShaderBindings;
 
 /// Trait for objects that can be drawn into an [`Image`][crate::Image].
 pub trait Drawable {
@@ -23,6 +24,7 @@ pub(crate) struct ImageCommand {
     pub opts: DrawOption,
     pub shader_id: u32,
     pub shader_opts: ShaderOpts,
+    pub shader_bindings: ImageShaderBindings,
     pub size: [Pt; 2],
 }
 

@@ -685,14 +685,14 @@ pub struct Vertex {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, PartialEq, Default)]
 pub(crate) struct RawVertex {
-    pub pos: [f32; 3],          // 0..12
-    _pad1: f32,                 // 12..16
-    pub uv: [f32; 2],           // 16..24
-    _pad2: [f32; 2],            // 24..32
-    pub normal: [f32; 3],       // 32..44
-    _pad3: f32,                 // 44..48
-    pub tangent: [f32; 3],      // 48..60
-    _pad4: f32,                 // 60..64
+    pub pos: [f32; 3],           // 0..12
+    _pad1: f32,                  // 12..16
+    pub uv: [f32; 2],            // 16..24
+    _pad2: [f32; 2],             // 24..32
+    pub normal: [f32; 3],        // 32..44
+    _pad3: f32,                  // 44..48
+    pub tangent: [f32; 3],       // 48..60
+    _pad4: f32,                  // 60..64
     pub joint_indices: [u32; 4], // 64..80
     pub joint_weights: [f32; 4], // 80..96
 }

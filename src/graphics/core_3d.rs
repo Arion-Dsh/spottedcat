@@ -27,7 +27,9 @@ fn resolve_material_texture<'a>(
         .filter(|&id| images.get(id as usize).and_then(|v| v.as_ref()).is_some())
         .unwrap_or(fallback_id);
     let entry = images.get(id as usize).and_then(|v| v.as_ref())?;
-    let texture_entry = textures.get(entry.texture_id as usize).and_then(|v| v.as_ref())?;
+    let texture_entry = textures
+        .get(entry.texture_id as usize)
+        .and_then(|v| v.as_ref())?;
     let uv_rect = resolve_image_uv(entry, texture_entry);
     let view = &texture_entry.runtime.gpu_texture.as_ref()?.0.view;
     Some((entry.texture_id, uv_rect, view))

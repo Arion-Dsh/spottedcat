@@ -69,7 +69,9 @@ fn resolve_material_texture<'a>(
         .filter(|&id| images.get(id as usize).and_then(|v| v.as_ref()).is_some())
         .unwrap_or(fallback_id);
     let entry = images.get(id as usize).and_then(|v| v.as_ref())?;
-    let texture_entry = textures.get(entry.texture_id as usize).and_then(|v| v.as_ref())?;
+    let texture_entry = textures
+        .get(entry.texture_id as usize)
+        .and_then(|v| v.as_ref())?;
     let uv_rect = resolve_image_uv(entry, texture_entry);
     let view = &texture_entry.runtime.gpu_texture.as_ref()?.0.view;
     Some((entry.texture_id, uv_rect, view))
@@ -160,35 +162,35 @@ fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
         },
         DrawCommand3D::ModelInstanced(_, model, _, shader_id, _, skin_id, _) => {
             DrawCommand3DSortKey {
-            instanced: true,
-            shader_id: *shader_id,
-            skin_id: skin_id.unwrap_or(0),
-            mesh_id: model.first_id(),
-            albedo_id: model
-                .parts
-                .first()
-                .and_then(|part| part.material.albedo)
-                .unwrap_or(0),
-            pbr_id: model
-                .parts
-                .first()
-                .and_then(|part| part.material.pbr)
-                .unwrap_or(0),
-            normal_id: model
-                .parts
-                .first()
-                .and_then(|part| part.material.normal)
-                .unwrap_or(0),
-            ao_id: model
-                .parts
-                .first()
-                .and_then(|part| part.material.occlusion)
-                .unwrap_or(0),
-            emissive_id: model
-                .parts
-                .first()
-                .and_then(|part| part.material.emissive)
-                .unwrap_or(0),
+                instanced: true,
+                shader_id: *shader_id,
+                skin_id: skin_id.unwrap_or(0),
+                mesh_id: model.first_id(),
+                albedo_id: model
+                    .parts
+                    .first()
+                    .and_then(|part| part.material.albedo)
+                    .unwrap_or(0),
+                pbr_id: model
+                    .parts
+                    .first()
+                    .and_then(|part| part.material.pbr)
+                    .unwrap_or(0),
+                normal_id: model
+                    .parts
+                    .first()
+                    .and_then(|part| part.material.normal)
+                    .unwrap_or(0),
+                ao_id: model
+                    .parts
+                    .first()
+                    .and_then(|part| part.material.occlusion)
+                    .unwrap_or(0),
+                emissive_id: model
+                    .parts
+                    .first()
+                    .and_then(|part| part.material.emissive)
+                    .unwrap_or(0),
             }
         }
     }

@@ -4,6 +4,8 @@ use crate::DrawOption;
 use crate::ShaderOpts;
 use crate::drawable::DrawCommand;
 use crate::glyph_cache::GlyphCache;
+use crate::graphics::image_pipeline::ImagePipeline;
+use crate::graphics::texture::GpuTexture;
 use crate::image_raw::{ImageRenderer, InstanceData};
 use ab_glyph::FontArc;
 use std::collections::HashMap;
@@ -11,9 +13,17 @@ use std::collections::HashMap;
 #[cfg(feature = "model-3d")]
 use super::core_3d::Graphics3D;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ResolvedImageShaderInput {
+    Texture(u32),
+    Screen(u32),
+    History(u32),
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ResolvedDraw {
     pub texture_id: u32,
+    pub extra_inputs: [ResolvedImageShaderInput; 4],
     pub bounds: crate::image::Bounds,
     pub uv_rect: [f32; 4],
     pub opts: DrawOption,
@@ -34,7 +44,7 @@ pub(crate) struct Graphics {
     pub(crate) config: wgpu::SurfaceConfiguration,
     pub(crate) image_renderer: ImageRenderer,
     pub(crate) default_pipeline: wgpu::RenderPipeline,
-    pub(crate) image_pipelines: HashMap<u32, wgpu::RenderPipeline>,
+    pub(crate) image_pipelines: HashMap<u32, ImagePipeline>,
     pub(crate) batch: Vec<InstanceData>,
     pub(crate) font_cache: HashMap<u64, FontArc>,
     pub(crate) glyph_cache: GlyphCache,
@@ -48,6 +58,9 @@ pub(crate) struct Graphics {
     pub(crate) transparent: bool,
     pub(crate) font_atlas: Option<super::atlas::DynamicAtlas>,
     pub(crate) shared_atlas: Option<super::atlas::DynamicAtlas>,
+    pub(crate) shader_screen_snapshots: HashMap<u32, GpuTexture>,
+    pub(crate) shader_history_snapshots: HashMap<u32, GpuTexture>,
+    pub(crate) final_screen_texture: Option<GpuTexture>,
 }
 
 impl std::fmt::Debug for Graphics {
@@ -217,6 +230,9 @@ impl Graphics {
             transparent,
             font_atlas: Some(super::atlas::DynamicAtlas::new(max_texture_dimension_2d)),
             shared_atlas: Some(super::atlas::DynamicAtlas::new(max_texture_dimension_2d)),
+            shader_screen_snapshots: HashMap::new(),
+            shader_history_snapshots: HashMap::new(),
+            final_screen_texture: None,
         };
 
         // Default resources will be registered via the Context in App initialization

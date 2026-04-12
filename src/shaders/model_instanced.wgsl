@@ -259,8 +259,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     color = pow(color, vec3<f32>(1.0/2.2));
     
     var final_color = vec4<f32>(color, model_globals.extra.x);
-    
-    // USER_FS_HOOK
-    
     return final_color;
 }

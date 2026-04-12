@@ -10,50 +10,122 @@ use std::time::Instant;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use web_time::Instant;
 
-use super::core::{Graphics, ResolvedDraw};
+use super::core::{Graphics, ResolvedDraw, ResolvedImageShaderInput};
 use super::image_ops::resolve_image_uv;
+use super::image_pipeline::ImagePipeline;
 use crate::image_raw::ImageRenderer;
+use crate::image_shader::ImageShaderInput;
 
 pub(crate) struct RenderConfig<'a> {
+    pub device: &'a wgpu::Device,
     pub screen_size_data: [f32; 4],
     pub scale_factor: f32,
-    pub image_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
+    pub image_pipelines: &'a HashMap<u32, ImagePipeline>,
     pub default_pipeline: &'a wgpu::RenderPipeline,
+    pub screen_snapshots: &'a HashMap<u32, crate::graphics::texture::GpuTexture>,
+    pub history_snapshots: &'a HashMap<u32, crate::graphics::texture::GpuTexture>,
 }
 
 fn expect_image_pipeline<'a>(
-    image_pipelines: &'a HashMap<u32, wgpu::RenderPipeline>,
+    image_pipelines: &'a HashMap<u32, ImagePipeline>,
     default_pipeline: &'a wgpu::RenderPipeline,
     shader_id: u32,
-) -> &'a wgpu::RenderPipeline {
+) -> (&'a wgpu::RenderPipeline, bool) {
     if shader_id == 0 {
-        default_pipeline
+        (default_pipeline, false)
     } else {
-        image_pipelines.get(&shader_id).unwrap_or_else(|| {
+        let pipeline = image_pipelines.get(&shader_id).unwrap_or_else(|| {
             panic!(
                 "[spot][render] missing image pipeline for shader_id {}",
                 shader_id
             )
-        })
+        });
+        (&pipeline.pipeline, pipeline.uses_extra_textures)
     }
 }
 
-fn expect_resource_bind_group<'a>(
-    ctx: &'a Context,
-    texture_id: u32,
-) -> &'a wgpu::BindGroup {
+fn expect_resource_bind_group<'a>(ctx: &'a Context, texture_id: u32) -> &'a wgpu::BindGroup {
     ctx.registry
         .textures
         .get(texture_id as usize)
         .and_then(|v| v.as_ref())
         .map(|e| &e.runtime)
         .and_then(|d| d.bind_group.as_ref())
-        .unwrap_or_else(|| panic!("[spot][render] missing bind group for texture {}", texture_id))
+        .unwrap_or_else(|| {
+            panic!(
+                "[spot][render] missing bind group for texture {}",
+                texture_id
+            )
+        })
+}
+
+fn expect_texture_view<'a>(ctx: &'a Context, texture_id: u32) -> &'a wgpu::TextureView {
+    ctx.registry
+        .textures
+        .get(texture_id as usize)
+        .and_then(|v| v.as_ref())
+        .and_then(|entry| entry.runtime.gpu_texture.as_ref())
+        .map(|gpu| &gpu.0.view)
+        .unwrap_or_else(|| {
+            panic!(
+                "[spot][render] missing texture view for texture {}",
+                texture_id
+            )
+        })
+}
+
+fn resolve_shader_input_texture<'a>(
+    ctx: &'a Context,
+    screen_snapshots: &'a HashMap<u32, crate::graphics::texture::GpuTexture>,
+    history_snapshots: &'a HashMap<u32, crate::graphics::texture::GpuTexture>,
+    input: ResolvedImageShaderInput,
+) -> &'a wgpu::TextureView {
+    match input {
+        ResolvedImageShaderInput::Texture(texture_id) => expect_texture_view(ctx, texture_id),
+        ResolvedImageShaderInput::Screen(target_texture_id) => screen_snapshots
+            .get(&target_texture_id)
+            .map(|texture| &texture.0.view)
+            .or_else(|| {
+                history_snapshots
+                    .get(&target_texture_id)
+                    .map(|texture| &texture.0.view)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "[spot][render] missing screen snapshot for target {}",
+                    target_texture_id
+                )
+            }),
+        ResolvedImageShaderInput::History(target_texture_id) => history_snapshots
+            .get(&target_texture_id)
+            .map(|texture| &texture.0.view)
+            .or_else(|| {
+                screen_snapshots
+                    .get(&target_texture_id)
+                    .map(|texture| &texture.0.view)
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "[spot][render] missing history snapshot for target {}",
+                    target_texture_id
+                )
+            }),
+    }
+}
+
+fn resolve_extra_texture_ids(inputs: [ResolvedImageShaderInput; 4]) -> [u32; 4] {
+    let mut ids = [0u32; 4];
+    for (index, input) in inputs.iter().enumerate() {
+        ids[index] = match input {
+            ResolvedImageShaderInput::Texture(texture_id)
+            | ResolvedImageShaderInput::Screen(texture_id)
+            | ResolvedImageShaderInput::History(texture_id) => *texture_id,
+        };
+    }
+    ids
 }
 
 impl Graphics {
-
-
     pub(crate) fn resolve_drawables(
         &mut self,
         ctx: &mut Context,
@@ -84,8 +156,34 @@ impl Graphics {
                             continue;
                         }
 
+                        let mut extra_inputs =
+                            [ResolvedImageShaderInput::Texture(entry.texture_id); 4];
+                        for (index, input) in cmd.shader_bindings.extra_inputs.iter().enumerate() {
+                            extra_inputs[index] = match input {
+                                ImageShaderInput::None => {
+                                    ResolvedImageShaderInput::Texture(entry.texture_id)
+                                }
+                                ImageShaderInput::Image(extra_image) => ctx
+                                    .registry
+                                    .images
+                                    .get(extra_image.id() as usize)
+                                    .and_then(|v| v.as_ref())
+                                    .map(|extra_entry| {
+                                        ResolvedImageShaderInput::Texture(extra_entry.texture_id)
+                                    })
+                                    .unwrap_or(ResolvedImageShaderInput::Texture(entry.texture_id)),
+                                ImageShaderInput::Screen => {
+                                    ResolvedImageShaderInput::Screen(cmd.target_texture_id)
+                                }
+                                ImageShaderInput::History => {
+                                    ResolvedImageShaderInput::History(cmd.target_texture_id)
+                                }
+                            };
+                        }
+
                         self.resolved_draws.push(ResolvedDraw {
                             texture_id: entry.texture_id,
+                            extra_inputs,
                             bounds: entry.bounds,
                             uv_rect: resolve_image_uv(entry, texture_entry),
                             opts: cmd.opts,
@@ -104,7 +202,6 @@ impl Graphics {
                         eprintln!("[spot] Text layout error: {:?}", e);
                     }
                 }
-
             }
         }
     }
@@ -118,8 +215,6 @@ impl Graphics {
         config: RenderConfig<'a>,
         ctx: &'a Context,
     ) {
-
-
         let mut current_opacity = 1.0f32;
 
         // Upload initial engine globals
@@ -143,6 +238,7 @@ impl Graphics {
         let mut current_texture_id: Option<u32> = None;
         let mut current_shader_id: u32 = 0;
         let mut current_user_globals = ShaderOpts::default();
+        let mut current_extra_inputs = [ResolvedImageShaderInput::Texture(0); 4];
 
         for resolved in resolved_draws.iter() {
             let opts = resolved.opts;
@@ -153,22 +249,59 @@ impl Graphics {
             let effective_user_globals = shader_opts;
 
             let state_changed = current_texture_id != Some(resolved.texture_id)
+                || current_extra_inputs != resolved.extra_inputs
                 || current_shader_id != shader_id
                 || current_user_globals != effective_user_globals
                 || current_opacity != draw_opacity;
 
             if state_changed && !batch.is_empty() {
                 if let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice()) {
-                    let pipeline = expect_image_pipeline(
+                    let (pipeline, uses_extra_textures) = expect_image_pipeline(
                         config.image_pipelines,
                         config.default_pipeline,
                         current_shader_id,
                     );
                     let bind_group = expect_resource_bind_group(ctx, current_texture_id.unwrap());
+                    let extra_bind_group = if uses_extra_textures {
+                        let texture_ids = resolve_extra_texture_ids(current_extra_inputs);
+                        Some(image_renderer.extra_texture_bind_group(
+                            config.device,
+                            texture_ids,
+                            [
+                                resolve_shader_input_texture(
+                                    ctx,
+                                    config.screen_snapshots,
+                                    config.history_snapshots,
+                                    current_extra_inputs[0],
+                                ),
+                                resolve_shader_input_texture(
+                                    ctx,
+                                    config.screen_snapshots,
+                                    config.history_snapshots,
+                                    current_extra_inputs[1],
+                                ),
+                                resolve_shader_input_texture(
+                                    ctx,
+                                    config.screen_snapshots,
+                                    config.history_snapshots,
+                                    current_extra_inputs[2],
+                                ),
+                                resolve_shader_input_texture(
+                                    ctx,
+                                    config.screen_snapshots,
+                                    config.history_snapshots,
+                                    current_extra_inputs[3],
+                                ),
+                            ],
+                        ))
+                    } else {
+                        None
+                    };
                     image_renderer.draw_batch(
                         rpass,
                         pipeline,
                         bind_group,
+                        extra_bind_group.as_ref(),
                         range,
                         current_user_globals_offset,
                         current_engine_globals_offset,
@@ -201,6 +334,7 @@ impl Graphics {
             }
 
             current_texture_id = Some(resolved.texture_id);
+            current_extra_inputs = resolved.extra_inputs;
             current_shader_id = shader_id;
 
             batch.push(InstanceData {
@@ -219,16 +353,52 @@ impl Graphics {
         if !batch.is_empty()
             && let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice())
         {
-            let pipeline = expect_image_pipeline(
+            let (pipeline, uses_extra_textures) = expect_image_pipeline(
                 config.image_pipelines,
                 config.default_pipeline,
                 current_shader_id,
             );
             let bind_group = expect_resource_bind_group(ctx, current_texture_id.unwrap());
+            let extra_bind_group = if uses_extra_textures {
+                let texture_ids = resolve_extra_texture_ids(current_extra_inputs);
+                Some(image_renderer.extra_texture_bind_group(
+                    config.device,
+                    texture_ids,
+                    [
+                        resolve_shader_input_texture(
+                            ctx,
+                            config.screen_snapshots,
+                            config.history_snapshots,
+                            current_extra_inputs[0],
+                        ),
+                        resolve_shader_input_texture(
+                            ctx,
+                            config.screen_snapshots,
+                            config.history_snapshots,
+                            current_extra_inputs[1],
+                        ),
+                        resolve_shader_input_texture(
+                            ctx,
+                            config.screen_snapshots,
+                            config.history_snapshots,
+                            current_extra_inputs[2],
+                        ),
+                        resolve_shader_input_texture(
+                            ctx,
+                            config.screen_snapshots,
+                            config.history_snapshots,
+                            current_extra_inputs[3],
+                        ),
+                    ],
+                ))
+            } else {
+                None
+            };
             image_renderer.draw_batch(
                 rpass,
                 pipeline,
                 bind_group,
+                extra_bind_group.as_ref(),
                 range,
                 current_user_globals_offset,
                 current_engine_globals_offset,
@@ -274,7 +444,7 @@ impl Graphics {
             }
         };
         let wait_ms = wait_started_at.elapsed().as_secs_f64() * 1000.0;
-        let view = frame
+        let surface_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
@@ -285,15 +455,15 @@ impl Graphics {
 
         let width = self.config.width;
         let height = self.config.height;
+        let final_screen_texture = self.ensure_final_screen_texture(width, height);
+        let render_view = &final_screen_texture.0.view;
         #[cfg(feature = "model-3d")]
-        if !ctx.runtime.model_3d.draw_list.is_empty()
-        {
+        if !ctx.runtime.model_3d.draw_list.is_empty() {
             self.prepare_3d_command_order(ctx, 0);
         }
 
         #[cfg(feature = "model-3d")]
-        if !ctx.runtime.model_3d.draw_list.is_empty()
-        {
+        if !ctx.runtime.model_3d.draw_list.is_empty() {
             self.render_shadow_pass(ctx, width, height, 0);
         }
 
@@ -315,7 +485,7 @@ impl Graphics {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_3d_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: render_view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -343,17 +513,27 @@ impl Graphics {
                 multiview_mask: None,
             });
 
-            if !ctx.runtime.model_3d.draw_list.is_empty()
-            {
+            if !ctx.runtime.model_3d.draw_list.is_empty() {
                 self.render_main_3d_pass(ctx, width, height, &mut rpass, 0);
             }
         }
+
+        Self::update_shader_snapshot(
+            &mut self.shader_screen_snapshots,
+            &self.device,
+            &mut encoder,
+            0,
+            &final_screen_texture.0.texture,
+            width,
+            height,
+            self.config.format,
+        );
 
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_overlay_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: render_view,
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
@@ -406,12 +586,90 @@ impl Graphics {
                 &mut self.resolved_draws,
                 &mut rpass,
                 RenderConfig {
+                    device: &self.device,
                     screen_size_data,
                     scale_factor: ctx.scale_factor() as f32,
                     image_pipelines: &self.image_pipelines,
                     default_pipeline: &self.default_pipeline,
+                    screen_snapshots: &self.shader_screen_snapshots,
+                    history_snapshots: &self.shader_history_snapshots,
                 },
                 ctx,
+            );
+        }
+
+        Self::update_shader_snapshot(
+            &mut self.shader_history_snapshots,
+            &self.device,
+            &mut encoder,
+            0,
+            &final_screen_texture.0.texture,
+            width,
+            height,
+            self.config.format,
+        );
+
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("present_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &surface_view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+            let screen_scale_factor = ctx.scale_factor() as f32;
+            let lw = width as f32 / screen_scale_factor;
+            let lh = height as f32 / screen_scale_factor;
+            let screen_size_data = [2.0 / lw, 2.0 / lh, 1.0 / lw, 1.0 / lh];
+            let engine_globals = crate::image_raw::EngineGlobals {
+                screen: screen_size_data,
+                opacity: 1.0,
+                shader_opacity: 1.0,
+                scale_factor: screen_scale_factor,
+                _padding: [0.0; 1],
+            };
+            let engine_offset = self
+                .image_renderer
+                .upload_engine_globals(&self.queue, &engine_globals)
+                .unwrap_or(0);
+            let user_offset = self
+                .image_renderer
+                .upload_user_globals_bytes(&self.queue, ShaderOpts::default().as_bytes())
+                .unwrap_or(0);
+            let range = self
+                .image_renderer
+                .upload_instances(
+                    &self.queue,
+                    &[InstanceData {
+                        pos: [0.0, 0.0],
+                        rotation: 0.0,
+                        size: [lw, lh],
+                        uv_rect: [0.0, 0.0, 1.0, 1.0],
+                        ..Default::default()
+                    }],
+                )
+                .unwrap_or(0..0);
+            let bind_group = self
+                .image_renderer
+                .create_texture_bind_group(&self.device, render_view);
+            self.image_renderer.draw_batch(
+                &mut rpass,
+                &self.default_pipeline,
+                &bind_group,
+                None,
+                range,
+                user_offset,
+                engine_offset,
             );
         }
 
@@ -461,7 +719,6 @@ impl Graphics {
             let target_texture_id = match drawable {
                 DrawCommand::Image(cmd) => cmd.target_texture_id,
                 DrawCommand::Text(cmd) => cmd.target_texture_id,
-
             };
             if target_texture_id != 0
                 && self.target_is_live(ctx, target_texture_id)
@@ -519,12 +776,7 @@ impl Graphics {
         for dependency in self.target_dependencies(ctx, drawables, target_texture_id) {
             if dependency != target_texture_id {
                 self.render_target_recursive(
-                    ctx,
-                    drawables,
-                    dependency,
-                    encoder,
-                    rendered,
-                    visiting,
+                    ctx, drawables, dependency, encoder, rendered, visiting,
                 );
             }
         }
@@ -546,12 +798,30 @@ impl Graphics {
 
         for drawable in drawables {
             let Some(dep_texture_id) = (match drawable {
-                DrawCommand::Image(cmd) if cmd.target_texture_id == target_texture_id => ctx
-                    .registry
-                    .images
-                    .get(cmd.id as usize)
-                    .and_then(|v| v.as_ref())
-                    .map(|entry| entry.texture_id),
+                DrawCommand::Image(cmd) if cmd.target_texture_id == target_texture_id => {
+                    let mut dep_texture_id = ctx
+                        .registry
+                        .images
+                        .get(cmd.id as usize)
+                        .and_then(|v| v.as_ref())
+                        .map(|entry| entry.texture_id);
+                    if dep_texture_id.is_none() {
+                        for input in &cmd.shader_bindings.extra_inputs {
+                            if let ImageShaderInput::Image(image) = input {
+                                dep_texture_id = ctx
+                                    .registry
+                                    .images
+                                    .get(image.id() as usize)
+                                    .and_then(|v| v.as_ref())
+                                    .map(|entry| entry.texture_id);
+                                if dep_texture_id.is_some() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    dep_texture_id
+                }
                 DrawCommand::Text(cmd) if cmd.target_texture_id == target_texture_id => None,
                 DrawCommand::Image(_) | DrawCommand::Text(_) => None,
             }) else {
@@ -629,6 +899,111 @@ impl Graphics {
         deps
     }
 
+    fn ensure_shader_snapshot_texture(
+        cache: &mut HashMap<u32, crate::graphics::texture::GpuTexture>,
+        device: &wgpu::Device,
+        target_texture_id: u32,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    ) {
+        let needs_recreate = cache
+            .get(&target_texture_id)
+            .map(|texture| {
+                texture.0.texture.width() != width || texture.0.texture.height() != height
+            })
+            .unwrap_or(true);
+        if needs_recreate {
+            cache.insert(
+                target_texture_id,
+                crate::graphics::texture::GpuTexture::create_empty_with_usage_and_mips(
+                    device,
+                    width.max(1),
+                    height.max(1),
+                    format,
+                    wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_DST
+                        | wgpu::TextureUsages::COPY_SRC,
+                    1,
+                ),
+            );
+        }
+    }
+
+    fn update_shader_snapshot(
+        cache: &mut HashMap<u32, crate::graphics::texture::GpuTexture>,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        target_texture_id: u32,
+        src_texture: &wgpu::Texture,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    ) {
+        Self::ensure_shader_snapshot_texture(
+            cache,
+            device,
+            target_texture_id,
+            width,
+            height,
+            format,
+        );
+        let dst = cache
+            .get(&target_texture_id)
+            .expect("snapshot texture must exist after ensure");
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: src_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &dst.0.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    fn ensure_final_screen_texture(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> crate::graphics::texture::GpuTexture {
+        let needs_recreate = self
+            .final_screen_texture
+            .as_ref()
+            .map(|texture| {
+                texture.0.texture.width() != width || texture.0.texture.height() != height
+            })
+            .unwrap_or(true);
+        if needs_recreate {
+            self.final_screen_texture = Some(
+                crate::graphics::texture::GpuTexture::create_empty_with_usage_and_mips(
+                    &self.device,
+                    width.max(1),
+                    height.max(1),
+                    self.config.format,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING
+                        | wgpu::TextureUsages::COPY_SRC,
+                    1,
+                ),
+            );
+        }
+        self.final_screen_texture
+            .as_ref()
+            .expect("final screen texture must exist after ensure")
+            .clone()
+    }
+
     fn render_target_pass(
         &mut self,
         ctx: &mut Context,
@@ -646,7 +1021,12 @@ impl Graphics {
             (
                 entry.pixel_width,
                 entry.pixel_height,
-                crate::image::Bounds::new(crate::Pt(0.0), crate::Pt(0.0), entry.width, entry.height),
+                crate::image::Bounds::new(
+                    crate::Pt(0.0),
+                    crate::Pt(0.0),
+                    entry.width,
+                    entry.height,
+                ),
             )
         };
 
@@ -684,9 +1064,7 @@ impl Graphics {
                 if runtime.generation != self.gpu_generation {
                     eprintln!(
                         "[spot][render] WARNING: Rendering to texture {} with generation mismatch ({} vs {})",
-                        target_texture_id,
-                        runtime.generation,
-                        self.gpu_generation
+                        target_texture_id, runtime.generation, self.gpu_generation
                     );
                 }
 
@@ -749,40 +1127,67 @@ impl Graphics {
                 }
             }
 
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("target_overlay_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
+            Self::update_shader_snapshot(
+                &mut self.shader_screen_snapshots,
+                &self.device,
+                encoder,
+                target_texture_id,
+                &target_gpu_texture.0.texture,
+                width,
+                height,
+                self.config.format,
+            );
+
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("target_overlay_render_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+
+                let lw = bounds.width.as_f32();
+                let lh = bounds.height.as_f32();
+                let screen_size_data = [2.0 / lw, 2.0 / lh, 1.0 / lw, 1.0 / lh];
+
+                Self::render_batches_internal(
+                    &mut self.image_renderer,
+                    &self.queue,
+                    &mut self.batch,
+                    &mut target_resolved,
+                    &mut rpass,
+                    RenderConfig {
+                        device: &self.device,
+                        screen_size_data,
+                        scale_factor: 1.0,
+                        image_pipelines: &self.image_pipelines,
+                        default_pipeline: &self.default_pipeline,
+                        screen_snapshots: &self.shader_screen_snapshots,
+                        history_snapshots: &self.shader_history_snapshots,
                     },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
+                    ctx,
+                );
+            }
 
-            let lw = bounds.width.as_f32();
-            let lh = bounds.height.as_f32();
-            let screen_size_data = [2.0 / lw, 2.0 / lh, 1.0 / lw, 1.0 / lh];
-
-            Self::render_batches_internal(
-                &mut self.image_renderer,
-                &self.queue,
-                &mut self.batch,
-                &mut target_resolved,
-                &mut rpass,
-                RenderConfig {
-                    screen_size_data,
-                    scale_factor: 1.0,
-                    image_pipelines: &self.image_pipelines,
-                    default_pipeline: &self.default_pipeline,
-                },
-                ctx,
+            Self::update_shader_snapshot(
+                &mut self.shader_history_snapshots,
+                &self.device,
+                encoder,
+                target_texture_id,
+                &target_gpu_texture.0.texture,
+                width,
+                height,
+                self.config.format,
             );
         }
     }

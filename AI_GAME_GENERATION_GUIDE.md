@@ -175,10 +175,17 @@ Shaders, fonts, and images created or registered through the `Context` are persi
 Inject custom WGSL hooks into the rendering pipeline.
 ```rust
 // 2D Shader
-spottedcat::register_image_shader(ctx, shader_source_str);
+let shader_source_str = &spottedcat::image_shader_template();
+spottedcat::register_image_shader_desc(ctx, spottedcat::ImageShaderDesc::from_wgsl(shader_source_str));
 
 // 3D Shader
+let shader_source_str = spottedcat::model_shader_template();
 spottedcat::register_model_shader(ctx, shader_source_str);
+
+// shader_source_str must be a full WGSL source that defines:
+// - vs_main
+// - vs_main_instanced
+// - fs_main
 ```
 
 ## 9. Development Tips

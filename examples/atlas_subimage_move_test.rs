@@ -32,45 +32,66 @@ impl Spot for SubImageNestTest {
     }
 
     fn update(&mut self, ctx: &mut Context, _dt: std::time::Duration) {
-        if self.ready { return; }
+        if self.ready {
+            return;
+        }
 
         // Load happy-tree
         const BYTES: &[u8] = include_bytes!("../assets/happy-tree.png");
         let img = image::load_from_memory(BYTES).unwrap();
         let rgba = img.to_rgba8();
-        let tree = Image::new(ctx,
+        let tree = Image::new(
+            ctx,
             Pt::from(img.width() as f32),
             Pt::from(img.height() as f32),
             &rgba,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Sub-image layer 1: tree canopy (top 512x512, centered)
-        let c1 = Image::sub_image(ctx, tree,
+        let c1 = Image::sub_image(
+            ctx,
+            tree,
             spottedcat::image::Bounds::new(
-                Pt::from(256.0), Pt::from(50.0),
-                Pt::from(512.0), Pt::from(512.0),
+                Pt::from(256.0),
+                Pt::from(50.0),
+                Pt::from(512.0),
+                Pt::from(512.0),
             ),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Sub-image layer 2: face area (center of c1)
-        let c2 = Image::sub_image(ctx, c1,
+        let c2 = Image::sub_image(
+            ctx,
+            c1,
             spottedcat::image::Bounds::new(
-                Pt::from(128.0), Pt::from(128.0),
-                Pt::from(256.0), Pt::from(256.0),
+                Pt::from(128.0),
+                Pt::from(128.0),
+                Pt::from(256.0),
+                Pt::from(256.0),
             ),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Sub-image layer 3: smile (center of c2)
-        let c3 = Image::sub_image(ctx, c2,
+        let c3 = Image::sub_image(
+            ctx,
+            c2,
             spottedcat::image::Bounds::new(
-                Pt::from(64.0), Pt::from(64.0),
-                Pt::from(128.0), Pt::from(128.0),
+                Pt::from(64.0),
+                Pt::from(64.0),
+                Pt::from(128.0),
+                Pt::from(128.0),
             ),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Render targets for each nesting level
-        let canvas_a = spottedcat::Texture::new_render_target(ctx, Pt::from(512.0), Pt::from(512.0)).view();
-        let canvas_b = spottedcat::Texture::new_render_target(ctx, Pt::from(256.0), Pt::from(256.0)).view();
+        let canvas_a =
+            spottedcat::Texture::new_render_target(ctx, Pt::from(512.0), Pt::from(512.0)).view();
+        let canvas_b =
+            spottedcat::Texture::new_render_target(ctx, Pt::from(256.0), Pt::from(256.0)).view();
 
         println!("--- Nested Sub-Image Render Target Test ---");
         println!("tree:     {:?}", tree.bounds());
@@ -89,9 +110,15 @@ impl Spot for SubImageNestTest {
 
     fn draw(&mut self, ctx: &mut Context, screen: Image) {
         let (Some(tree), Some(c1), Some(c2), Some(c3), Some(ca), Some(cb)) = (
-            self.tree, self.c1, self.c2, self.c3,
-            self.canvas_a, self.canvas_b,
-        ) else { return };
+            self.tree,
+            self.c1,
+            self.c2,
+            self.c3,
+            self.canvas_a,
+            self.canvas_b,
+        ) else {
+            return;
+        };
 
         // canvas_b (256x256):
         //   - c2 fills it at natural 1x scale (background)
@@ -99,28 +126,43 @@ impl Spot for SubImageNestTest {
         //     → acts as a "zoom lens": same area but magnified, going past edge
         //     → bottom-right of canvas_b shows c3 content at 2x, clearly different
         cb.draw(ctx, &c2, DrawOption::default());
-        cb.draw(ctx, &c3, DrawOption::default()
-            .with_position([Pt::from(64.0), Pt::from(64.0)])
-            .with_scale([2.0, 2.0]));
+        cb.draw(
+            ctx,
+            &c3,
+            DrawOption::default()
+                .with_position([Pt::from(64.0), Pt::from(64.0)])
+                .with_scale([2.0, 2.0]),
+        );
 
         // canvas_a (512x512):
         //   - c1 fills it at natural 1x scale
         //   - canvas_b (with zoom lens baked in) overlaid at (128, 128) → nested inset
         ca.draw(ctx, &c1, DrawOption::default());
-        ca.draw(ctx, &cb, DrawOption::default()
-            .with_position([Pt::from(128.0), Pt::from(128.0)]));
+        ca.draw(
+            ctx,
+            &cb,
+            DrawOption::default().with_position([Pt::from(128.0), Pt::from(128.0)]),
+        );
 
         // --- Screen: 2 panels ---
         // Left: original tree (reference)
-        screen.draw(ctx, &tree, DrawOption::default()
-            .with_position([Pt::from(10.0), Pt::from(10.0)])
-            .with_scale([0.35, 0.35]));
+        screen.draw(
+            ctx,
+            &tree,
+            DrawOption::default()
+                .with_position([Pt::from(10.0), Pt::from(10.0)])
+                .with_scale([0.35, 0.35]),
+        );
 
         // Right: canvas_a — the full nested composite
         //   Shows: c1 → canvas_b (c2 + c3@2x) nested in bottom-right quarter
-        screen.draw(ctx, &ca, DrawOption::default()
-            .with_position([Pt::from(400.0), Pt::from(10.0)])
-            .with_scale([0.75, 0.75]));
+        screen.draw(
+            ctx,
+            &ca,
+            DrawOption::default()
+                .with_position([Pt::from(400.0), Pt::from(10.0)])
+                .with_scale([0.75, 0.75]),
+        );
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
