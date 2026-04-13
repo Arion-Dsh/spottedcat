@@ -4,11 +4,11 @@ use android_activity::AndroidApp;
 #[cfg(target_os = "android")]
 use std::ffi::{CStr, CString};
 #[cfg(target_os = "android")]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_os = "android")]
 use std::sync::Mutex;
 #[cfg(target_os = "android")]
 use std::sync::OnceLock;
-#[cfg(target_os = "android")]
-use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "android")]
 static ANDROID_APP: OnceLock<AndroidApp> = OnceLock::new();
