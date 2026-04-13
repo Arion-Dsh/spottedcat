@@ -4,11 +4,11 @@ use android_activity::AndroidApp;
 #[cfg(target_os = "android")]
 use std::ffi::{CStr, CString};
 #[cfg(target_os = "android")]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(target_os = "android")]
 use std::sync::Mutex;
 #[cfg(target_os = "android")]
 use std::sync::OnceLock;
+#[cfg(target_os = "android")]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "android")]
 static ANDROID_APP: OnceLock<AndroidApp> = OnceLock::new();
@@ -35,6 +35,76 @@ pub fn get_activity() -> Option<&'static jni::objects::GlobalRef> {
 #[cfg(target_os = "android")]
 pub fn get_app() -> Option<AndroidApp> {
     ANDROID_APP.get().cloned()
+}
+
+#[cfg(target_os = "android")]
+pub fn sdk_int() -> Result<i32, String> {
+    let jvm = JVM.get().ok_or_else(|| "JVM unavailable".to_string())?;
+    let mut env = jvm.attach_current_thread().map_err(|err| err.to_string())?;
+    let version =
+        find_class(&mut env, "android/os/Build$VERSION").map_err(|err| err.to_string())?;
+    env.get_static_field(version, "SDK_INT", "I")
+        .and_then(|value| value.i())
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(target_os = "android")]
+pub fn has_runtime_permission(permission: &str) -> Result<bool, String> {
+    let jvm = JVM.get().ok_or_else(|| "JVM unavailable".to_string())?;
+    let activity_ref = ACTIVITY
+        .get()
+        .ok_or_else(|| "Activity unavailable".to_string())?;
+    let mut env = jvm.attach_current_thread().map_err(|err| err.to_string())?;
+    let permission_java = env.new_string(permission).map_err(|err| err.to_string())?;
+    let permission_obj = jni::objects::JObject::from(permission_java);
+    let package_manager =
+        find_class(&mut env, "android/content/pm/PackageManager").map_err(|err| err.to_string())?;
+    let granted = env
+        .get_static_field(package_manager, "PERMISSION_GRANTED", "I")
+        .and_then(|value| value.i())
+        .map_err(|err| err.to_string())?;
+    let status = env
+        .call_method(
+            activity_ref.as_obj(),
+            "checkSelfPermission",
+            "(Ljava/lang/String;)I",
+            &[jni::objects::JValue::Object(&permission_obj)],
+        )
+        .and_then(|value| value.i())
+        .map_err(|err| err.to_string())?;
+    Ok(status == granted)
+}
+
+#[cfg(target_os = "android")]
+pub fn request_runtime_permission(permission: &str, request_code: i32) -> Result<(), String> {
+    let jvm = JVM.get().ok_or_else(|| "JVM unavailable".to_string())?;
+    let activity_ref = ACTIVITY
+        .get()
+        .ok_or_else(|| "Activity unavailable".to_string())?;
+    let mut env = jvm.attach_current_thread().map_err(|err| err.to_string())?;
+    let permission_java = env.new_string(permission).map_err(|err| err.to_string())?;
+    let permission_obj = jni::objects::JObject::from(permission_java);
+    let string_class = env
+        .find_class("java/lang/String")
+        .map_err(|err| err.to_string())?;
+    let permissions = env
+        .new_object_array(1, string_class, jni::objects::JObject::null())
+        .map_err(|err| err.to_string())?;
+    env.set_object_array_element(&permissions, 0, permission_obj)
+        .map_err(|err| err.to_string())?;
+    let permissions_obj = jni::objects::JObject::from(permissions);
+
+    env.call_method(
+        activity_ref.as_obj(),
+        "requestPermissions",
+        "([Ljava/lang/String;I)V",
+        &[
+            jni::objects::JValue::Object(&permissions_obj),
+            jni::objects::JValue::Int(request_code),
+        ],
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(())
 }
 
 #[cfg(target_os = "android")]

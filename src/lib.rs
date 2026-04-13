@@ -68,6 +68,8 @@ pub mod image;
 mod image_raw;
 mod image_shader;
 mod input;
+#[cfg(target_os = "ios")]
+pub mod ios;
 mod key;
 mod launch;
 pub mod math;
