@@ -111,11 +111,22 @@ impl Graphics {
         self.default_pipeline = self.create_default_image_pipeline();
         #[cfg(feature = "model-3d")]
         if self.model_3d.is_some() {
-            let (model_pipeline, instanced_model_pipeline) = self.create_default_model_pipelines();
+            let (
+                model_pipeline,
+                transparent_model_pipeline,
+                instanced_model_pipeline,
+                transparent_instanced_model_pipeline,
+            ) = self.create_default_model_pipelines();
             self.model_3d_mut().expect("checked Some").model_pipeline = model_pipeline;
             self.model_3d_mut()
                 .expect("checked Some")
+                .transparent_model_pipeline = transparent_model_pipeline;
+            self.model_3d_mut()
+                .expect("checked Some")
                 .instanced_model_pipeline = instanced_model_pipeline;
+            self.model_3d_mut()
+                .expect("checked Some")
+                .transparent_instanced_model_pipeline = transparent_instanced_model_pipeline;
             #[cfg(feature = "effects")]
             {
                 self.model_3d_mut()

@@ -11,11 +11,16 @@ use crate::model::SkinData;
 
 pub(super) struct Render3DConfig<'a> {
     pub model_pipeline: &'a wgpu::RenderPipeline,
+    pub transparent_model_pipeline: &'a wgpu::RenderPipeline,
     pub instanced_model_pipeline: &'a wgpu::RenderPipeline,
+    pub transparent_instanced_model_pipeline: &'a wgpu::RenderPipeline,
     pub shadow_pipeline: &'a wgpu::RenderPipeline,
     pub instanced_shadow_pipeline: &'a wgpu::RenderPipeline,
     pub model_pipelines: &'a std::collections::HashMap<u32, wgpu::RenderPipeline>,
+    pub transparent_model_pipelines: &'a std::collections::HashMap<u32, wgpu::RenderPipeline>,
     pub instanced_model_pipelines: &'a std::collections::HashMap<u32, wgpu::RenderPipeline>,
+    pub transparent_instanced_model_pipelines:
+        &'a std::collections::HashMap<u32, wgpu::RenderPipeline>,
     pub white_image_id: u32,
     pub black_image_id: u32,
     pub normal_image_id: u32,
@@ -196,6 +201,21 @@ fn draw_command_3d_sort_key(command: &DrawCommand3D) -> DrawCommand3DSortKey {
     }
 }
 
+fn draw_command_3d_position(command: &DrawCommand3D) -> [f32; 3] {
+    match command {
+        DrawCommand3D::Model(_, _, opts, ..) | DrawCommand3D::ModelInstanced(_, _, opts, ..) => {
+            opts.position
+        }
+    }
+}
+
+fn distance_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
+    let dx = a[0] - b[0];
+    let dy = a[1] - b[1];
+    let dz = a[2] - b[2];
+    dx * dx + dy * dy + dz * dz
+}
+
 impl Graphics {
     pub(super) fn prepare_3d_command_order(&mut self, ctx: &Context, target_texture_id: u32) {
         let model_3d = self.ensure_model_3d();
@@ -228,6 +248,20 @@ impl Graphics {
         model_3d
             .opaque_draw_indices_3d
             .sort_by_key(|&index| draw_command_3d_sort_key(&ctx.runtime.model_3d.draw_list[index]));
+        let camera_pos = ctx.runtime.model_3d.camera.eye;
+        model_3d.transparent_draw_indices_3d.sort_by(|&a, &b| {
+            let command_a = &ctx.runtime.model_3d.draw_list[a];
+            let command_b = &ctx.runtime.model_3d.draw_list[b];
+            let distance_a = distance_squared(camera_pos, draw_command_3d_position(command_a));
+            let distance_b = distance_squared(camera_pos, draw_command_3d_position(command_b));
+
+            distance_b
+                .partial_cmp(&distance_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| {
+                    draw_command_3d_sort_key(command_a).cmp(&draw_command_3d_sort_key(command_b))
+                })
+        });
     }
 
     pub(super) fn render_shadow_pass(
@@ -274,11 +308,17 @@ impl Graphics {
                 &ctx.registry.textures,
                 Render3DConfig {
                     model_pipeline: &model_3d.model_pipeline,
+                    transparent_model_pipeline: &model_3d.transparent_model_pipeline,
                     instanced_model_pipeline: &model_3d.instanced_model_pipeline,
+                    transparent_instanced_model_pipeline: &model_3d
+                        .transparent_instanced_model_pipeline,
                     shadow_pipeline: &model_3d.shadow_pipeline,
                     instanced_shadow_pipeline: &model_3d.instanced_shadow_pipeline,
                     model_pipelines: &model_3d.model_pipelines,
+                    transparent_model_pipelines: &model_3d.transparent_model_pipelines,
                     instanced_model_pipelines: &model_3d.instanced_model_pipelines,
+                    transparent_instanced_model_pipelines: &model_3d
+                        .transparent_instanced_model_pipelines,
                     white_image_id: model_3d.white_image_id,
                     black_image_id: model_3d.black_image_id,
                     normal_image_id: model_3d.normal_image_id,
@@ -319,11 +359,17 @@ impl Graphics {
             &ctx.registry.textures,
             Render3DConfig {
                 model_pipeline: &model_3d.model_pipeline,
+                transparent_model_pipeline: &model_3d.transparent_model_pipeline,
                 instanced_model_pipeline: &model_3d.instanced_model_pipeline,
+                transparent_instanced_model_pipeline: &model_3d
+                    .transparent_instanced_model_pipeline,
                 shadow_pipeline: &model_3d.shadow_pipeline,
                 instanced_shadow_pipeline: &model_3d.instanced_shadow_pipeline,
                 model_pipelines: &model_3d.model_pipelines,
+                transparent_model_pipelines: &model_3d.transparent_model_pipelines,
                 instanced_model_pipelines: &model_3d.instanced_model_pipelines,
+                transparent_instanced_model_pipelines: &model_3d
+                    .transparent_instanced_model_pipelines,
                 white_image_id: model_3d.white_image_id,
                 black_image_id: model_3d.black_image_id,
                 normal_image_id: model_3d.normal_image_id,
@@ -436,8 +482,16 @@ impl Graphics {
                         extra: [opts.opacity, 0.0, 0.0, 0.0],
                         ..Default::default()
                     };
+                    let is_transparent = opts.opacity < 1.0;
                     let pipeline = if is_shadow_pass {
                         config.shadow_pipeline
+                    } else if is_transparent && *shader_id == 0 {
+                        config.transparent_model_pipeline
+                    } else if is_transparent {
+                        config
+                            .transparent_model_pipelines
+                            .get(shader_id)
+                            .unwrap_or(config.transparent_model_pipeline)
                     } else if *shader_id == 0 {
                         config.model_pipeline
                     } else {
@@ -600,8 +654,16 @@ impl Graphics {
                         extra: [opts.opacity, 0.0, 0.0, 0.0],
                         ..Default::default()
                     };
+                    let is_transparent = opts.opacity < 1.0;
                     let pipeline = if is_shadow_pass {
                         config.instanced_shadow_pipeline
+                    } else if is_transparent && *shader_id == 0 {
+                        config.transparent_instanced_model_pipeline
+                    } else if is_transparent {
+                        config
+                            .transparent_instanced_model_pipelines
+                            .get(shader_id)
+                            .unwrap_or(config.transparent_instanced_model_pipeline)
                     } else if *shader_id == 0 {
                         config.instanced_model_pipeline
                     } else {

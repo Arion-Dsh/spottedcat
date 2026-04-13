@@ -255,6 +255,24 @@ impl AnimatedModel {
 
         ctx.update_bone_matrices(skin.skin_id, &bone_matrices);
     }
+
+    pub fn draw_with_shader(
+        &self,
+        ctx: &mut crate::Context,
+        target: crate::Image,
+        shader_id: u32,
+        options: crate::DrawOption3D,
+        shader_opts: crate::ShaderOpts,
+    ) {
+        self.model.draw_with_shader(
+            ctx,
+            target,
+            shader_id,
+            options,
+            shader_opts,
+            self.skin.as_ref().map(|skin| skin.skin_id),
+        );
+    }
 }
 
 impl crate::Drawable for &AnimatedModel {
