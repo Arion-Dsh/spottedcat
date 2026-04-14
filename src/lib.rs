@@ -309,6 +309,11 @@ pub fn mouse_pressed(ctx: &Context, btn: MouseButton) -> bool {
     ctx.input().mouse_pressed(btn)
 }
 
+/// Returns true if the specified mouse button was just released this frame.
+pub fn mouse_released(ctx: &Context, btn: MouseButton) -> bool {
+    ctx.input().mouse_released(btn)
+}
+
 /// Returns the current mouse position in logical coordinates.
 pub fn mouse_pos(ctx: &Context) -> Option<(Pt, Pt)> {
     ctx.input().cursor_position()
@@ -322,6 +327,11 @@ pub fn cursor_position(ctx: &Context) -> Option<(Pt, Pt)> {
 /// Returns a slice of active touch points.
 pub fn touches(ctx: &Context) -> &[TouchInfo] {
     ctx.input().touches()
+}
+
+/// Returns the current frame's scroll wheel delta.
+pub fn scroll_delta(ctx: &Context) -> (f32, f32) {
+    ctx.input().scroll_delta()
 }
 
 /// Requests a window title update.

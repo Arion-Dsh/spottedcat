@@ -1073,7 +1073,7 @@ impl Graphics {
             let view = &target_gpu_texture.0.view;
 
             #[cfg(feature = "model-3d")]
-            {
+            let has_3d = {
                 let has_3d = self
                     .model_3d()
                     .map(|model_3d| {
@@ -1125,7 +1125,10 @@ impl Graphics {
                     });
                     self.render_main_3d_pass(ctx, width, height, &mut rpass, target_texture_id);
                 }
-            }
+                has_3d
+            };
+            #[cfg(not(feature = "model-3d"))]
+            let has_3d = false;
 
             Self::update_shader_snapshot(
                 &mut self.shader_screen_snapshots,
@@ -1146,7 +1149,11 @@ impl Graphics {
                         resolve_target: None,
                         depth_slice: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
+                            load: if has_3d {
+                                wgpu::LoadOp::Load
+                            } else {
+                                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                            },
                             store: wgpu::StoreOp::Store,
                         },
                     })],
