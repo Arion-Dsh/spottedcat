@@ -47,14 +47,29 @@ impl Graphics {
         label: &'static str,
         desc: &ImageShaderDesc,
     ) -> ImagePipeline {
+        let uses_extra_textures = desc.uses_extra_textures();
+        let source = if desc.internal_prelude {
+            format!(
+                "{}\n{}",
+                crate::shader_templates::image_shader_prelude_with_full_metadata_internal(
+                    uses_extra_textures,
+                    &desc.extra_texture_names,
+                    desc.history_slot,
+                    desc.screen_slot
+                ),
+                desc.source
+            )
+        } else {
+            desc.source.clone()
+        };
+
         let shader = self
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(label),
-                source: wgpu::ShaderSource::Wgsl(desc.source.clone().into()),
+                source: wgpu::ShaderSource::Wgsl(source.into()),
             });
 
-        let uses_extra_textures = desc.uses_extra_textures();
         let pipeline_layout = self.create_image_pipeline_layout(uses_extra_textures);
 
         let pipeline = self

@@ -173,19 +173,39 @@ Shaders, fonts, and images created or registered through the `Context` are persi
 ## 8. Custom Shaders
 
 Inject custom WGSL hooks into the rendering pipeline.
+
+### Recommended 2D Path (Template)
+The engine automatically injects standard structs, variables (`src`, `opacity`, `screen`), and bindings.
+
 ```rust
-// 2D Shader
-let shader_source_str = &spottedcat::image_shader_template();
-spottedcat::register_image_shader_desc(ctx, spottedcat::ImageShaderDesc::from_wgsl(shader_source_str));
+let shader_id = spottedcat::register_image_shader_template(
+    ctx,
+    spottedcat::ImageShaderTemplate::new()
+        .with_extra_textures(true)
+        .with_history_at(0) // Available as 't_history'
+        .with_screen_at(1)  // Available as 't_screen'
+        .with_fragment_body(r#"
+            let history = textureSample(t_history, extra_samp, in.uv);
+            return vec4<f32>(max(src.rgb, history.rgb), src.a * opacity);
+        "#),
+);
 
-// 3D Shader
-let shader_source_str = spottedcat::model_shader_template();
-spottedcat::register_model_shader(ctx, shader_source_str);
+// Bind at draw time by intent
+let bindings = ImageShaderBindings::new()
+    .with_history()
+    .with_screen();
 
-// shader_source_str must be a full WGSL source that defines:
-// - vs_main
-// - vs_main_instanced
-// - fs_main
+screen.draw_with_shader_bindings(ctx, image, shader_id, opts, shader_opts, bindings);
+```
+
+### Full WGSL Path
+Use `with_internal_prelude(true)` to write your own `vs_main` and `fs_main` while still getting engine structs and bindings injected.
+
+```rust
+let desc = spottedcat::ImageShaderDesc::from_wgsl(source)
+    .with_internal_prelude(true)
+    .with_history_slot(0);
+let shader_id = spottedcat::register_image_shader_desc(ctx, desc);
 ```
 
 ## 9. Development Tips

@@ -21,6 +21,9 @@ impl Spot for ImageShaderTemplateExample {
             ImageShaderTemplate::new()
                 .with_extra_textures(true)
                 .with_blend_mode(ImageShaderBlendMode::Add)
+                .with_history_at(0)
+                .with_texture_alias(1, "t_noise")
+                .with_screen_at(2)
                 .with_shared(
                     r#"
 fn shimmer_tint(color: vec3<f32>, tint: vec3<f32>, noise: vec3<f32>, pulse: f32) -> vec3<f32> {
@@ -31,13 +34,13 @@ fn shimmer_tint(color: vec3<f32>, tint: vec3<f32>, noise: vec3<f32>, pulse: f32)
                 .with_vertex_body("out.local_uv = out.local_uv * 0.96 + vec2<f32>(0.02, 0.02);")
                 .with_fragment_body(
                     r#"
-let history = textureSample(t0, extra_samp, in.uv);
-let noise = textureSample(t1, extra_samp, fract(in.local_uv * 3.0 + vec2<f32>(user_globals[0].x * 0.13, user_globals[0].x * 0.09))).rgb;
-let screen = textureSample(t2, extra_samp, in.uv);
+let history = textureSample(t_history, extra_samp, in.uv);
+let noise = textureSample(t_noise, extra_samp, fract(in.local_uv * 3.0 + vec2<f32>(user_globals[0].x * 0.13, user_globals[0].x * 0.09))).rgb;
+let screen_sample = textureSample(t_screen, extra_samp, in.uv);
 let tint = user_globals[1].rgb;
 let pulse = 0.55 + 0.45 * sin(user_globals[0].x * 2.2 + in.local_uv.x * 6.2831);
 let trail = history.rgb * 0.94;
-let composed = max(trail * 0.98 + screen.rgb * 0.08, shimmer_tint(src.rgb, tint, noise, pulse));
+let composed = max(trail * 0.98 + screen_sample.rgb * 0.08, shimmer_tint(src.rgb, tint, noise, pulse));
 let alpha = max(src.a, history.a * 0.96) * opacity;
 return vec4<f32>(composed, alpha);
 "#,
@@ -66,9 +69,9 @@ return vec4<f32>(composed, alpha);
         shader_opts.set_vec4(1, [1.0, 0.45, 0.9, 1.0]);
 
         let bindings = ImageShaderBindings::new()
-            .with_history(0)
-            .with_extra_image(1, self.noise)
-            .with_screen(2);
+            .with_history()
+            .with_image("t_noise", self.noise)
+            .with_screen();
 
         screen.draw_with_shader_bindings(
             ctx,

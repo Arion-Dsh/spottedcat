@@ -2,9 +2,16 @@ use crate::model::{RawVertex, SceneGlobals};
 use bytemuck::{Pod, Zeroable};
 use std::collections::HashMap;
 
+const MODEL_SHADER_OPTS_SIZE: usize = 256;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct MaterialBindGroupKey {
     pub texture_source_ids: [u32; 5],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct ModelShaderOptsKey {
+    bytes: [u8; MODEL_SHADER_OPTS_SIZE],
 }
 
 #[repr(C)]
@@ -52,11 +59,12 @@ pub struct ModelRenderer {
     pub(crate) skins: HashMap<u32, crate::model::SkinData>,
     pub(crate) texture_bind_groups: HashMap<MaterialBindGroupKey, wgpu::BindGroup>,
     pub(crate) skin_bone_offsets: HashMap<u32, u32>,
+    shader_opts_offsets: HashMap<ModelShaderOptsKey, u32>,
 }
 
 impl ModelRenderer {
     pub const GLOBALS_SIZE_BYTES: usize = std::mem::size_of::<ModelGlobals>();
-    pub const USER_SHADER_OPTS_SIZE: usize = 256;
+    pub const USER_SHADER_OPTS_SIZE: usize = MODEL_SHADER_OPTS_SIZE;
 
     pub fn new(device: &wgpu::Device) -> Self {
         let align = device.limits().min_uniform_buffer_offset_alignment;
@@ -399,6 +407,7 @@ impl ModelRenderer {
             skins: HashMap::new(),
             texture_bind_groups: HashMap::new(),
             skin_bone_offsets: HashMap::new(),
+            shader_opts_offsets: HashMap::new(),
         }
     }
 
@@ -510,6 +519,7 @@ impl ModelRenderer {
         self.next_user_shader_opts = 0;
         self.next_bone_batch = 0;
         self.skin_bone_offsets.clear();
+        self.shader_opts_offsets.clear();
     }
 
     pub fn bone_offset_for_skin(
@@ -561,11 +571,21 @@ impl ModelRenderer {
         if self.next_user_shader_opts >= self.max_user_shader_opts {
             return Err(anyhow::anyhow!("max model shader opts exceeded"));
         }
+        let key = ModelShaderOptsKey {
+            bytes: bytes
+                .try_into()
+                .expect("validated model shader opts byte size before caching"),
+        };
+        if let Some(offset) = self.shader_opts_offsets.get(&key) {
+            return Ok(*offset);
+        }
         let slot = self.next_user_shader_opts;
         self.next_user_shader_opts += 1;
         let offset = slot as wgpu::BufferAddress * self.user_opts_stride as wgpu::BufferAddress;
         queue.write_buffer(&self.user_shader_opts_buffer, offset, bytes);
-        Ok(offset as u32)
+        let offset = offset as u32;
+        self.shader_opts_offsets.insert(key, offset);
+        Ok(offset)
     }
 
     pub fn upload_bone_matrices(

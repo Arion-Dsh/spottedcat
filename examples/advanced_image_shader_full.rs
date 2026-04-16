@@ -3,43 +3,9 @@ use spottedcat::{
     ShaderOpts, Spot, WindowConfig, register_image_shader_desc,
 };
 
-const FULL_SHADER: &str = r#"
-@group(0) @binding(0) var tex: texture_2d<f32>;
-@group(0) @binding(1) var samp: sampler;
-
-@group(1) @binding(0) var t_history: texture_2d<f32>;
-@group(1) @binding(1) var t_noise: texture_2d<f32>;
-@group(1) @binding(2) var t_screen: texture_2d<f32>;
-@group(1) @binding(3) var t_unused: texture_2d<f32>;
-@group(1) @binding(4) var extra_samp: sampler;
-
-@group(2) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;
-
-struct EngineGlobals {
-    screen: vec4<f32>,
-    opacity: f32,
-    shader_opacity: f32,
-    scale_factor: f32,
-    _padding: f32,
-};
-
-@group(3) @binding(0) var<uniform> _sp_internal: EngineGlobals;
-
-struct VsIn {
-    @builtin(vertex_index) vertex_index: u32,
-    @location(0) pos: vec2<f32>,
-    @location(1) rotation: f32,
-    @location(2) size: vec2<f32>,
-    @location(3) uv_rect: vec4<f32>,
-};
-
-struct VsOut {
-    @builtin(position) clip_pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-    @location(1) local_uv: vec2<f32>,
-    @location(2) uv_scale: vec2<f32>,
-};
-
+// No structs or @group declarations needed!
+// The internal prelude handles EngineGlobals, VsIn, VsOut, and standard bindings.
+const FULL_SHADER_SOURCE: &str = r#"
 @vertex
 fn vs_main(in: VsIn) -> VsOut {
     var out: VsOut;
@@ -59,6 +25,8 @@ fn vs_main(in: VsIn) -> VsOut {
 
     let local_pos = pos_arr[in.vertex_index];
     let uv = uv_arr[in.vertex_index];
+    
+    // Engine constants are automatically injected by the prelude
     let sw_inv_2 = _sp_internal.screen.x;
     let sh_inv_2 = _sp_internal.screen.y;
     let sw_inv = _sp_internal.screen.z;
@@ -90,16 +58,24 @@ fn vs_main(in: VsIn) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let src = textureSample(tex, samp, in.uv);
+    
+    // NATIVE SEMANTIC BINDINGS:
+    // We didn't even have to define 't_history' or 't_screen' manually!
+    // The engine auto-injected them because we set the semantic slots in Registration.
     let history = textureSample(t_history, extra_samp, in.uv);
     let screen = textureSample(t_screen, extra_samp, in.uv);
+    
     let time = user_globals[0].x;
     let tint = user_globals[1].rgb;
+    
+    // We used a custom alias for the noise texture
     let noise_uv = fract(in.local_uv * 3.0 + vec2<f32>(time * 0.13, time * 0.09));
     let noise = textureSample(t_noise, extra_samp, noise_uv).rgb;
 
     let trail = history.rgb * 0.94;
     let shimmer = tint * (0.65 + noise * 0.8);
     let pulse = 0.55 + 0.45 * sin(time * 2.2 + in.local_uv.x * 6.2831);
+    
     let composed = max(trail * 0.98 + screen.rgb * 0.08, src.rgb * shimmer * pulse);
     let alpha = max(src.a, history.a * 0.96) * _sp_internal.opacity * _sp_internal.shader_opacity;
 
@@ -118,10 +94,17 @@ impl Spot for FullShaderExample {
     fn initialize(ctx: &mut Context) -> Self {
         let sprite = Image::new(ctx, Pt::from(96.0), Pt::from(96.0), &build_sprite_rgba()).unwrap();
         let noise = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &build_noise_rgba()).unwrap();
+        
+        // Registration with Semantic Slots:
+        // No manual index repeat in Draw anymore!
         let shader_id = register_image_shader_desc(
             ctx,
-            ImageShaderDesc::from_wgsl(FULL_SHADER)
+            ImageShaderDesc::from_wgsl(FULL_SHADER_SOURCE)
+                .with_internal_prelude(true)
                 .with_extra_textures(true)
+                .with_history_slot(0) // Marks slot 0 as "History"
+                .with_texture_alias(1, "t_noise")
+                .with_screen_slot(2)  // Marks slot 2 as "Screen snapshot"
                 .with_blend_mode(ImageShaderBlendMode::Add),
         );
 
@@ -146,10 +129,12 @@ impl Spot for FullShaderExample {
         shader_opts.set_vec4(0, [self.time, 0.0, 0.0, 0.0]);
         shader_opts.set_vec4(1, [1.0, 0.45, 0.9, 1.0]);
 
+        // Semantic Drawing:
+        // NO INDEXES! The engine knows History is slot 0 and Screen is slot 2.
         let bindings = ImageShaderBindings::new()
-            .with_history(0)
-            .with_extra_image(1, self.noise)
-            .with_screen(2);
+            .with_history()
+            .with_image("t_noise", self.noise)
+            .with_screen();
 
         screen.draw_with_shader_bindings(
             ctx,
@@ -208,7 +193,7 @@ fn build_noise_rgba() -> Vec<u8> {
 
 fn main() {
     spottedcat::run::<FullShaderExample>(WindowConfig {
-        title: "Full Image Shader".to_string(),
+        title: "Full Image Shader with Semantic Bindings".to_string(),
         width: Pt::from(960.0),
         height: Pt::from(640.0),
         ..Default::default()

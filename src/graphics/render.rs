@@ -158,15 +158,19 @@ impl Graphics {
 
                         let mut extra_inputs =
                             [ResolvedImageShaderInput::Texture(entry.texture_id); 4];
-                        for (index, input) in cmd.shader_bindings.extra_inputs.iter().enumerate() {
-                            extra_inputs[index] = match input {
+                        
+                        let shader_desc = ctx.registry.image_shaders.get(&cmd.shader_id);
+
+                        // Helper to resolve ImageShaderInput to ResolvedImageShaderInput
+                        let resolve_input = |input: &ImageShaderInput| -> ResolvedImageShaderInput {
+                            match input {
                                 ImageShaderInput::None => {
                                     ResolvedImageShaderInput::Texture(entry.texture_id)
                                 }
                                 ImageShaderInput::Image(extra_image) => ctx
                                     .registry
                                     .images
-                                    .get(extra_image.id() as usize)
+                                    .get(extra_image.index())
                                     .and_then(|v| v.as_ref())
                                     .map(|extra_entry| {
                                         ResolvedImageShaderInput::Texture(extra_entry.texture_id)
@@ -178,7 +182,36 @@ impl Graphics {
                                 ImageShaderInput::History => {
                                     ResolvedImageShaderInput::History(cmd.target_texture_id)
                                 }
-                            };
+                            }
+                        };
+
+                        // 1. Apply legacy index-based slots
+                        for (index, input) in cmd.shader_bindings.extra_inputs.iter().enumerate() {
+                            if *input != ImageShaderInput::None {
+                                extra_inputs[index] = resolve_input(input);
+                            }
+                        }
+
+                        // 2. Apply semantic intents (ignoring None)
+                        if let Some(desc) = shader_desc {
+                            if cmd.shader_bindings.history {
+                                if let Some(slot) = desc.history_slot {
+                                    extra_inputs[slot] = ResolvedImageShaderInput::History(cmd.target_texture_id);
+                                }
+                            }
+                            if cmd.shader_bindings.screen {
+                                if let Some(slot) = desc.screen_slot {
+                                    extra_inputs[slot] = ResolvedImageShaderInput::Screen(cmd.target_texture_id);
+                                }
+                            }
+                            for (name, input) in &cmd.shader_bindings.named_inputs {
+                                for i in 0..4 {
+                                    if desc.extra_texture_names[i].as_deref() == Some(name) {
+                                        extra_inputs[i] = resolve_input(input);
+                                        break;
+                                    }
+                                }
+                            }
                         }
 
                         self.resolved_draws.push(ResolvedDraw {
@@ -426,13 +459,23 @@ impl Graphics {
             wgpu::SurfaceError::Lost
         })?;
 
+        let targets_ms;
+        #[allow(unused_mut, unused_assignments)]
+        let mut shadow_ms = 0.0;
+        #[allow(unused_mut, unused_assignments)]
+        let mut main_3d_ms = 0.0;
+        let overlay_ms;
+        let present_ms;
+
         #[cfg(feature = "model-3d")]
         if let Some(model_3d) = self.model_3d_mut() {
             model_3d.model_renderer.begin_frame();
         }
         self.image_renderer.begin_frame();
 
+        let targets_started_at = Instant::now();
         self.render_all_targets(ctx, &draws);
+        targets_ms = targets_started_at.elapsed().as_secs_f64() * 1000.0;
 
         let frame_started_at = Instant::now();
         let wait_started_at = Instant::now();
@@ -458,19 +501,29 @@ impl Graphics {
         let final_screen_texture = self.ensure_final_screen_texture(width, height);
         let render_view = &final_screen_texture.0.view;
         #[cfg(feature = "model-3d")]
-        if !ctx.runtime.model_3d.draw_list.is_empty() {
+        if ctx.runtime.model_3d.draw_list.is_empty() {
+            self.clear_3d_command_order();
+        } else {
             self.prepare_3d_command_order(ctx, 0);
         }
 
         #[cfg(feature = "model-3d")]
-        if !ctx.runtime.model_3d.draw_list.is_empty() {
-            self.render_shadow_pass(ctx, width, height, 0);
+        if !ctx.runtime.model_3d.draw_list.is_empty()
+            && self
+                .model_3d()
+                .map(|model_3d| !model_3d.shadow_draw_indices_3d.is_empty())
+                .unwrap_or(false)
+        {
+            let shadow_started_at = Instant::now();
+            self.render_shadow_pass(&mut encoder, ctx, width, height, 0);
+            shadow_ms = shadow_started_at.elapsed().as_secs_f64() * 1000.0;
         }
 
         self.resolve_drawables(ctx, &draws, 0, width, height);
 
         #[cfg(feature = "model-3d")]
         {
+            let main_3d_started_at = Instant::now();
             let depth_stencil_attachment =
                 self.model_3d()
                     .map(|model_3d| wgpu::RenderPassDepthStencilAttachment {
@@ -516,6 +569,7 @@ impl Graphics {
             if !ctx.runtime.model_3d.draw_list.is_empty() {
                 self.render_main_3d_pass(ctx, width, height, &mut rpass, 0);
             }
+            main_3d_ms = main_3d_started_at.elapsed().as_secs_f64() * 1000.0;
         }
 
         Self::update_shader_snapshot(
@@ -530,6 +584,7 @@ impl Graphics {
         );
 
         {
+            let overlay_started_at = Instant::now();
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("main_overlay_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -596,6 +651,7 @@ impl Graphics {
                 },
                 ctx,
             );
+            overlay_ms = overlay_started_at.elapsed().as_secs_f64() * 1000.0;
         }
 
         Self::update_shader_snapshot(
@@ -610,6 +666,7 @@ impl Graphics {
         );
 
         {
+            let present_started_at = Instant::now();
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("present_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -671,6 +728,7 @@ impl Graphics {
                 user_offset,
                 engine_offset,
             );
+            present_ms = present_started_at.elapsed().as_secs_f64() * 1000.0;
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -678,6 +736,11 @@ impl Graphics {
         crate::graphics::profile::record_render_frame(
             wait_ms,
             frame_started_at.elapsed().as_secs_f64() * 1000.0,
+            targets_ms,
+            shadow_ms,
+            main_3d_ms,
+            overlay_ms,
+            present_ms,
         );
 
         Ok(())
@@ -1031,19 +1094,16 @@ impl Graphics {
         };
 
         #[cfg(feature = "model-3d")]
-        if !ctx.runtime.model_3d.draw_list.is_empty() {
+        if ctx.runtime.model_3d.draw_list.is_empty() {
+            self.clear_3d_command_order();
+        } else {
             self.prepare_3d_command_order(ctx, target_texture_id);
-            if !self
+            if self
                 .model_3d()
-                .map(|model_3d| {
-                    !model_3d.opaque_draw_indices_3d.is_empty()
-                        || !model_3d.transparent_draw_indices_3d.is_empty()
-                })
+                .map(|model_3d| !model_3d.shadow_draw_indices_3d.is_empty())
                 .unwrap_or(false)
             {
-                // no-op
-            } else {
-                self.render_shadow_pass(ctx, width, height, target_texture_id);
+                self.render_shadow_pass(encoder, ctx, width, height, target_texture_id);
             }
         }
 

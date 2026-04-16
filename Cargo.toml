@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.9.2"
+version = "0.9.3"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -146,6 +146,11 @@ required-features = ["model-3d"]
 [[example]]
 name = "advanced_model_shader_full"
 path = "examples/advanced_model_shader_full.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "mixed_model_shader_stress"
+path = "examples/mixed_model_shader_stress.rs"
 required-features = ["model-3d"]
 
 [[example]]

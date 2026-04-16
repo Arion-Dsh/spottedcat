@@ -109,6 +109,7 @@ Honor these rules:
 - scene transitions -> `switch_scene` or `switch_scene_with`
 - shared state -> `insert_resource` and `get_resource`
 - atmosphere -> `set_fog`, light helpers, camera helpers
+- custom 2D effects -> `ImageShaderTemplate` plus `bindings.with_history()` / `.with_screen()` (Semantic Bindings)
 
 ### 7. Verify in the cheapest environment first
 

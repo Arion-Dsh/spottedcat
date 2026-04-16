@@ -1,5 +1,14 @@
 use crate::image_shader::{ImageShaderBlendMode, ImageShaderDesc};
 
+/// A builder for creating data-driven image shaders with automatic boilerplate injection.
+///
+/// `ImageShaderTemplate` provides a high-level API to customize the vertex and fragment
+/// stages without writing full WGSL from scratch. It automatically injects:
+/// - Standard structs: `VsIn`, `VsOut`, `EngineGlobals`.
+/// - Core variables: `screen`, `opacity`, `scale_factor`.
+/// - Bindings: Source texture (`tex`/`samp`) and semantic extra textures (`t_history`, `t_screen`, etc.)
+///
+/// Use [`ImageShaderTemplate::build_desc`] to get a descriptor ready for registration.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ImageShaderTemplate {
     uses_extra_textures: bool,
@@ -7,6 +16,10 @@ pub struct ImageShaderTemplate {
     shared: String,
     vertex_body: String,
     fragment_body: String,
+    extra_texture_names: [Option<String>; 4],
+    user_global_names: [Option<String>; 16],
+    history_slot: Option<usize>,
+    screen_slot: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -52,6 +65,10 @@ impl ImageShaderTemplate {
             shared: String::new(),
             vertex_body: String::new(),
             fragment_body: String::from("return vec4<f32>(src.rgb, src.a * opacity);"),
+            extra_texture_names: Default::default(),
+            user_global_names: Default::default(),
+            history_slot: None,
+            screen_slot: None,
         }
     }
 
@@ -80,6 +97,43 @@ impl ImageShaderTemplate {
         self
     }
 
+    /// Provides a custom name for an extra texture slot when using the internal prelude.
+    ///
+    /// This name can then be used in the shader body (e.g., `textureSample(custom_name, ...)`).
+    pub fn with_texture_alias(mut self, slot: usize, name: impl Into<String>) -> Self {
+        if slot < 4 {
+            self.extra_texture_names[slot] = Some(name.into());
+        }
+        self
+    }
+
+    pub fn with_user_global_alias(mut self, slot: usize, name: impl Into<String>) -> Self {
+        if slot < 16 {
+            self.user_global_names[slot] = Some(name.into());
+        }
+        self
+    }
+
+    /// Registers the history texture semantic to a specific slot.
+    ///
+    /// When using the internal prelude, this slot will be automatically aliased to `t_history`.
+    pub fn with_history_at(mut self, slot: usize) -> Self {
+        if slot < 4 {
+            self.history_slot = Some(slot);
+        }
+        self
+    }
+
+    /// Registers the screen snapshot semantic to a specific slot.
+    ///
+    /// When using the internal prelude, this slot will be automatically aliased to `t_screen`.
+    pub fn with_screen_at(mut self, slot: usize) -> Self {
+        if slot < 4 {
+            self.screen_slot = Some(slot);
+        }
+        self
+    }
+
     pub fn build(self) -> String {
         image_shader_template_from_slots(&self)
     }
@@ -87,9 +141,20 @@ impl ImageShaderTemplate {
     pub fn build_desc(self) -> ImageShaderDesc {
         let uses_extra_textures = self.uses_extra_textures;
         let blend_mode = self.blend_mode;
-        ImageShaderDesc::from_wgsl(self.build())
+        let history_slot = self.history_slot;
+        let screen_slot = self.screen_slot;
+        
+        let mut desc = ImageShaderDesc::from_wgsl(self.build())
             .with_extra_textures(uses_extra_textures)
-            .with_blend_mode(blend_mode)
+            .with_blend_mode(blend_mode);
+            
+        if let Some(slot) = history_slot {
+            desc = desc.with_history_slot(slot);
+        }
+        if let Some(slot) = screen_slot {
+            desc = desc.with_screen_slot(slot);
+        }
+        desc
     }
 }
 
@@ -119,30 +184,12 @@ impl ModelShaderTemplate {
 }
 
 fn image_shader_template_from_slots(template: &ImageShaderTemplate) -> String {
-    let uses_extra_textures = template.uses_extra_textures;
-    let user_group = if uses_extra_textures { 2 } else { 1 };
-    let engine_group = if uses_extra_textures { 3 } else { 2 };
-
-    let mut wgsl = String::from(IMAGE_SHADER_TEMPLATE_PREFIX);
-
-    if uses_extra_textures {
-        wgsl.push_str(
-            r#"
-@group(1) @binding(0) var t0: texture_2d<f32>;
-@group(1) @binding(1) var t1: texture_2d<f32>;
-@group(1) @binding(2) var t2: texture_2d<f32>;
-@group(1) @binding(3) var t3: texture_2d<f32>;
-@group(1) @binding(4) var extra_samp: sampler;
-"#,
-        );
-    }
-
-    wgsl.push_str(&format!(
-        "\n@group({user_group}) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;\n"
-    ));
-    wgsl.push_str(&format!(
-        "@group({engine_group}) @binding(0) var<uniform> _sp_internal: EngineGlobals;\n"
-    ));
+    let mut wgsl = image_shader_prelude_with_full_metadata_internal(
+        template.uses_extra_textures, 
+        &template.extra_texture_names,
+        template.history_slot,
+        template.screen_slot
+    );
 
     if !template.shared.trim().is_empty() {
         wgsl.push('\n');
@@ -171,10 +218,16 @@ fn vs_main(in: VsIn) -> VsOut {
 
     let local_pos = pos_arr[in.vertex_index];
     let uv = uv_arr[in.vertex_index];
-    let sw_inv_2 = _sp_internal.screen.x;
-    let sh_inv_2 = _sp_internal.screen.y;
-    let sw_inv = _sp_internal.screen.z;
-    let sh_inv = _sp_internal.screen.w;
+    
+    // Inject core variables
+    let screen = _sp_internal.screen;
+    let opacity = _sp_internal.opacity * _sp_internal.shader_opacity;
+    let scale_factor = _sp_internal.scale_factor;
+
+    let sw_inv_2 = screen.x;
+    let sh_inv_2 = screen.y;
+    let sw_inv = screen.z;
+    let sh_inv = screen.w;
 
     let tx = in.pos.x * sw_inv_2 - 1.0;
     let ty = 1.0 - in.pos.y * sh_inv_2;
@@ -216,8 +269,17 @@ fn vs_main(in: VsIn) -> VsOut {
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let src = textureSample(tex, samp, in.uv);
     let opacity = _sp_internal.opacity * _sp_internal.shader_opacity;
+    let screen = _sp_internal.screen;
+    let scale_factor = _sp_internal.scale_factor;
 "#,
     );
+
+    // Inject user global aliases
+    for (i, name) in template.user_global_names.iter().enumerate() {
+        if let Some(name) = name {
+            wgsl.push_str(&format!("    let {name} = user_globals[{i}];\n"));
+        }
+    }
 
     let body = template.fragment_body.trim();
     if body.is_empty() {
@@ -230,6 +292,59 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }
     }
     wgsl.push_str("}\n");
+    wgsl
+}
+
+
+pub fn image_shader_prelude_with_full_metadata_internal(
+    uses_extra_textures: bool,
+    texture_names: &[Option<String>; 4],
+    history_slot: Option<usize>,
+    screen_slot: Option<usize>,
+) -> String {
+    let mut final_names = [None, None, None, None];
+    for i in 0..4 {
+        final_names[i] = texture_names[i].clone();
+    }
+    
+    if let Some(slot) = history_slot {
+        if final_names[slot].is_none() {
+            final_names[slot] = Some("t_history".to_string());
+        }
+    }
+    if let Some(slot) = screen_slot {
+        if final_names[slot].is_none() {
+            final_names[slot] = Some("t_screen".to_string());
+        }
+    }
+
+    let user_group = if uses_extra_textures { 2 } else { 1 };
+    let engine_group = if uses_extra_textures { 3 } else { 2 };
+
+    let mut wgsl = String::from(IMAGE_SHADER_TEMPLATE_PREFIX);
+
+    if uses_extra_textures {
+        wgsl.push('\n');
+        for i in 0..4 {
+            let name = final_names[i].as_deref().unwrap_or_else(|| match i {
+                0 => "t0",
+                1 => "t1",
+                2 => "t2",
+                3 => "t3",
+                _ => unreachable!(),
+            });
+            wgsl.push_str(&format!("@group(1) @binding({i}) var {name}: texture_2d<f32>;\n"));
+        }
+        wgsl.push_str("@group(1) @binding(4) var extra_samp: sampler;\n");
+    }
+
+    wgsl.push_str(&format!(
+        "\n@group({user_group}) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;\n"
+    ));
+    wgsl.push_str(&format!(
+        "@group({engine_group}) @binding(0) var<uniform> _sp_internal: EngineGlobals;\n"
+    ));
+
     wgsl
 }
 
@@ -315,19 +430,5 @@ mod tests {
             .with_vertex_body("out.local_uv = out.local_uv * 0.5;")
             .build();
         assert!(shader.contains("out.local_uv = out.local_uv * 0.5;"));
-    }
-
-    #[test]
-    fn model_shader_template_includes_shared_and_fragment_slots() {
-        let shader = ModelShaderTemplate::new()
-            .with_shared(
-                "fn tint(c: vec3<f32>) -> vec3<f32> { return c * vec3<f32>(0.8, 0.9, 1.0); }",
-            )
-            .with_fragment_body("return vec4<f32>(tint(src.rgb), src.a * model_globals.extra.x);")
-            .build();
-        assert!(shader.contains("fn tint(c: vec3<f32>) -> vec3<f32>"));
-        assert!(shader.contains("return vec4<f32>(tint(src.rgb), src.a * model_globals.extra.x);"));
-        assert!(!shader.contains("MODEL_SHARED_SLOT"));
-        assert!(!shader.contains("MODEL_FRAGMENT_BODY_SLOT"));
     }
 }

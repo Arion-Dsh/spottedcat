@@ -1,5 +1,4 @@
 use crate::Context;
-use crate::ShaderOpts;
 use crate::drawable::DrawCommand3D;
 use crate::graphics::model_raw::MaterialBindGroupKey;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
@@ -49,6 +48,13 @@ struct DrawCommand3DSortKey {
     normal_id: u32,
     ao_id: u32,
     emissive_id: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct ShadowDrawCommand3DSortKey {
+    instanced: bool,
+    skin_id: u32,
+    mesh_id: u32,
 }
 
 fn normalize3(v: [f32; 3]) -> [f32; 3] {
@@ -209,6 +215,19 @@ fn draw_command_3d_position(command: &DrawCommand3D) -> [f32; 3] {
     }
 }
 
+fn shadow_draw_command_3d_sort_key(command: &DrawCommand3D) -> ShadowDrawCommand3DSortKey {
+    match command {
+        DrawCommand3D::Model(_, model, _, _, _, skin_id)
+        | DrawCommand3D::ModelInstanced(_, model, _, _, _, skin_id, _) => {
+            ShadowDrawCommand3DSortKey {
+                instanced: matches!(command, DrawCommand3D::ModelInstanced(..)),
+                skin_id: skin_id.unwrap_or(0),
+                mesh_id: model.first_id(),
+            }
+        }
+    }
+}
+
 fn distance_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     let dx = a[0] - b[0];
     let dy = a[1] - b[1];
@@ -216,17 +235,242 @@ fn distance_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     dx * dx + dy * dy + dz * dz
 }
 
+fn draw_option_3d_model_matrix(opts: &crate::DrawOption3D) -> [[f32; 4]; 4] {
+    let model_mat = crate::math::mat4::from_translation(opts.position);
+    let rot_mat = crate::math::mat4::from_rotation(opts.rotation);
+    let scale_mat = crate::math::mat4::from_scale(opts.scale);
+    crate::math::mat4::multiply(model_mat, crate::math::mat4::multiply(rot_mat, scale_mat))
+}
+
 impl Graphics {
+    pub(super) fn clear_3d_command_order(&mut self) {
+        if let Some(model_3d) = self.model_3d_mut() {
+            model_3d.opaque_draw_indices_3d.clear();
+            model_3d.transparent_draw_indices_3d.clear();
+            model_3d.shadow_draw_indices_3d.clear();
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_shadow_3d_internal<'pass>(
+        model_renderer: &mut ModelRenderer,
+        queue: &wgpu::Queue,
+        models: &[Option<MeshData>],
+        skins: &[Option<SkinData>],
+        pipeline: &wgpu::RenderPipeline,
+        rpass: &mut wgpu::RenderPass<'pass>,
+        ctx: &Context,
+        shadow_draw_indices: &[usize],
+        target_texture_id: u32,
+        lvp: [[f32; 4]; 4],
+    ) {
+        let mut current_mesh_id: Option<u32> = None;
+        let mut current_bone_offset: Option<u32> = None;
+
+        rpass.set_pipeline(pipeline);
+
+        let mut index = 0;
+        while index < shadow_draw_indices.len() {
+            let Some(command) = ctx
+                .runtime
+                .model_3d
+                .draw_list
+                .get(shadow_draw_indices[index])
+            else {
+                index += 1;
+                continue;
+            };
+
+            match command {
+                DrawCommand3D::Model(command_target_texture_id, model, opts, _, _, skin_id_cmd) => {
+                    if *command_target_texture_id != target_texture_id {
+                        index += 1;
+                        continue;
+                    }
+
+                    let mut transforms = Vec::with_capacity(8);
+                    transforms.push(draw_option_3d_model_matrix(opts));
+
+                    let mut next_index = index + 1;
+                    while next_index < shadow_draw_indices.len() {
+                        match ctx
+                            .runtime
+                            .model_3d
+                            .draw_list
+                            .get(shadow_draw_indices[next_index])
+                        {
+                            Some(DrawCommand3D::Model(
+                                next_target_texture_id,
+                                next_model,
+                                next_opts,
+                                _,
+                                _,
+                                next_skin_id,
+                            )) if *next_target_texture_id == target_texture_id
+                                && next_skin_id == skin_id_cmd
+                                && next_model == model =>
+                            {
+                                transforms.push(draw_option_3d_model_matrix(next_opts));
+                                next_index += 1;
+                            }
+                            Some(_) | None => break,
+                        }
+                    }
+
+                    if let Err(e) = model_renderer.upload_instances(queue, &transforms) {
+                        eprintln!("[spot][render] Failed to upload shadow instances: {}", e);
+                        index = next_index;
+                        continue;
+                    }
+
+                    let mut bone_offset = 0;
+                    if let Some(skin_id) = skin_id_cmd
+                        && let Some(Some(skin)) = skins.get(*skin_id as usize)
+                        && let Ok(off) = model_renderer.bone_offset_for_skin(
+                            queue,
+                            *skin_id,
+                            &skin.bone_matrices,
+                        )
+                    {
+                        bone_offset = off;
+                    }
+
+                    let globals = crate::graphics::model_raw::ModelGlobals {
+                        mvp: lvp,
+                        model: crate::math::mat4::identity(),
+                        extra: [1.0, 0.0, 0.0, 0.0],
+                        ..Default::default()
+                    };
+
+                    if let Ok(offset) = model_renderer.upload_globals(queue, &globals) {
+                        rpass.set_bind_group(0, &model_renderer.globals_bind_group, &[offset, 0]);
+                        if current_bone_offset != Some(bone_offset) {
+                            rpass.set_bind_group(
+                                1,
+                                &model_renderer.bone_matrices_bind_group,
+                                &[bone_offset],
+                            );
+                            current_bone_offset = Some(bone_offset);
+                        }
+
+                        for part in model.parts.iter() {
+                            if let Some(Some(mesh)) = models.get(part.id as usize) {
+                                if current_mesh_id != Some(part.id) {
+                                    rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                                    rpass.set_vertex_buffer(
+                                        1,
+                                        model_renderer.instance_buffer.slice(..),
+                                    );
+                                    rpass.set_index_buffer(
+                                        mesh.index_buffer.slice(..),
+                                        wgpu::IndexFormat::Uint32,
+                                    );
+                                    current_mesh_id = Some(part.id);
+                                }
+                                rpass.draw_indexed(
+                                    0..mesh.index_count,
+                                    0,
+                                    0..transforms.len() as u32,
+                                );
+                            }
+                        }
+                    }
+
+                    index = next_index;
+                }
+                DrawCommand3D::ModelInstanced(
+                    command_target_texture_id,
+                    model,
+                    opts,
+                    _,
+                    _,
+                    skin_id_cmd,
+                    transforms,
+                ) => {
+                    if *command_target_texture_id != target_texture_id {
+                        index += 1;
+                        continue;
+                    }
+
+                    if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {
+                        eprintln!("[spot][render] Failed to upload instances: {}", e);
+                        index += 1;
+                        continue;
+                    }
+
+                    let mut bone_offset = 0;
+                    if let Some(skin_id) = skin_id_cmd
+                        && let Some(Some(skin)) = skins.get(*skin_id as usize)
+                        && let Ok(off) = model_renderer.bone_offset_for_skin(
+                            queue,
+                            *skin_id,
+                            &skin.bone_matrices,
+                        )
+                    {
+                        bone_offset = off;
+                    }
+
+                    let globals = crate::graphics::model_raw::ModelGlobals {
+                        mvp: crate::math::mat4::multiply(lvp, draw_option_3d_model_matrix(opts)),
+                        model: crate::math::mat4::identity(),
+                        extra: [1.0, 0.0, 0.0, 0.0],
+                        ..Default::default()
+                    };
+
+                    if let Ok(offset) = model_renderer.upload_globals(queue, &globals) {
+                        rpass.set_bind_group(0, &model_renderer.globals_bind_group, &[offset, 0]);
+                        if current_bone_offset != Some(bone_offset) {
+                            rpass.set_bind_group(
+                                1,
+                                &model_renderer.bone_matrices_bind_group,
+                                &[bone_offset],
+                            );
+                            current_bone_offset = Some(bone_offset);
+                        }
+
+                        for part in model.parts.iter() {
+                            if let Some(Some(mesh)) = models.get(part.id as usize) {
+                                if current_mesh_id != Some(part.id) {
+                                    rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                                    rpass.set_vertex_buffer(
+                                        1,
+                                        model_renderer.instance_buffer.slice(..),
+                                    );
+                                    rpass.set_index_buffer(
+                                        mesh.index_buffer.slice(..),
+                                        wgpu::IndexFormat::Uint32,
+                                    );
+                                    current_mesh_id = Some(part.id);
+                                }
+                                rpass.draw_indexed(
+                                    0..mesh.index_count,
+                                    0,
+                                    0..transforms.len() as u32,
+                                );
+                            }
+                        }
+                    }
+
+                    index += 1;
+                }
+            }
+        }
+    }
+
     pub(super) fn prepare_3d_command_order(&mut self, ctx: &Context, target_texture_id: u32) {
         let model_3d = self.ensure_model_3d();
         model_3d.opaque_draw_indices_3d.clear();
         model_3d.transparent_draw_indices_3d.clear();
+        model_3d.shadow_draw_indices_3d.clear();
 
         model_3d
             .opaque_draw_indices_3d
             .reserve(ctx.runtime.model_3d.draw_list.len());
         model_3d
             .transparent_draw_indices_3d
+            .reserve(ctx.runtime.model_3d.draw_list.len());
+        model_3d
+            .shadow_draw_indices_3d
             .reserve(ctx.runtime.model_3d.draw_list.len());
 
         for (index, command) in ctx.runtime.model_3d.draw_list.iter().enumerate() {
@@ -238,6 +482,7 @@ impl Graphics {
             if command_target != target_texture_id {
                 continue;
             }
+            model_3d.shadow_draw_indices_3d.push(index);
             if draw_command_3d_is_transparent(command) {
                 model_3d.transparent_draw_indices_3d.push(index);
             } else {
@@ -262,23 +507,22 @@ impl Graphics {
                     draw_command_3d_sort_key(command_a).cmp(&draw_command_3d_sort_key(command_b))
                 })
         });
+        model_3d.shadow_draw_indices_3d.sort_by_key(|&index| {
+            shadow_draw_command_3d_sort_key(&ctx.runtime.model_3d.draw_list[index])
+        });
     }
 
     pub(super) fn render_shadow_pass(
         &mut self,
+        encoder: &mut wgpu::CommandEncoder,
         ctx: &mut Context,
         width: u32,
         height: u32,
         target_texture_id: u32,
     ) {
         self.ensure_model_3d();
-        let mut shadow_encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("shadow_encoder"),
-                });
         {
-            let mut rpass = shadow_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("shadow_pass"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -328,21 +572,20 @@ impl Graphics {
                 },
                 &mut rpass,
                 ctx,
-                &model_3d.opaque_draw_indices_3d,
-                &model_3d.transparent_draw_indices_3d,
+                &model_3d.shadow_draw_indices_3d,
+                &[],
                 true,
                 target_texture_id,
             );
         }
-        self.queue.submit(std::iter::once(shadow_encoder.finish()));
     }
 
-    pub(super) fn render_main_3d_pass<'a>(
+    pub(super) fn render_main_3d_pass<'pass>(
         &mut self,
         ctx: &mut Context,
         width: u32,
         height: u32,
-        rpass: &mut wgpu::RenderPass<'a>,
+        rpass: &mut wgpu::RenderPass<'pass>,
         target_texture_id: u32,
     ) {
         let queue = &self.queue;
@@ -387,7 +630,7 @@ impl Graphics {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn render_3d_internal<'a>(
+    pub(super) fn render_3d_internal<'pass, 'cfg>(
         model_renderer: &mut ModelRenderer,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
@@ -396,8 +639,8 @@ impl Graphics {
         skins: &[Option<SkinData>],
         images: &[Option<ImageEntry>],
         textures: &[Option<crate::graphics::texture::TextureEntry>],
-        config: Render3DConfig,
-        rpass: &mut wgpu::RenderPass<'a>,
+        config: Render3DConfig<'cfg>,
+        rpass: &mut wgpu::RenderPass<'pass>,
         ctx: &Context,
         opaque_draw_indices: &[usize],
         transparent_draw_indices: &[usize],
@@ -434,10 +677,28 @@ impl Graphics {
         }
 
         let lvp = scene_globals.light_view_proj;
+
+        if is_shadow_pass {
+            Self::render_shadow_3d_internal(
+                model_renderer,
+                queue,
+                models,
+                skins,
+                config.instanced_shadow_pipeline,
+                rpass,
+                ctx,
+                opaque_draw_indices,
+                target_texture_id,
+                lvp,
+            );
+            return;
+        }
+
         let mut current_pipeline: Option<*const wgpu::RenderPipeline> = None;
         let mut current_mesh_binding: Option<(u32, bool)> = None;
         let mut current_material_key: Option<MaterialBindGroupKey> = None;
-        let mut current_shader_opts: Option<ShaderOpts> = None;
+        let mut current_shader_opts_bytes: Option<[u8; ModelRenderer::USER_SHADER_OPTS_SIZE]> =
+            None;
         let mut current_shader_opts_offset: u32 = 0;
         let mut current_bone_offset: Option<u32> = None;
         let mut environment_bound = false;
@@ -445,7 +706,7 @@ impl Graphics {
         for command in opaque_draw_indices
             .iter()
             .chain(transparent_draw_indices.iter())
-            .map(|&index| &ctx.runtime.model_3d.draw_list[index])
+            .filter_map(|&index| ctx.runtime.model_3d.draw_list.get(index))
         {
             match command {
                 DrawCommand3D::Model(
@@ -511,13 +772,19 @@ impl Graphics {
                     {
                         bone_offset = off;
                     }
-                    if !is_shadow_pass
-                        && current_shader_opts != Some(*shader_opts)
-                        && let Ok(offset) =
-                            model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes())
-                    {
-                        current_shader_opts = Some(*shader_opts);
-                        current_shader_opts_offset = offset;
+                    if !is_shadow_pass {
+                        let shader_opts_bytes: [u8; ModelRenderer::USER_SHADER_OPTS_SIZE] =
+                            shader_opts
+                                .as_bytes()
+                                .try_into()
+                                .expect("model shader opts size should match renderer buffer size");
+                        if current_shader_opts_bytes != Some(shader_opts_bytes)
+                            && let Ok(offset) =
+                                model_renderer.upload_shader_opts_bytes(queue, &shader_opts_bytes)
+                        {
+                            current_shader_opts_bytes = Some(shader_opts_bytes);
+                            current_shader_opts_offset = offset;
+                        }
                     }
 
                     for part in model.parts.iter() {
@@ -683,13 +950,19 @@ impl Graphics {
                     {
                         bone_offset = off;
                     }
-                    if !is_shadow_pass
-                        && current_shader_opts != Some(*shader_opts)
-                        && let Ok(offset) =
-                            model_renderer.upload_shader_opts_bytes(queue, shader_opts.as_bytes())
-                    {
-                        current_shader_opts = Some(*shader_opts);
-                        current_shader_opts_offset = offset;
+                    if !is_shadow_pass {
+                        let shader_opts_bytes: [u8; ModelRenderer::USER_SHADER_OPTS_SIZE] =
+                            shader_opts
+                                .as_bytes()
+                                .try_into()
+                                .expect("model shader opts size should match renderer buffer size");
+                        if current_shader_opts_bytes != Some(shader_opts_bytes)
+                            && let Ok(offset) =
+                                model_renderer.upload_shader_opts_bytes(queue, &shader_opts_bytes)
+                        {
+                            current_shader_opts_bytes = Some(shader_opts_bytes);
+                            current_shader_opts_offset = offset;
+                        }
                     }
 
                     if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {

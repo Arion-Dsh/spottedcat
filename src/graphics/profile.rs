@@ -12,6 +12,11 @@ pub(crate) struct RenderProfileStats {
     pub sum_total_ms: f64,
     pub sum_wait_ms: f64,
     pub sum_work_ms: f64,
+    pub sum_targets_ms: f64,
+    pub sum_shadow_ms: f64,
+    pub sum_main_3d_ms: f64,
+    pub sum_overlay_ms: f64,
+    pub sum_present_ms: f64,
     pub min_total_ms: f64,
     pub max_total_ms: f64,
 }
@@ -23,6 +28,11 @@ impl Default for RenderProfileStats {
             sum_total_ms: 0.0,
             sum_wait_ms: 0.0,
             sum_work_ms: 0.0,
+            sum_targets_ms: 0.0,
+            sum_shadow_ms: 0.0,
+            sum_main_3d_ms: 0.0,
+            sum_overlay_ms: 0.0,
+            sum_present_ms: 0.0,
             min_total_ms: f64::INFINITY,
             max_total_ms: 0.0,
         }
@@ -50,7 +60,15 @@ pub(crate) fn render_profiling_enabled() -> bool {
     })
 }
 
-pub(crate) fn record_render_frame(wait_ms: f64, total_ms: f64) {
+pub(crate) fn record_render_frame(
+    wait_ms: f64,
+    total_ms: f64,
+    targets_ms: f64,
+    shadow_ms: f64,
+    main_3d_ms: f64,
+    overlay_ms: f64,
+    present_ms: f64,
+) {
     if !render_profiling_enabled() {
         return;
     }
@@ -63,17 +81,27 @@ pub(crate) fn record_render_frame(wait_ms: f64, total_ms: f64) {
     stats.sum_total_ms += total_ms;
     stats.sum_wait_ms += wait_ms;
     stats.sum_work_ms += work_ms;
+    stats.sum_targets_ms += targets_ms;
+    stats.sum_shadow_ms += shadow_ms;
+    stats.sum_main_3d_ms += main_3d_ms;
+    stats.sum_overlay_ms += overlay_ms;
+    stats.sum_present_ms += present_ms;
     stats.min_total_ms = stats.min_total_ms.min(total_ms);
     stats.max_total_ms = stats.max_total_ms.max(total_ms);
 
     if stats.frame.is_multiple_of(120) {
         let frames = stats.frame as f64;
         eprintln!(
-            "[spot][profile] frames={} avg_total={:.2}ms avg_wait={:.2}ms avg_work={:.2}ms min_total={:.2}ms max_total={:.2}ms",
+            "[spot][profile] frames={} avg_total={:.2}ms avg_wait={:.2}ms avg_work={:.2}ms avg_targets={:.2}ms avg_shadow={:.2}ms avg_main3d={:.2}ms avg_overlay={:.2}ms avg_present={:.2}ms min_total={:.2}ms max_total={:.2}ms",
             stats.frame,
             stats.sum_total_ms / frames,
             stats.sum_wait_ms / frames,
             stats.sum_work_ms / frames,
+            stats.sum_targets_ms / frames,
+            stats.sum_shadow_ms / frames,
+            stats.sum_main_3d_ms / frames,
+            stats.sum_overlay_ms / frames,
+            stats.sum_present_ms / frames,
             stats.min_total_ms,
             stats.max_total_ms
         );

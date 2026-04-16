@@ -160,8 +160,9 @@ fn fresnelSchlickRoughness(cosTheta: f32, F0: vec3<f32>, roughness: f32) -> vec3
 fn fetch_shadow(shadow_pos: vec3<f32>) -> f32 {
     let in_bounds = f32(shadow_pos.x >= 0.0 && shadow_pos.x <= 1.0 && shadow_pos.y >= 0.0 && shadow_pos.y <= 1.0);
     
+    let shadow_dims = vec2<f32>(textureDimensions(t_shadow));
+    let texel_size = 1.0 / max(shadow_dims.x, 1.0);
     var shadow: f32 = 0.0;
-    let texel_size = 1.0 / 2048.0;
     for (var y: i32 = -1; y <= 1; y = y + 1) {
         for (var x: i32 = -1; x <= 1; x = x + 1) {
             let offset = vec2<f32>(f32(x), f32(y)) * texel_size;

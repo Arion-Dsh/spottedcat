@@ -1,203 +1,114 @@
-# Image Shader Layout
+# Image Shader Guide
 
-This document describes the public `Image` shader contract for `spottedcat`.
+This document describes the custom image shader system in `spottedcat`.
 
-The runtime does not expose `wgpu`, but custom image shaders still run against a fixed bind-group layout and a fixed vertex buffer layout.
+## Overview
 
-## Modes
+Custom shaders in `spottedcat` are written in **WGSL**. While the engine handles the underlying `wgpu` state, you have full control over the vertex and fragment stages.
 
-Generate a starter WGSL with:
+There are two main ways to create an image shader:
 
-```rust
-let wgsl = spottedcat::image_shader_template();
-```
+1.  **`ImageShaderTemplate`** (Recommended): A slot-based API where you only provide the shader body. The engine handles all standard boilerplate (structs, uniforms, vertex logic).
+2.  **`ImageShaderDesc` with `internal_prelude`**: Full control over `vs_main` and `fs_main`, but with engine-standard structs and bindings automatically injected.
 
-If you want the generated template to include the extra-texture bind group, use the template API:
+---
 
-```rust
-let wgsl = spottedcat::ImageShaderTemplate::new()
-    .with_extra_textures(true)
-    .build();
-```
+## The Recommended Approach: Templates
 
-For the highest control, register the edited shader with:
+Using `ImageShaderTemplate` avoids repetitive boilerplate and makes your shaders more resilient to engine updates.
 
-1. `register_image_shader_desc(ctx, ImageShaderDesc::from_wgsl(source))`
-   - Full WGSL mode.
-   - You provide the full shader source.
-   - This is the only supported custom `Image` shader path.
-
-The recommended path is the limited template API:
+### 1. Registration
 
 ```rust
 let shader_id = spottedcat::register_image_shader_template(
     ctx,
     spottedcat::ImageShaderTemplate::new()
-    .with_extra_textures(true)
-    .with_shared("fn tint(c: vec3<f32>) -> vec3<f32> { return c * vec3<f32>(1.0, 0.5, 0.8); }")
-    .with_vertex_body("out.local_uv = out.local_uv * 0.9 + vec2<f32>(0.05, 0.05);")
-    .with_fragment_body("return vec4<f32>(tint(src.rgb), src.a * opacity);")
+        .with_extra_textures(true)
+        .with_history_at(0)   // Map History semantic to slot 0
+        .with_screen_at(1)    // Map Screen semantic to slot 1
+        .with_texture_alias(2, "t_noise") // Custom name for slot 2
+        .with_fragment_body(r#"
+            // 't_history', 't_screen', 't_noise' are auto-injected
+            let history = textureSample(t_history, extra_samp, in.uv);
+            let screen_bg = textureSample(t_screen, extra_samp, in.uv);
+            let noise = textureSample(t_noise, extra_samp, in.local_uv).r;
+
+            // 'src', 'opacity', 'screen', and 'scale_factor' are also auto-injected
+            let final_color = mix(src.rgb, history.rgb, noise) * opacity;
+            return vec4<f32>(final_color, src.a);
+        "#),
 );
 ```
 
-Supported slots:
+### 2. Semantic Binding (Draw Time)
 
-1. `shared`
-   - helper functions, constants, and shared WGSL declarations
-2. `vertex_body`
-   - a small vertex-stage customization block inserted before `return out`
-3. `fragment_body`
-   - the body inserted into `fs_main` after `src` and `opacity` are prepared
-
-## Pipeline Contract
-
-These parts stay engine-defined even in full WGSL mode:
-
-1. Render pipeline topology: triangle strip quad rendering.
-2. Draw model: one quad per image draw.
-3. Vertex buffer layout: the engine writes one instance record per draw.
-4. Uniform payload for custom data: `ShaderOpts` as `array<vec4<f32>, 16>`.
-5. Extra texture count limit: up to 4.
-
-The blend mode is configurable through `ImageShaderBlendMode`.
-
-## Bind Group Layout
-
-### Without extra textures
-
-1. `@group(0)` source image texture and sampler
-2. `@group(1)` user globals
-3. `@group(2)` engine globals
-
-### With extra textures
-
-If `ImageShaderDesc::with_extra_textures(true)` is used:
-
-1. `@group(0)` source image texture and sampler
-2. `@group(1)` extra textures and sampler
-3. `@group(2)` user globals
-4. `@group(3)` engine globals
-
-The extra-texture bind group always exposes 4 texture bindings plus 1 sampler. If your shader only needs 1 or 2 extra textures, you can ignore the unused bindings.
-
-## Binding Details
-
-### `@group(0)`: source image
-
-```wgsl
-@group(0) @binding(0) var tex: texture_2d<f32>;
-@group(0) @binding(1) var samp: sampler;
-```
-
-This is the image passed as the `source` argument to `draw_with_shader` or `draw_with_shader_bindings`.
-
-### `@group(1)`: extra textures
-
-Present only when `with_extra_textures(true)` is enabled.
-
-```wgsl
-@group(1) @binding(0) var t0: texture_2d<f32>;
-@group(1) @binding(1) var t1: texture_2d<f32>;
-@group(1) @binding(2) var t2: texture_2d<f32>;
-@group(1) @binding(3) var t3: texture_2d<f32>;
-@group(1) @binding(4) var extra_samp: sampler;
-```
-
-These slots are populated from `ImageShaderBindings`.
+When drawing with `draw_with_shader_bindings`, you bind textures by **intent** rather than index:
 
 ```rust
 let bindings = ImageShaderBindings::new()
-    .with_extra_image(0, noise)
-    .with_screen(1)
-    .with_history(2);
+    .with_history()                // Engine knows this belongs in slot 0
+    .with_screen()                 // Engine knows this belongs in slot 1
+    .with_image("t_noise", my_noise); // Engine knows this belongs in slot 2
+
+screen.draw_with_shader_bindings(ctx, sprite, shader_id, opts, shader_opts, bindings);
 ```
 
-Slot mapping:
+---
 
-1. `with_extra_image(slot, image)` -> samples another `Image`
-2. `with_screen(slot)` -> samples the current target snapshot
-3. `with_history(slot)` -> samples the previous-frame target snapshot
+## Automatic Injection (Prelude)
 
-Unused slots fall back to the source image texture.
+When using `ImageShaderTemplate` or `ImageShaderDesc::with_internal_prelude(true)`, the engine injects a standard set of WGSL definitions into your shader.
 
-## `screen` And `history`
+### Injected Structs
 
-`screen` and `history` are target-relative, not global.
+-   `VsIn`: Vertex input (position, rotation, size, uv_rect).
+-   `VsOut`: Fragment input (clip_pos, uv, local_uv, uv_scale).
+-   `EngineGlobals`: Screen size and global opacity info.
 
-For a draw into some target texture `T`:
+### Injected Variables
 
-1. `screen`
-   - A snapshot of `T` taken before the target's image batch begins.
-   - For the main screen, this means the state after the 3D/base pass and before the 2D image batch.
+In your vertex/fragment bodies, you can directly access:
 
-2. `history`
-   - A snapshot of `T` from the end of the previous frame.
-   - On the first frame, it falls back to `screen`.
+-   `src`: (Fragment only) The sampled color of the main image.
+-   `opacity`: The combined effect of `DrawOption` and `ShaderOpts` opacity.
+-   `screen`: A `vec4<f32>` containing `[2/w, 2/h, 1/w, 1/h]`.
+-   `scale_factor`: The current device pixel ratio.
+-   `user_globals`: An array of 16 `vec4<f32>` containing your `ShaderOpts` data.
 
-Important: `screen` is not a live read of the current attachment during the same pass.
+### Injected Bindings
 
-## User Globals Layout
+-   `tex`: The main source image texture.
+-   `samp`: The primary linear sampler.
+-   `extra_samp`: A linear sampler for all extra textures.
+-   `t_history`, `t_screen`: (If slots are assigned) Semantic texture aliases.
+-   `t0` to `t3`: Generic names for extra textures (fallback).
 
-Custom per-draw data comes from `ShaderOpts`.
+---
 
-WGSL declaration:
+## Semantic Descriptions
 
-```wgsl
-@group(N) @binding(0) var<uniform> user_globals: array<vec4<f32>, 16>;
-```
+### `screen` snapshot
+A snapshot of the current render target taken *before* the current draw batch began. Useful for post-processing effects and localized distortion.
 
-`N` is:
+### `history` snapshot
+A snapshot of the render target from the **end of the previous frame**. Essential for temporal effects like trails, motion blur, and accumulation buffers.
 
-1. `1` when extra textures are disabled
-2. `2` when extra textures are enabled
+---
 
-Rust side example:
+## Low-Level: Full WGSL Contract
 
-```rust
-let mut opts = ShaderOpts::default();
-opts.set_vec4(0, [time, 0.0, 0.0, 0.0]);
-opts.set_vec4(1, [1.0, 0.5, 0.8, 1.0]);
-```
+If you disable `internal_prelude`, you must handle all bindings and structs manually.
 
-## Engine Globals Layout
+### Bind Group Layout
 
-WGSL declaration:
+-   `@group(0)`: Main texture (`binding(0)`) and sampler (`binding(1)`).
+-   `@group(1)`: Extra textures (`binding(0-3)`) and extra sampler (`binding(4)`).
+-   `@group(2)`: User globals (`ShaderOpts`).
+-   `@group(3)`: Engine globals (Internal state).
 
-```wgsl
-struct EngineGlobals {
-    screen: vec4<f32>,
-    opacity: f32,
-    shader_opacity: f32,
-    scale_factor: f32,
-    _padding: f32,
-};
+*Note: Group indices shift down if extra textures are disabled.*
 
-@group(N) @binding(0) var<uniform> _sp_internal: EngineGlobals;
-```
-
-`N` is:
-
-1. `2` when extra textures are disabled
-2. `3` when extra textures are enabled
-
-Field meanings:
-
-1. `screen.xy`
-   - `2.0 / logical_width`, `2.0 / logical_height`
-2. `screen.zw`
-   - `1.0 / logical_width`, `1.0 / logical_height`
-3. `opacity`
-   - draw opacity from `DrawOption`
-4. `shader_opacity`
-   - `ShaderOpts::opacity`
-5. `scale_factor`
-   - current window/device scale factor
-
-## Vertex Layout
-
-The engine provides one instanced vertex record per image draw.
-
-WGSL input shape:
+### Vertex Input Layout
 
 ```wgsl
 struct VsIn {
@@ -209,34 +120,9 @@ struct VsIn {
 };
 ```
 
-Field meanings:
+---
 
-1. `pos`
-   - logical draw position
-2. `rotation`
-   - per-draw rotation in radians
-3. `size`
-   - final logical draw size after scaling
-4. `uv_rect`
-   - source UV rectangle in atlas space
+## Examples
 
-## Entry Points
-
-In full WGSL mode, entry point names are currently fixed:
-
-1. Vertex: `vs_main`
-2. Fragment: `fs_main`
-
-## Example
-
-See:
-
-1. `examples/advanced_image_shader_full.rs`
-
-That example demonstrates:
-
-1. full WGSL registration
-2. extra image textures
-3. `screen`
-4. `history`
-5. additive blending
+-   Template mode: `examples/image_shader_template.rs`
+-   Full WGSL mode: `examples/advanced_image_shader_full.rs`

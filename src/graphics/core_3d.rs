@@ -84,6 +84,7 @@ pub(crate) struct Graphics3D {
     pub(crate) transparent_instanced_model_pipelines: HashMap<u32, wgpu::RenderPipeline>,
     pub(crate) opaque_draw_indices_3d: Vec<usize>,
     pub(crate) transparent_draw_indices_3d: Vec<usize>,
+    pub(crate) shadow_draw_indices_3d: Vec<usize>,
     pub(crate) model_renderer: ModelRenderer,
     pub(crate) model_pipeline: wgpu::RenderPipeline,
     pub(crate) transparent_model_pipeline: wgpu::RenderPipeline,
@@ -664,7 +665,7 @@ impl Graphics {
                 layout: Some(&shadow_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shadow_shader,
-                    entry_point: Some("vs_main"),
+                    entry_point: Some("vs_main_instanced"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &[
                         RawVertex::layout(),
@@ -723,6 +724,7 @@ impl Graphics {
             transparent_instanced_model_pipelines: HashMap::new(),
             opaque_draw_indices_3d: Vec::new(),
             transparent_draw_indices_3d: Vec::new(),
+            shadow_draw_indices_3d: Vec::new(),
             model_renderer,
             model_pipeline,
             transparent_model_pipeline,
