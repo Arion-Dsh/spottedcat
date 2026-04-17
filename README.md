@@ -48,7 +48,7 @@ By default, only the 2D core is enabled for maximum efficiency. To use 3D models
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.9.3", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.9.4", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example

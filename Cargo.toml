@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "0.9.3"
+version = "0.9.4"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -108,6 +108,10 @@ required-features = ["utils"]
 [[example]]
 name = "rgb_image"
 path = "examples/rgb_image.rs"
+
+[[example]]
+name = "rotation_aspect_test"
+path = "examples/rotation_aspect_test.rs"
 
 [[example]]
 name = "one_shot_splash"

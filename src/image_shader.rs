@@ -143,9 +143,13 @@ impl Eq for ImageShaderInput {}
 /// defined during shader registration. The engine handles the underlying slot mapping.
 ///
 /// ```rust
-/// let bindings = ImageShaderBindings::new()
-///     .with_history() // Automatically finds the history slot
-///     .with_image("t_noise", noise_img); // Automatically finds the "t_noise" slot
+/// use spottedcat::{Image, ImageShaderBindings};
+///
+/// fn build_bindings(noise_img: Image) -> ImageShaderBindings {
+///     ImageShaderBindings::new()
+///         .with_history() // Automatically finds the history slot
+///         .with_image("t_noise", noise_img) // Automatically finds the "t_noise" slot
+/// }
 /// ```
 ///
 /// ### Positional Bindings
@@ -154,9 +158,13 @@ impl Eq for ImageShaderInput {}
 /// overwrite positional bindings if they share the same slot.
 ///
 /// ```rust
-/// let bindings = ImageShaderBindings::new()
-///     .with_extra_image(0, noise_img)
-///     .with_extra_image(1, mask_img);
+/// use spottedcat::{Image, ImageShaderBindings};
+///
+/// fn build_bindings(noise_img: Image, mask_img: Image) -> ImageShaderBindings {
+///     ImageShaderBindings::new()
+///         .with_extra_image(0, noise_img)
+///         .with_extra_image(1, mask_img)
+/// }
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageShaderBindings {

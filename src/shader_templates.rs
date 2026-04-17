@@ -231,16 +231,16 @@ fn vs_main(in: VsIn) -> VsOut {
 
     let tx = in.pos.x * sw_inv_2 - 1.0;
     let ty = 1.0 - in.pos.y * sh_inv_2;
-    let sx = in.size.x * sw_inv;
-    let sy = in.size.y * sh_inv;
-
     let c = cos(in.rotation);
     let s = sin(in.rotation);
-    let dx = tx - (c * sx * -1.0 - s * sy * 1.0);
-    let dy = ty - (s * sx * -1.0 + c * sy * 1.0);
 
-    let x = local_pos.x * (c * sx) + local_pos.y * (-s * sy) + dx;
-    let y = local_pos.x * (s * sx) + local_pos.y * (c * sy) + dy;
+    let ox = (local_pos.x + 1.0) * 0.5 * in.size.x;
+    let oy = (1.0 - local_pos.y) * 0.5 * in.size.y;
+    let rx = c * ox + s * oy;
+    let ry = c * oy - s * ox;
+
+    let x = tx + rx * sw_inv_2;
+    let y = ty - ry * sh_inv_2;
 
     out.clip_pos = vec4<f32>(x, y, 0.0, 1.0);
     out.local_uv = uv;
