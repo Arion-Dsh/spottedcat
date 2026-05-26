@@ -11,6 +11,10 @@ cargo check --example one_shot_splash
 cargo check --example seven_level_test
 cargo check --example text_performance_test
 cargo check --example touch_test
+cargo check --example rgb_image
+cargo check --example rotation_aspect_test
+cargo check --example advanced_image_shader_full
+cargo check --example image_shader_template
 
 echo "Checking utils examples..."
 cargo check --example happy_tree_desktop --features utils
@@ -22,6 +26,8 @@ cargo check --example instancing_test --features model-3d
 cargo check --example metal_sphere --features model-3d
 cargo check --example model_test --features model-3d
 cargo check --example render_state_stress --features model-3d
+cargo check --example advanced_model_shader_full --features model-3d
+cargo check --example mixed_model_shader_stress --features model-3d
 
 echo "Checking effects examples..."
 cargo check --example fog_world --features effects
