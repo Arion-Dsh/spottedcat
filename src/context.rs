@@ -121,6 +121,14 @@ impl Context {
         ctx
     }
 
+    /// Returns the platform's persistent application data directory when available.
+    ///
+    /// On Android this is the app's internal data directory. On iOS this resolves to
+    /// the app sandbox's `Library/Application Support` directory.
+    pub fn app_data_dir(&self) -> Option<std::path::PathBuf> {
+        platform_app_data_dir()
+    }
+
     pub(crate) fn set_delta_time(&mut self, dt: std::time::Duration) {
         self.runtime.delta_time = dt;
         self.runtime.total_elapsed = self.runtime.total_elapsed.saturating_add(dt);
@@ -659,6 +667,25 @@ impl Context {
 
         self.runtime.draw_list.push(drawable);
     }
+}
+
+#[cfg(target_os = "android")]
+fn platform_app_data_dir() -> Option<std::path::PathBuf> {
+    crate::android::get_app().and_then(|app| app.internal_data_path())
+}
+
+#[cfg(target_os = "ios")]
+fn platform_app_data_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        std::path::PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+    })
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn platform_app_data_dir() -> Option<std::path::PathBuf> {
+    None
 }
 
 #[cfg(test)]
