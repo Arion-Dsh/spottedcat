@@ -21,7 +21,7 @@ impl Clone for AudioSystem {
     }
 }
 
-type AudioRegistrationQueue = Arc<Mutex<Vec<(u32, Vec<u8>)>>>;
+type AudioRegistrationQueue = Arc<Mutex<Vec<(u32, SoundData)>>>;
 
 pub(crate) struct AudioSystemInner {
     #[allow(dead_code)]
@@ -107,8 +107,10 @@ impl AudioSystem {
 
     pub(crate) fn register_sound(&self, bytes: Vec<u8>) -> u32 {
         let sound_id = self.0.next_sound_id.fetch_add(1, Ordering::SeqCst);
-        if let Ok(mut queue) = self.0.registration_queue.lock() {
-            queue.push((sound_id, bytes));
+        if let Ok(sound_data) = decode_sound_from_bytes(bytes)
+            && let Ok(mut queue) = self.0.registration_queue.lock()
+        {
+            queue.push((sound_id, sound_data));
         }
         sound_id
     }
@@ -709,21 +711,14 @@ pub(crate) fn decode_sound_from_bytes(bytes: Vec<u8>) -> Result<SoundData> {
 
 fn promote_pending_registrations_locked(
     handler: &mut MixerHandler,
-    queue: &mut Vec<(u32, Vec<u8>)>,
+    queue: &mut Vec<(u32, SoundData)>,
 ) {
-    for (id, sound_data) in decode_pending_registrations(std::mem::take(queue)) {
+    for (id, sound_data) in std::mem::take(queue) {
         handler.sound_registry.insert(id, sound_data);
     }
 }
 
-fn decode_pending_registrations(pending: Vec<(u32, Vec<u8>)>) -> Vec<(u32, SoundData)> {
-    pending
-        .into_iter()
-        .filter_map(|(id, bytes)| decode_sound_from_bytes(bytes).ok().map(|sound| (id, sound)))
-        .collect()
-}
-
-fn remove_pending_registration_locked(queue: &mut Vec<(u32, Vec<u8>)>, sound_id: u32) {
+fn remove_pending_registration_locked(queue: &mut Vec<(u32, SoundData)>, sound_id: u32) {
     queue.retain(|(id, _)| *id != sound_id);
 }
 
@@ -740,7 +735,7 @@ mod tests {
             sound_registry: HashMap::new(),
             sounds: Vec::new(),
         };
-        let mut queue = vec![(7, test_wav_bytes())];
+        let mut queue = vec![(7, decode_sound_from_bytes(test_wav_bytes()).unwrap())];
 
         promote_pending_registrations_locked(&mut handler, &mut queue);
 
@@ -750,7 +745,10 @@ mod tests {
 
     #[test]
     fn unregister_removes_pending_registration() {
-        let mut queue = vec![(7, test_wav_bytes()), (8, test_wav_bytes())];
+        let mut queue = vec![
+            (7, decode_sound_from_bytes(test_wav_bytes()).unwrap()),
+            (8, decode_sound_from_bytes(test_wav_bytes()).unwrap()),
+        ];
 
         remove_pending_registration_locked(&mut queue, 7);
 

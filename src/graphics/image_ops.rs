@@ -1,4 +1,4 @@
-use crate::graphics::texture::GpuTexture;
+use crate::graphics::texture::{GpuTexture, TextureUploadRegion};
 use crate::platform;
 
 use super::core::Graphics;
@@ -7,111 +7,85 @@ impl Graphics {
     pub(crate) fn process_registrations(&mut self, ctx: &mut crate::Context) -> anyhow::Result<()> {
         let has_pending = ctx.registry.textures.iter().any(|opt| {
             opt.as_ref()
-                .map(|e| !e.is_ready(self.gpu_generation))
+                .map(|e| !e.is_ready(self.gpu_generation) || !e.pending_uploads.is_empty())
                 .unwrap_or(false)
         });
         if !self.dirty_assets && !has_pending {
             return Ok(());
         }
 
+        if ctx.registry.textures.iter().any(|opt| {
+            opt.as_ref()
+                .map(|e| e.dynamic_atlas && !e.is_ready(self.gpu_generation))
+                .unwrap_or(false)
+        }) {
+            self.sync_dynamic_atlas_raw_data(ctx);
+        }
+
         for i in 0..ctx.registry.textures.len() {
             let Some(entry) = ctx.registry.textures[i].as_mut() else {
                 continue;
             };
-            if entry.is_ready(self.gpu_generation) {
+            let needs_full_upload = !entry.is_ready(self.gpu_generation);
+            if !needs_full_upload && entry.pending_uploads.is_empty() {
                 continue;
             }
 
-            let usage = if entry.is_render_target() {
-                wgpu::TextureUsages::TEXTURE_BINDING
+            if needs_full_upload {
+                let usage = wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::COPY_DST
                     | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT
-            } else {
-                wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT
-            };
-            let format = entry.gpu_format(self.config.format);
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT;
+                let format = entry.gpu_format(self.config.format);
 
-            let texture = if entry.is_render_target() {
-                GpuTexture::create_empty_with_usage_and_mips(
-                    &self.device,
-                    entry.pixel_width,
-                    entry.pixel_height,
-                    format,
-                    usage,
-                    1,
-                )
-            } else if entry.dynamic_atlas {
-                GpuTexture::create_empty_with_usage_and_mips(
-                    &self.device,
-                    entry.pixel_width,
-                    entry.pixel_height,
-                    format,
-                    usage,
-                    1,
-                )
-            } else {
-                GpuTexture::create_empty_with_usage(
-                    &self.device,
-                    entry.pixel_width,
-                    entry.pixel_height,
-                    format,
-                    usage,
-                )
-            };
+                let texture = if entry.is_render_target() || entry.dynamic_atlas {
+                    GpuTexture::create_empty_with_usage_and_mips(
+                        &self.device,
+                        entry.pixel_width,
+                        entry.pixel_height,
+                        format,
+                        usage,
+                        1,
+                    )
+                } else {
+                    GpuTexture::create_empty_with_usage(
+                        &self.device,
+                        entry.pixel_width,
+                        entry.pixel_height,
+                        format,
+                        usage,
+                    )
+                };
 
-            if let Some(raw_data) = entry.raw_data.as_ref() {
-                let mut upload_data = raw_data.to_vec();
-                if matches!(
-                    texture.0.format,
-                    wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
-                ) {
-                    for p in upload_data.chunks_exact_mut(4) {
-                        p.swap(0, 2);
+                if let Some(raw_data) = entry.raw_data.as_ref() {
+                    upload_rgba_texture_region(
+                        &self.queue,
+                        &texture,
+                        0,
+                        0,
+                        entry.pixel_width,
+                        entry.pixel_height,
+                        raw_data,
+                    );
+
+                    if !entry.dynamic_atlas {
+                        texture.generate_mipmaps(&self.device, &self.queue);
                     }
                 }
 
-                let bytes_per_row = 4 * entry.pixel_width;
-                let (data, bytes_per_row) = platform::align_write_texture_bytes(
-                    bytes_per_row,
-                    entry.pixel_height,
-                    upload_data,
-                );
-
-                self.queue.write_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: &texture.0.texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d::ZERO,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    &data,
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(bytes_per_row),
-                        rows_per_image: Some(entry.pixel_height),
-                    },
-                    wgpu::Extent3d {
-                        width: entry.pixel_width,
-                        height: entry.pixel_height,
-                        depth_or_array_layers: 1,
-                    },
-                );
-
-                if !entry.dynamic_atlas {
-                    texture.generate_mipmaps(&self.device, &self.queue);
+                let bind_group = self
+                    .image_renderer
+                    .create_texture_bind_group(&self.device, &texture.0.view);
+                entry.runtime.gpu_texture = Some(texture);
+                entry.runtime.bind_group = Some(bind_group);
+                entry.runtime.generation = self.gpu_generation;
+                entry.pending_uploads.clear();
+            } else if let Some(texture) = entry.runtime.gpu_texture.as_ref() {
+                let pending_uploads = std::mem::take(&mut entry.pending_uploads);
+                for upload in pending_uploads {
+                    upload_texture_region(&self.queue, texture, upload);
                 }
             }
-
-            let bind_group = self
-                .image_renderer
-                .create_texture_bind_group(&self.device, &texture.0.view);
-            entry.runtime.gpu_texture = Some(texture);
-            entry.runtime.bind_group = Some(bind_group);
-            entry.runtime.generation = self.gpu_generation;
         }
 
         self.dirty_assets = false;
@@ -135,6 +109,77 @@ impl Graphics {
 
         self.process_registrations(ctx)
     }
+}
+
+impl Graphics {
+    fn sync_dynamic_atlas_raw_data(&self, ctx: &mut crate::Context) {
+        if let Some(atlas) = self.font_atlas.as_ref() {
+            atlas.sync_raw_data(&mut ctx.registry);
+        }
+        if let Some(atlas) = self.shared_atlas.as_ref() {
+            atlas.sync_raw_data(&mut ctx.registry);
+        }
+    }
+}
+
+fn upload_texture_region(queue: &wgpu::Queue, texture: &GpuTexture, upload: TextureUploadRegion) {
+    upload_rgba_texture_region(
+        queue,
+        texture,
+        upload.x,
+        upload.y,
+        upload.width,
+        upload.height,
+        &upload.rgba,
+    );
+}
+
+fn upload_rgba_texture_region(
+    queue: &wgpu::Queue,
+    texture: &GpuTexture,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) {
+    if width == 0 || height == 0 {
+        return;
+    }
+
+    let mut upload_data = rgba.to_vec();
+    if matches!(
+        texture.0.format,
+        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+    ) {
+        for p in upload_data.chunks_exact_mut(4) {
+            p.swap(0, 2);
+        }
+    }
+
+    let bytes_per_row = 4 * width;
+    let (data, bytes_per_row) =
+        platform::align_write_texture_bytes(bytes_per_row, height, upload_data);
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture.0.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x, y, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        &data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(bytes_per_row),
+            rows_per_image: Some(height),
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
 }
 
 pub(crate) fn resolve_image_uv(

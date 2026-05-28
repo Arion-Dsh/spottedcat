@@ -1,3 +1,4 @@
+use crate::graphics::texture::TextureUploadRegion;
 use crate::{Image, Pt};
 use std::sync::Arc;
 
@@ -12,6 +13,58 @@ struct Node {
     h: i32,
     split: bool,
     is_end: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DynamicAtlas;
+    use crate::{Context, Pt};
+
+    #[test]
+    fn atlas_append_on_ready_texture_queues_partial_upload_without_invalidating_generation() {
+        let mut ctx = Context::new();
+        let mut atlas = DynamicAtlas::new(256);
+        let rgba = [255, 0, 0, 255];
+
+        let first = atlas
+            .add_region(
+                &mut ctx.registry,
+                1.0,
+                Pt::from(1.0),
+                Pt::from(1.0),
+                1,
+                1,
+                &rgba,
+            )
+            .expect("first atlas insert should succeed");
+        let texture_id = first.texture_id();
+        let generation = ctx.registry.gpu_generation;
+        let entry = ctx.registry.textures[texture_id as usize]
+            .as_mut()
+            .expect("atlas texture should be registered");
+        entry.pending_uploads.clear();
+        entry.runtime.generation = generation;
+
+        atlas
+            .add_region(
+                &mut ctx.registry,
+                1.0,
+                Pt::from(1.0),
+                Pt::from(1.0),
+                1,
+                1,
+                &rgba,
+            )
+            .expect("second atlas insert should succeed");
+
+        let entry = ctx.registry.textures[texture_id as usize]
+            .as_ref()
+            .expect("atlas texture should still be registered");
+        assert_eq!(entry.runtime.generation, generation);
+        assert_eq!(entry.pending_uploads.len(), 1);
+        assert_eq!(entry.pending_uploads[0].width, 3);
+        assert_eq!(entry.pending_uploads[0].height, 3);
+    }
 }
 
 impl Node {
@@ -313,13 +366,33 @@ impl DynamicAtlas {
         page.buffer[bottom_right_dst_idx..bottom_right_dst_idx + 4].copy_from_slice(bottom_right);
 
         // Update the texture data in Registry
+        let registry_generation = registry.gpu_generation;
         if let Some(entry) = registry
             .textures
             .get_mut(page.texture_id as usize)
             .and_then(|v| v.as_mut())
         {
-            entry.raw_data = Some(Arc::from(page.buffer.as_slice()));
-            entry.runtime.generation = 0; // Force re-upload
+            let upload_x = inner_x - 1;
+            let upload_y = inner_y - 1;
+            let upload_w = w + 2;
+            let upload_h = h + 2;
+            let mut rgba_region = Vec::with_capacity((upload_w * upload_h * 4) as usize);
+            for row in 0..upload_h {
+                let src_idx = ((upload_y + row) * page.pixel_width + upload_x) as usize * 4;
+                let row_len = (upload_w * 4) as usize;
+                rgba_region.extend_from_slice(&page.buffer[src_idx..src_idx + row_len]);
+            }
+
+            if !entry.is_ready(registry_generation) {
+                entry.raw_data = Some(Arc::from(page.buffer.as_slice()));
+            }
+            entry.pending_uploads.push(TextureUploadRegion {
+                x: upload_x,
+                y: upload_y,
+                width: upload_w,
+                height: upload_h,
+                rgba: rgba_region,
+            });
             registry.dirty_assets = true;
         }
 
@@ -362,5 +435,17 @@ impl DynamicAtlas {
                 height: h,
             },
         })
+    }
+
+    pub(crate) fn sync_raw_data(&self, registry: &mut crate::context::ResourceRegistry) {
+        for page in &self.pages {
+            if let Some(entry) = registry
+                .textures
+                .get_mut(page.texture_id as usize)
+                .and_then(|v| v.as_mut())
+            {
+                entry.raw_data = Some(Arc::from(page.buffer.as_slice()));
+            }
+        }
     }
 }

@@ -401,7 +401,17 @@ pub(crate) struct TextureEntry {
     pub(crate) render_target: bool,
     pub(crate) dynamic_atlas: bool,
     pub(crate) raw_data: Option<Arc<[u8]>>,
+    pub(crate) pending_uploads: Vec<TextureUploadRegion>,
     pub(crate) runtime: TextureRuntimeData,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TextureUploadRegion {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) rgba: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -448,6 +458,7 @@ impl TextureEntry {
             render_target: false,
             dynamic_atlas: false,
             raw_data: Some(raw_data),
+            pending_uploads: Vec::new(),
             runtime: TextureRuntimeData {
                 gpu_texture: None,
                 bind_group: None,
@@ -473,6 +484,7 @@ impl TextureEntry {
             render_target: false,
             dynamic_atlas: true,
             raw_data: Some(raw_data),
+            pending_uploads: Vec::new(),
             runtime: TextureRuntimeData {
                 gpu_texture: None,
                 bind_group: None,
@@ -497,6 +509,7 @@ impl TextureEntry {
             render_target: true,
             dynamic_atlas: false,
             raw_data: None,
+            pending_uploads: Vec::new(),
             runtime: TextureRuntimeData {
                 gpu_texture: None,
                 bind_group: None,
