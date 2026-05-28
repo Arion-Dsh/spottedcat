@@ -91,7 +91,7 @@ impl App {
         let attributes = Window::default_attributes()
             .with_title(self.window_config.title.clone())
             .with_resizable(self.window_config.resizable)
-            .with_transparent(true);
+            .with_transparent(self.window_config.transparent);
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         let attributes = {
