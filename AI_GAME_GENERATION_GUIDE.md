@@ -84,6 +84,51 @@ target.draw(ctx, &image, DrawOption::default()
 }
 ```
 
+### Asynchronous Asset Loading
+To avoid freezing the `update` or `draw` loop when reading and decoding image files from disk, use `AsyncImageLoader`. Load files concurrently in background threads and check progress / slice sub-images inside `update`:
+```rust
+use spottedcat::{Context, Image, Spot, AsyncImageLoader, DrawOption, Bounds, Pt};
+
+struct GameScene {
+    assets: AsyncImageLoader,
+    player_frames: Vec<Image>,
+}
+
+impl Spot for GameScene {
+    fn initialize(ctx: &mut Context) -> Self {
+        let mut assets = AsyncImageLoader::new();
+        // Trigger load in background
+        assets.load("assets/spritesheet.png");
+        
+        Self {
+            assets,
+            player_frames: Vec::new(),
+        }
+    }
+
+    fn update(&mut self, ctx: &mut Context, _dt: std::time::Duration) {
+        // Once done, retrieve and slice EXACTLY once in update, avoiding lookup overhead in draw
+        if self.assets.is_done(ctx) && self.player_frames.is_empty() {
+            let sheet = self.assets.get(ctx, "assets/spritesheet.png").unwrap();
+            let frame = Image::sub_image(ctx, sheet, Bounds::new(Pt(0.0), Pt(0.0), Pt(32.0), Pt(32.0))).unwrap();
+            self.player_frames.push(frame);
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut Context, screen: Image) {
+        if self.assets.is_done(ctx) {
+            // Draw pre-sliced images directly
+            screen.draw(ctx, &self.player_frames[0], DrawOption::default());
+        } else {
+            // Check loading progress ratio (0.0 to 1.0)
+            let ratio = self.assets.progress_ratio(ctx);
+            draw_progress_bar(ctx, screen, ratio);
+        }
+    }
+}
+```
+
+
 ### Text
 Text requires a registered font ID.
 ```rust

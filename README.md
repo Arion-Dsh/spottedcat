@@ -41,14 +41,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.9.6"
+spottedcat = "0.9.7"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.9.6", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "0.9.7", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
@@ -162,7 +162,9 @@ Forces pending asset rebuild/re-upload to GPU to run immediately with `spottedca
 - **Input**: Check keys with `spottedcat::key_down(ctx, ...)`, mouse with `spottedcat::mouse_down(ctx, ...)`, or get `spottedcat::mouse_pos(ctx)`.
 - **Audio**: Play sounds with `spottedcat::play_sound(ctx, ...)`.
 - **Scenes**: Transition between states using `spottedcat::switch_scene::<NewScene>()`.
+- **Asynchronous Asset Loading**: Enable the `utils` feature and use `AsyncImageLoader` to load and decode images on a background thread. Query progress with `progress_ratio(ctx)` and check completion with `is_done(ctx)` to implement smooth loading bars and perform one-time sub-image slicing.
 - **Resources**: Share data between systems via `spottedcat::get_resource::<T>(ctx)`.
+
 
 ### Sensors
 

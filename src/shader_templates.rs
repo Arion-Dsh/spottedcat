@@ -387,7 +387,7 @@ fn model_shader_template_from_slots(template: &ModelShaderTemplate) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        ImageShaderTemplate, ModelShaderTemplate, image_shader_template, model_shader_template,
+        ImageShaderTemplate, image_shader_template, model_shader_template,
     };
 
     #[test]

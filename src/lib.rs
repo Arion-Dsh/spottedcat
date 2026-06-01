@@ -138,6 +138,10 @@ pub use sound::*;
 pub use splash::OneShotSplash;
 pub use text::Text;
 pub use touch::{TouchInfo, TouchPhase};
+#[cfg(feature = "utils")]
+pub use utils::image::{load_image_async, LoadingImage, AsyncImageLoader};
+
+
 
 // --- Functional API ---
 
