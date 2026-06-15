@@ -143,11 +143,11 @@ impl ImageShaderTemplate {
         let blend_mode = self.blend_mode;
         let history_slot = self.history_slot;
         let screen_slot = self.screen_slot;
-        
+
         let mut desc = ImageShaderDesc::from_wgsl(self.build())
             .with_extra_textures(uses_extra_textures)
             .with_blend_mode(blend_mode);
-            
+
         if let Some(slot) = history_slot {
             desc = desc.with_history_slot(slot);
         }
@@ -185,10 +185,10 @@ impl ModelShaderTemplate {
 
 fn image_shader_template_from_slots(template: &ImageShaderTemplate) -> String {
     let mut wgsl = image_shader_prelude_with_full_metadata_internal(
-        template.uses_extra_textures, 
+        template.uses_extra_textures,
         &template.extra_texture_names,
         template.history_slot,
-        template.screen_slot
+        template.screen_slot,
     );
 
     if !template.shared.trim().is_empty() {
@@ -295,7 +295,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     wgsl
 }
 
-
 pub fn image_shader_prelude_with_full_metadata_internal(
     uses_extra_textures: bool,
     texture_names: &[Option<String>; 4],
@@ -306,7 +305,7 @@ pub fn image_shader_prelude_with_full_metadata_internal(
     for i in 0..4 {
         final_names[i] = texture_names[i].clone();
     }
-    
+
     if let Some(slot) = history_slot {
         if final_names[slot].is_none() {
             final_names[slot] = Some("t_history".to_string());
@@ -333,7 +332,9 @@ pub fn image_shader_prelude_with_full_metadata_internal(
                 3 => "t3",
                 _ => unreachable!(),
             });
-            wgsl.push_str(&format!("@group(1) @binding({i}) var {name}: texture_2d<f32>;\n"));
+            wgsl.push_str(&format!(
+                "@group(1) @binding({i}) var {name}: texture_2d<f32>;\n"
+            ));
         }
         wgsl.push_str("@group(1) @binding(4) var extra_samp: sampler;\n");
     }
@@ -386,9 +387,7 @@ fn model_shader_template_from_slots(template: &ModelShaderTemplate) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ImageShaderTemplate, image_shader_template, model_shader_template,
-    };
+    use super::{ImageShaderTemplate, image_shader_template, model_shader_template};
 
     #[test]
     fn image_shader_template_without_extra_textures_uses_default_groups() {

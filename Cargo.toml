@@ -19,6 +19,8 @@ exclude = [
 
 [dependencies]
 wgpu = { version = "28", features = ["gles"] }
+sdl3-sys = { version = "=0.6.6", features = ["build-from-source"] }
+raw-window-handle = "0.6"
 bytemuck = { version = "1", features = ["derive"] }
 anyhow = "1"
 ab_glyph = "0.2"
@@ -28,14 +30,10 @@ image = { version = "0.25", optional = true }
 gltf = { version = "1.4.1", optional = true }
 ultraviolet = { version = "0.10.0", features = ["bytemuck"] }
 
-[target.'cfg(not(target_os = "android"))'.dependencies]
-winit = { version = "0.30" }
-
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-sys = "0.6"
 android-activity = { version = "0.6.1", features = ["game-activity"] }
 ndk = "0.9.0"
-rwh_06 = { package = "raw-window-handle", version = "0.6" }
 jni = "0.21"
 
 [target.'cfg(target_os = "ios")'.dependencies]

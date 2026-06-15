@@ -139,9 +139,7 @@ pub use splash::OneShotSplash;
 pub use text::Text;
 pub use touch::{TouchInfo, TouchPhase};
 #[cfg(feature = "utils")]
-pub use utils::image::{load_image_async, LoadingImage, AsyncImageLoader};
-
-
+pub use utils::image::{AsyncImageLoader, LoadingImage, load_image_async};
 
 // --- Functional API ---
 

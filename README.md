@@ -233,8 +233,8 @@ See `examples/image_shader_template.rs` and `examples/metal_sphere.rs` for templ
 Declared support:
 
 - **Desktop**: Windows, macOS, Linux.
-- **Web**: Compile to WASM with `wasm-pack`. See `canvas_id` in `WindowConfig`.
-- **Android**: Integrated with `winit`'s android-activity.
+- **Web**: SDL3-backed WASM builds target Emscripten.
+- **Android**: SDL3-backed Android windowing.
 - **iOS**: Support for UIKit and native sensor access.
 
 

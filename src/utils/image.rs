@@ -68,7 +68,9 @@ impl LoadingImage {
                 let scale_factor = ctx.scale_factor().max(1.0);
                 let width = Pt::from_physical_px(width_px as f64, scale_factor);
                 let height = Pt::from_physical_px(height_px as f64, scale_factor);
-                match Image::new_from_rgba8_with_pixels(ctx, width_px, height_px, width, height, &rgba) {
+                match Image::new_from_rgba8_with_pixels(
+                    ctx, width_px, height_px, width, height, &rgba,
+                ) {
                     Ok(img) => {
                         self.image = Some(img);
                         Some(img)
@@ -99,14 +101,12 @@ impl LoadingImage {
         self.poll(ctx)
     }
 
-
     /// Returns the loaded Image if it is ready, otherwise returns the fallback placeholder image.
     /// Internally polls the loading status automatically.
     pub fn get_or(&mut self, ctx: &mut Context, fallback: Image) -> Image {
         self.get(ctx).unwrap_or(fallback)
     }
 }
-
 
 /// Starts loading an image asynchronously from the specified path.
 ///
@@ -269,12 +269,12 @@ impl AsyncImageLoader {
 
     /// Checks if loading failed for a specific path, returning the error message if any.
     pub fn error(&self, path: &str) -> Option<&str> {
-        self.errors.get(path).map(|s| s.as_str()).or_else(|| {
-            self.loading.get(path).and_then(|loader| loader.error())
-        })
+        self.errors
+            .get(path)
+            .map(|s| s.as_str())
+            .or_else(|| self.loading.get(path).and_then(|loader| loader.error()))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -320,7 +320,7 @@ mod tests {
 
         // Trigger loading
         loader.load("assets/happy-tree.png");
-        
+
         // 2. Loading state check (immediately after queuing)
         assert!(loader.progress_ratio(&mut ctx) < 1.0);
         assert!(!loader.is_done(&mut ctx));
@@ -343,12 +343,9 @@ mod tests {
         assert!(ready);
         assert_eq!(loader.progress_ratio(&mut ctx), 1.0);
         assert!(loader.is_ready(&mut ctx, "assets/happy-tree.png"));
-        
+
         let img = loader.get_or(&mut ctx, "assets/happy-tree.png", fallback);
         assert_ne!(img, fallback);
         assert!(img.width().as_f32() > 0.0);
     }
 }
-
-
-

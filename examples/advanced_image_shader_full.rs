@@ -94,7 +94,7 @@ impl Spot for FullShaderExample {
     fn initialize(ctx: &mut Context) -> Self {
         let sprite = Image::new(ctx, Pt::from(96.0), Pt::from(96.0), &build_sprite_rgba()).unwrap();
         let noise = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &build_noise_rgba()).unwrap();
-        
+
         // Registration with Semantic Slots:
         // No manual index repeat in Draw anymore!
         let shader_id = register_image_shader_desc(
@@ -104,7 +104,7 @@ impl Spot for FullShaderExample {
                 .with_extra_textures(true)
                 .with_history_slot(0) // Marks slot 0 as "History"
                 .with_texture_alias(1, "t_noise")
-                .with_screen_slot(2)  // Marks slot 2 as "Screen snapshot"
+                .with_screen_slot(2) // Marks slot 2 as "Screen snapshot"
                 .with_blend_mode(ImageShaderBlendMode::Add),
         );
 

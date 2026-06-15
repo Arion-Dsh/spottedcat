@@ -158,7 +158,7 @@ impl Graphics {
 
                         let mut extra_inputs =
                             [ResolvedImageShaderInput::Texture(entry.texture_id); 4];
-                        
+
                         let shader_desc = ctx.registry.image_shaders.get(&cmd.shader_id);
 
                         // Helper to resolve ImageShaderInput to ResolvedImageShaderInput
@@ -196,12 +196,14 @@ impl Graphics {
                         if let Some(desc) = shader_desc {
                             if cmd.shader_bindings.history {
                                 if let Some(slot) = desc.history_slot {
-                                    extra_inputs[slot] = ResolvedImageShaderInput::History(cmd.target_texture_id);
+                                    extra_inputs[slot] =
+                                        ResolvedImageShaderInput::History(cmd.target_texture_id);
                                 }
                             }
                             if cmd.shader_bindings.screen {
                                 if let Some(slot) = desc.screen_slot {
-                                    extra_inputs[slot] = ResolvedImageShaderInput::Screen(cmd.target_texture_id);
+                                    extra_inputs[slot] =
+                                        ResolvedImageShaderInput::Screen(cmd.target_texture_id);
                                 }
                             }
                             for (name, input) in &cmd.shader_bindings.named_inputs {

@@ -67,7 +67,8 @@ impl Spot for RotationAspectTest {
             &make_disc_rgba(),
         )
         .expect("disc image should load");
-        let font_id = spottedcat::register_font(ctx, include_bytes!("../assets/DejaVuSans.ttf").to_vec());
+        let font_id =
+            spottedcat::register_font(ctx, include_bytes!("../assets/DejaVuSans.ttf").to_vec());
 
         Self {
             disc,
@@ -95,9 +96,12 @@ impl Spot for RotationAspectTest {
             DrawOption::default().with_position([Pt::from(18.0), Pt::from(22.0)]),
         );
 
-        let hint = Text::new("Both discs should stay circular in this portrait window.", self.font_id)
-            .with_font_size(Pt::from(14.0))
-            .with_color([0.78, 0.84, 0.88, 1.0]);
+        let hint = Text::new(
+            "Both discs should stay circular in this portrait window.",
+            self.font_id,
+        )
+        .with_font_size(Pt::from(14.0))
+        .with_color([0.78, 0.84, 0.88, 1.0]);
         screen.draw(
             ctx,
             &hint,

@@ -56,7 +56,7 @@ pub fn request_runtime_permission(permission: &str) -> Result<(), String> {
             },
         );
 
-        pedometer.startPedometerUpdatesFromDate_withHandler(&start, &*handler);
+        pedometer.startPedometerUpdatesFromDate_withHandler(&start, RcBlock::as_ptr(&handler));
     }
 
     Ok(())

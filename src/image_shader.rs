@@ -54,8 +54,8 @@ impl ImageShaderDesc {
     }
 
     /// Automatically prepends engine-standard WGSL definitions (EngineGlobals, VsIn, VsOut, etc.)
-    /// before the user-provided source. 
-    /// 
+    /// before the user-provided source.
+    ///
     /// This allows writing full shader code without copy-pasting standard boilerplate.
     /// When using the prelude, standard variables like `screen`, `opacity`, and `scale_factor`
     /// are automatically injected into the vertex and fragment bodies.
@@ -232,7 +232,8 @@ impl ImageShaderBindings {
 
     /// SEMANTIC: Binds an image to a named slot in the shader.
     pub fn with_image(mut self, name: impl Into<String>, image: Image) -> Self {
-        self.named_inputs.insert(name.into(), ImageShaderInput::Image(image));
+        self.named_inputs
+            .insert(name.into(), ImageShaderInput::Image(image));
         self
     }
 }

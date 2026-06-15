@@ -6,7 +6,7 @@ The **core** `spottedcat` crate is an engine library and does **not** define any
 
 This example uses a small wrapper crate at `examples/ios/spottedcat_ios_wrapper` that depends on `spottedcat` and exports `spottedcat_ios_start()` for demo purposes.
 
-This example is **winit-driven**: the iOS app entrypoint is `main.m`, which calls `spottedcat_ios_start()`.
+This example is SDL3-driven: the iOS app entrypoint is `main.m`, which calls `spottedcat_ios_start()`.
 
 The wrapper now shows:
 
@@ -36,6 +36,6 @@ The app calls `spottedcat_ios_start()` on launch.
 
 Note: step history is expected to be unavailable in the iOS Simulator because motion/pedometer data comes from real device sensors.
 
-Note: on iOS, `winit`'s `EventLoop::run_app` calls `UIApplicationMain`, so you cannot start it from a SwiftUI `@main` app (that would call `UIApplicationMain` twice).
+Note: on iOS, SDL3 owns the native application loop for this example, so keep the demo entrypoint in `main.m`.
 
 Note: the iOS Simulator may print messages like `Failed to send CA Event for app launch measurements...` / `Invalidating cache...`. These are system-level diagnostics and can be ignored if the app runs and renders correctly.

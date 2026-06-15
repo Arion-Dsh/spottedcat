@@ -1,10 +1,11 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
 }
 
 android {
     namespace = "com.example.gameactivityexample"
+    ndkVersion = "29.0.14206865"
+
     compileSdk {
         version = release(36)
     }
@@ -33,9 +34,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
-    }
-    kotlinOptions {
-        jvmTarget = "21"
     }
 
     packaging {
