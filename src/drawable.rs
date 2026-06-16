@@ -41,6 +41,26 @@ pub(crate) enum DrawCommand {
     Text(Box<TextCommand>),
 }
 
+/// Controls how an image is sampled when the drawn quad is larger than one tile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageRepeat {
+    /// Scale the image to fill the drawn quad.
+    #[default]
+    Stretch,
+    /// Repeat the image horizontally and vertically.
+    Repeat,
+    /// Repeat horizontally and keep a single tile vertically.
+    RepeatX,
+    /// Repeat vertically and keep a single tile horizontally.
+    RepeatY,
+    /// Repeat horizontally and stretch vertically.
+    RepeatXStretchY,
+    /// Repeat vertically and stretch horizontally.
+    RepeatYStretchX,
+    /// Draw one tile and leave the rest transparent.
+    NoRepeat,
+}
+
 /// Unified options for drawing images and text.
 ///
 /// Controls the position, rotation, and scale of drawn items.
@@ -53,6 +73,8 @@ pub struct DrawOption {
     /// Scale factors (x, y). Applied after size.
     scale: [f32; 2],
     opacity: f32,
+    repeat: ImageRepeat,
+    tile_size: Option<[Pt; 2]>,
 }
 
 impl Default for DrawOption {
@@ -62,6 +84,8 @@ impl Default for DrawOption {
             scale: [1.0, 1.0],
             rotation: 0.0,
             opacity: 1.0,
+            repeat: ImageRepeat::Stretch,
+            tile_size: None,
         }
     }
 }
@@ -74,6 +98,8 @@ impl DrawOption {
             rotation,
             scale,
             opacity: 1.0,
+            repeat: ImageRepeat::Stretch,
+            tile_size: None,
         }
     }
 
@@ -118,6 +144,29 @@ impl DrawOption {
     /// Sets the opacity (alpha multiplier), from 0.0 to 1.0.
     pub fn with_opacity(mut self, opacity: f32) -> Self {
         self.opacity = opacity.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn repeat(&self) -> ImageRepeat {
+        self.repeat
+    }
+
+    pub fn with_repeat(mut self, repeat: ImageRepeat) -> Self {
+        self.repeat = repeat;
+        self
+    }
+
+    pub fn tile_size(&self) -> Option<[Pt; 2]> {
+        self.tile_size
+    }
+
+    pub fn with_tile_size(mut self, tile_size: [Pt; 2]) -> Self {
+        self.tile_size = Some(tile_size);
+        self
+    }
+
+    pub fn clear_tile_size(mut self) -> Self {
+        self.tile_size = None;
         self
     }
 }

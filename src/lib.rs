@@ -97,7 +97,7 @@ pub use android_activity::AndroidApp;
 pub use assets::*;
 pub use context::Context;
 pub use controls::*;
-pub use drawable::{DrawOption, Drawable};
+pub use drawable::{DrawOption, Drawable, ImageRepeat};
 #[cfg(feature = "model-3d")]
 pub use drawable_3d::DrawOption3D;
 #[cfg(feature = "effects")]

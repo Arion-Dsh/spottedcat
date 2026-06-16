@@ -1,6 +1,7 @@
 //! Batch rendering and draw operations.
 
 use crate::Context;
+use crate::ImageRepeat;
 use crate::ShaderOpts;
 use crate::drawable::DrawCommand;
 use crate::image_raw::InstanceData;
@@ -123,6 +124,45 @@ fn resolve_extra_texture_ids(inputs: [ResolvedImageShaderInput; 4]) -> [u32; 4] 
         };
     }
     ids
+}
+
+fn resolve_repeat_params(opts: crate::DrawOption, source_size: [crate::Pt; 2]) -> [f32; 4] {
+    let repeat = opts.repeat();
+    if repeat == ImageRepeat::Stretch {
+        return [1.0, 1.0, 0.0, 0.0];
+    }
+
+    let draw_scale = opts.scale();
+    let draw_width = source_size[0].as_f32() * draw_scale[0].abs();
+    let draw_height = source_size[1].as_f32() * draw_scale[1].abs();
+    let tile_size = opts.tile_size().unwrap_or(source_size);
+    let tile_width = tile_size[0].as_f32().abs().max(1e-5);
+    let tile_height = tile_size[1].as_f32().abs().max(1e-5);
+    let repeat_x = matches!(
+        repeat,
+        ImageRepeat::Repeat | ImageRepeat::RepeatX | ImageRepeat::RepeatXStretchY
+    );
+    let repeat_y = matches!(
+        repeat,
+        ImageRepeat::Repeat | ImageRepeat::RepeatY | ImageRepeat::RepeatYStretchX
+    );
+    let stretch_x = matches!(repeat, ImageRepeat::RepeatYStretchX);
+    let stretch_y = matches!(repeat, ImageRepeat::RepeatXStretchY);
+
+    [
+        if stretch_x {
+            1.0
+        } else {
+            draw_width / tile_width
+        },
+        if stretch_y {
+            1.0
+        } else {
+            draw_height / tile_height
+        },
+        if repeat_x { 1.0 } else { 0.0 },
+        if repeat_y { 1.0 } else { 0.0 },
+    ]
 }
 
 impl Graphics {
@@ -380,6 +420,10 @@ impl Graphics {
                     resolved.bounds.height.as_f32() * opts.scale()[1],
                 ],
                 uv_rect: resolved.uv_rect,
+                repeat: resolve_repeat_params(
+                    opts,
+                    [resolved.bounds.width, resolved.bounds.height],
+                ),
                 ..Default::default()
             });
         }

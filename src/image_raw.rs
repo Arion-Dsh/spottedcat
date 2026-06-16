@@ -43,6 +43,7 @@ pub struct InstanceData {
     pub size: [f32; 2],
     pub _pad2: [f32; 2],
     pub uv_rect: [f32; 4],
+    pub repeat: [f32; 4],
 }
 
 #[repr(C)]
@@ -58,7 +59,7 @@ pub struct EngineGlobals {
 }
 
 impl InstanceData {
-    const ATTRS: [wgpu::VertexAttribute; 4] = [
+    const ATTRS: [wgpu::VertexAttribute; 5] = [
         wgpu::VertexAttribute {
             offset: 0,
             shader_location: 0,
@@ -77,6 +78,11 @@ impl InstanceData {
         wgpu::VertexAttribute {
             offset: 32,
             shader_location: 3,
+            format: wgpu::VertexFormat::Float32x4,
+        },
+        wgpu::VertexAttribute {
+            offset: 48,
+            shader_location: 4,
             format: wgpu::VertexFormat::Float32x4,
         },
     ];

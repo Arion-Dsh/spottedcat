@@ -28,6 +28,7 @@ struct VsIn {
     @location(1) rotation: f32,
     @location(2) size: vec2<f32>,
     @location(3) uv_rect: vec4<f32>,
+    @location(4) repeat: vec4<f32>,
 };
 
 struct VsOut {
@@ -35,6 +36,8 @@ struct VsOut {
     @location(0) uv: vec2<f32>,
     @location(1) local_uv: vec2<f32>,
     @location(2) uv_scale: vec2<f32>,
+    @location(3) src_uv: vec2<f32>,
+    @location(4) repeat_mask: f32,
 };
 
 
@@ -90,19 +93,30 @@ fn vs_main(in: VsIn) -> VsOut {
         in.uv_rect.y + uv.y * in.uv_rect.w
     );
 
-    // uv_scale is the atlas-space size of this image region
     out.uv_scale = in.uv_rect.zw;
 
-    // uv_scale is the atlas-space size of this image region
-    out.uv_scale = in.uv_rect.zw;
+    let tile_count = max(in.repeat.xy, vec2<f32>(1.0, 1.0));
+    let tiled_uv = uv * tile_count;
+    let repeat_enabled = in.repeat.zw > vec2<f32>(0.5, 0.5);
+    let src_local_uv = vec2<f32>(
+        select(min(tiled_uv.x, 1.0), fract(tiled_uv.x), repeat_enabled.x),
+        select(min(tiled_uv.y, 1.0), fract(tiled_uv.y), repeat_enabled.y),
+    );
+    out.repeat_mask =
+        select(select(0.0, 1.0, tiled_uv.x <= 1.0), 1.0, repeat_enabled.x) *
+        select(select(0.0, 1.0, tiled_uv.y <= 1.0), 1.0, repeat_enabled.y);
+    out.src_uv = vec2<f32>(
+        in.uv_rect.x + src_local_uv.x * in.uv_rect.z,
+        in.uv_rect.y + src_local_uv.y * in.uv_rect.w
+    );
 
     return out;
 }
 
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let c = textureSample(tex, samp, in.uv);
+    let c = textureSample(tex, samp, in.src_uv);
     let opacity = _sp_internal.opacity * _sp_internal.shader_opacity;
-    var color = vec4<f32>(c.rgb, c.a * opacity);
+    var color = vec4<f32>(c.rgb, c.a * opacity * in.repeat_mask);
     return color;
 }
