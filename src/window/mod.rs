@@ -1,6 +1,6 @@
 use crate::platform;
 use crate::scenes::{SceneFactory, ScenePayloadTypeId, Spot, take_scene_switch_request};
-use crate::{Context, WindowConfig};
+use crate::{Context, WindowConfig, gamepad};
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
@@ -211,6 +211,7 @@ pub(crate) struct App {
     pub(crate) init_state: GraphicsInitState,
     pub(crate) scale_factor: f64,
     pub(crate) timing: FixedTimestep,
+    pub(crate) gamepads: gamepad::GamepadRuntime,
 }
 
 pub(crate) fn make_screen_target(ctx: &Context) -> crate::Image {
@@ -246,6 +247,7 @@ impl App {
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
             timing: FixedTimestep::new(Duration::from_secs_f64(1.0 / 60.0)),
+            gamepads: gamepad::GamepadRuntime::new(),
         }
     }
 
@@ -265,7 +267,12 @@ impl App {
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
             timing: FixedTimestep::new(Duration::from_nanos(8_333_333)),
+            gamepads: gamepad::GamepadRuntime::new(),
         }
+    }
+
+    pub(crate) fn poll_gamepads(&mut self) {
+        self.gamepads.poll(self.ctx.input_mut());
     }
 }
 

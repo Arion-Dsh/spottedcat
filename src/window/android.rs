@@ -739,6 +739,8 @@ impl App {
                 }
             }
 
+            self.poll_gamepads();
+
             // Fixed update loop
             let updates = self.timing.run_updates(4, |dt| {
                 self.ctx.set_delta_time(dt);

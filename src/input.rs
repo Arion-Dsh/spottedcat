@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[cfg(not(target_os = "android"))]
 use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, Touch};
@@ -8,7 +8,34 @@ use winit::keyboard::PhysicalKey;
 use crate::Key;
 use crate::MouseButton as SpotMouseButton;
 use crate::Pt;
+use crate::gamepad::{GamepadAxis, GamepadButton, GamepadId, GamepadInfo};
 use crate::touch::{TouchInfo, TouchPhase};
+
+#[derive(Debug, Clone)]
+struct GamepadInputState {
+    info: GamepadInfo,
+    buttons_down: HashSet<GamepadButton>,
+    buttons_pressed: HashSet<GamepadButton>,
+    buttons_released: HashSet<GamepadButton>,
+    axes: HashMap<GamepadAxis, f32>,
+}
+
+impl GamepadInputState {
+    #[allow(dead_code)]
+    fn new(id: GamepadId, name: String) -> Self {
+        Self {
+            info: GamepadInfo {
+                id,
+                name,
+                connected: true,
+            },
+            buttons_down: HashSet::new(),
+            buttons_pressed: HashSet::new(),
+            buttons_released: HashSet::new(),
+            axes: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 /// Manages the state of all input devices (keyboard, mouse, touch, sensors).
@@ -37,6 +64,7 @@ pub struct InputManager {
     ime_preedit: Option<String>,
 
     touches: Vec<TouchInfo>,
+    gamepads: Vec<GamepadInputState>,
     #[cfg(feature = "sensors")]
     gyroscope: Option<[f32; 3]>,
     #[cfg(feature = "sensors")]
@@ -77,6 +105,7 @@ impl Default for InputManager {
             ime_preedit: None,
 
             touches: Vec::new(),
+            gamepads: Vec::new(),
             #[cfg(feature = "sensors")]
             gyroscope: None,
             #[cfg(feature = "sensors")]
@@ -148,6 +177,49 @@ impl InputManager {
     /// Returns a slice of active touch points.
     pub fn touches(&self) -> &[TouchInfo] {
         &self.touches
+    }
+
+    /// Returns basic information for every gamepad known to the input system.
+    pub fn gamepads(&self) -> Vec<GamepadInfo> {
+        self.gamepads
+            .iter()
+            .map(|state| state.info.clone())
+            .collect()
+    }
+
+    /// Returns true if the gamepad is currently connected.
+    pub fn gamepad_connected(&self, id: GamepadId) -> bool {
+        self.gamepad_state(id)
+            .map(|state| state.info.connected)
+            .unwrap_or(false)
+    }
+
+    /// Returns true if the specified gamepad button is currently held.
+    pub fn gamepad_button_down(&self, id: GamepadId, button: GamepadButton) -> bool {
+        self.gamepad_state(id)
+            .map(|state| state.buttons_down.contains(&button))
+            .unwrap_or(false)
+    }
+
+    /// Returns true if the specified gamepad button was pressed this frame.
+    pub fn gamepad_button_pressed(&self, id: GamepadId, button: GamepadButton) -> bool {
+        self.gamepad_state(id)
+            .map(|state| state.buttons_pressed.contains(&button))
+            .unwrap_or(false)
+    }
+
+    /// Returns true if the specified gamepad button was released this frame.
+    pub fn gamepad_button_released(&self, id: GamepadId, button: GamepadButton) -> bool {
+        self.gamepad_state(id)
+            .map(|state| state.buttons_released.contains(&button))
+            .unwrap_or(false)
+    }
+
+    /// Returns the current value of a gamepad axis, or 0.0 if unavailable.
+    pub fn gamepad_axis(&self, id: GamepadId, axis: GamepadAxis) -> f32 {
+        self.gamepad_state(id)
+            .and_then(|state| state.axes.get(&axis).copied())
+            .unwrap_or(0.0)
     }
 
     #[cfg(feature = "sensors")]
@@ -256,6 +328,10 @@ impl InputManager {
         self.mouse_other_released.clear();
         self.scroll_delta = (0.0, 0.0);
         self.text_input.clear();
+        for gamepad in &mut self.gamepads {
+            gamepad.buttons_pressed.clear();
+            gamepad.buttons_released.clear();
+        }
         #[cfg(feature = "sensors")]
         {
             self.step_detected = false;
@@ -277,6 +353,12 @@ impl InputManager {
         self.text_input.clear();
         self.ime_preedit = None;
         self.touches.clear();
+        for gamepad in &mut self.gamepads {
+            gamepad.buttons_down.clear();
+            gamepad.buttons_pressed.clear();
+            gamepad.buttons_released.clear();
+            gamepad.axes.clear();
+        }
         #[cfg(feature = "sensors")]
         {
             self.step_detected = false;
@@ -439,6 +521,74 @@ impl InputManager {
         }
     }
 
+    fn gamepad_state(&self, id: GamepadId) -> Option<&GamepadInputState> {
+        self.gamepads.iter().find(|state| state.info.id == id)
+    }
+
+    #[allow(dead_code)]
+    fn gamepad_state_mut(&mut self, id: GamepadId) -> Option<&mut GamepadInputState> {
+        self.gamepads.iter_mut().find(|state| state.info.id == id)
+    }
+
+    #[allow(dead_code)]
+    fn ensure_gamepad_state(&mut self, id: GamepadId, name: String) -> &mut GamepadInputState {
+        if let Some(idx) = self.gamepads.iter().position(|state| state.info.id == id) {
+            let state = &mut self.gamepads[idx];
+            state.info.connected = true;
+            if state.info.name != name {
+                state.info.name = name;
+            }
+            return state;
+        }
+
+        self.gamepads.push(GamepadInputState::new(id, name));
+        self.gamepads.last_mut().unwrap()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn handle_gamepad_connected(&mut self, id: GamepadId, name: String) {
+        self.ensure_gamepad_state(id, name);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn handle_gamepad_disconnected(&mut self, id: GamepadId) {
+        if let Some(state) = self.gamepad_state_mut(id) {
+            state.info.connected = false;
+            state.buttons_down.clear();
+            state.buttons_pressed.clear();
+            state.buttons_released.clear();
+            state.axes.clear();
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn handle_gamepad_button(
+        &mut self,
+        id: GamepadId,
+        button: GamepadButton,
+        pressed: bool,
+    ) {
+        let state = self.ensure_gamepad_state(id, "Gamepad".to_string());
+        if pressed {
+            if state.buttons_down.insert(button) {
+                state.buttons_pressed.insert(button);
+            }
+            state.buttons_released.remove(&button);
+        } else {
+            if state.buttons_down.remove(&button) {
+                state.buttons_released.insert(button);
+            }
+            state.buttons_pressed.remove(&button);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn handle_gamepad_axis(&mut self, id: GamepadId, axis: GamepadAxis, value: f32) {
+        let state = self.ensure_gamepad_state(id, "Gamepad".to_string());
+        let value = if value.abs() < 0.001 { 0.0 } else { value };
+        state.axes.insert(axis, value.clamp(-1.0, 1.0));
+    }
+
     #[cfg(feature = "sensors")]
     #[allow(dead_code)]
     pub(crate) fn handle_gyroscope(&mut self, x: f32, y: f32, z: f32) {
@@ -485,6 +635,7 @@ impl InputManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gamepad::{GamepadAxis, GamepadButton, GamepadId};
 
     #[test]
     fn losing_focus_clears_active_touches() {
@@ -508,5 +659,35 @@ mod tests {
 
         assert!(input.is_focused());
         assert!(input.touches().is_empty());
+    }
+
+    #[test]
+    fn gamepad_button_edges_and_axes_are_tracked() {
+        let mut input = InputManager::new();
+        let id = GamepadId(0);
+
+        input.handle_gamepad_connected(id, "pad".to_string());
+        input.handle_gamepad_button(id, GamepadButton::South, true);
+        input.handle_gamepad_axis(id, GamepadAxis::LeftX, 0.75);
+
+        assert!(input.gamepad_connected(id));
+        assert!(input.gamepad_button_down(id, GamepadButton::South));
+        assert!(input.gamepad_button_pressed(id, GamepadButton::South));
+        assert_eq!(input.gamepad_axis(id, GamepadAxis::LeftX), 0.75);
+
+        input.end_frame();
+
+        assert!(input.gamepad_button_down(id, GamepadButton::South));
+        assert!(!input.gamepad_button_pressed(id, GamepadButton::South));
+
+        input.handle_gamepad_button(id, GamepadButton::South, false);
+
+        assert!(!input.gamepad_button_down(id, GamepadButton::South));
+        assert!(input.gamepad_button_released(id, GamepadButton::South));
+
+        input.handle_gamepad_disconnected(id);
+
+        assert!(!input.gamepad_connected(id));
+        assert_eq!(input.gamepad_axis(id, GamepadAxis::LeftX), 0.0);
     }
 }

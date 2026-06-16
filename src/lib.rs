@@ -62,6 +62,7 @@ mod drawable;
 mod drawable_3d;
 #[cfg(feature = "effects")]
 mod fog;
+mod gamepad;
 mod glyph_cache;
 mod graphics;
 pub mod image;
@@ -101,6 +102,7 @@ pub use drawable::{DrawOption, Drawable};
 pub use drawable_3d::DrawOption3D;
 #[cfg(feature = "effects")]
 pub use fog::{FogBackgroundSettings, FogSamplingSettings, FogSettings};
+pub use gamepad::{GamepadAxis, GamepadButton, GamepadId, GamepadInfo};
 
 pub use graphics::texture::Texture;
 pub use image::{Bounds, Image};
@@ -329,6 +331,36 @@ pub fn cursor_position(ctx: &Context) -> Option<(Pt, Pt)> {
 /// Returns a slice of active touch points.
 pub fn touches(ctx: &Context) -> &[TouchInfo] {
     ctx.input().touches()
+}
+
+/// Returns basic information for every gamepad known to the input system.
+pub fn gamepads(ctx: &Context) -> Vec<GamepadInfo> {
+    ctx.input().gamepads()
+}
+
+/// Returns true if the gamepad is currently connected.
+pub fn gamepad_connected(ctx: &Context, id: GamepadId) -> bool {
+    ctx.input().gamepad_connected(id)
+}
+
+/// Returns true if the specified gamepad button is currently held down.
+pub fn gamepad_button_down(ctx: &Context, id: GamepadId, button: GamepadButton) -> bool {
+    ctx.input().gamepad_button_down(id, button)
+}
+
+/// Returns true if the specified gamepad button was just pressed this frame.
+pub fn gamepad_button_pressed(ctx: &Context, id: GamepadId, button: GamepadButton) -> bool {
+    ctx.input().gamepad_button_pressed(id, button)
+}
+
+/// Returns true if the specified gamepad button was just released this frame.
+pub fn gamepad_button_released(ctx: &Context, id: GamepadId, button: GamepadButton) -> bool {
+    ctx.input().gamepad_button_released(id, button)
+}
+
+/// Returns the current value of a gamepad axis, or 0.0 if unavailable.
+pub fn gamepad_axis(ctx: &Context, id: GamepadId, axis: GamepadAxis) -> f32 {
+    ctx.input().gamepad_axis(id, axis)
 }
 
 /// Returns the current frame's scroll wheel delta.

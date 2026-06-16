@@ -452,6 +452,8 @@ impl ApplicationHandler for App {
             return;
         }
 
+        self.poll_gamepads();
+
         // Run logic updates with fixed timestep (capped at 8 updates to prevent spiral of death)
         self.timing.run_updates(8, |dt| {
             #[cfg(all(target_os = "ios", feature = "sensors"))]
