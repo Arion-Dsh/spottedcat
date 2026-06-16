@@ -1,3 +1,15 @@
 [alias]
 wasm-build = "build --target wasm32-unknown-unknown"
 wasm-check = "check --target wasm32-unknown-unknown"
+
+[target.aarch64-linux-android]
+linker = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android21-clang"
+ar = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-ar"
+
+[env]
+ANDROID_NDK_HOME = { value = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865", force = true }
+ANDROID_NDK_ROOT = { value = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865", force = true }
+CMAKE_TOOLCHAIN_FILE_aarch64_linux_android = { value = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865/build/cmake/android.toolchain.cmake", force = true }
+CC_aarch64_linux_android = { value = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android21-clang", force = true }
+CXX_aarch64_linux_android = { value = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android21-clang++", force = true }
+AR_aarch64_linux_android = { value = "/Users/arion/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-ar", force = true }

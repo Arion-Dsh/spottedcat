@@ -23,14 +23,16 @@ impl MouseButton {
         }
     }
 
-    pub(crate) fn from_sdl_button(button: u8) -> Self {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn from_winit(button: winit::event::MouseButton) -> Self {
+        use winit::event::MouseButton as W;
         match button {
-            1 => MouseButton::Left,
-            2 => MouseButton::Middle,
-            3 => MouseButton::Right,
-            4 => MouseButton::Back,
-            5 => MouseButton::Forward,
-            v => MouseButton::Other(v as u16),
+            W::Left => MouseButton::Left,
+            W::Right => MouseButton::Right,
+            W::Middle => MouseButton::Middle,
+            W::Back => MouseButton::Back,
+            W::Forward => MouseButton::Forward,
+            W::Other(v) => MouseButton::Other(v),
         }
     }
 }

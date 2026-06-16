@@ -1,15 +1,14 @@
 use std::collections::HashSet;
 
+#[cfg(not(target_os = "android"))]
+use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, Touch};
+#[cfg(not(target_os = "android"))]
+use winit::keyboard::PhysicalKey;
+
 use crate::Key;
 use crate::MouseButton as SpotMouseButton;
 use crate::Pt;
 use crate::touch::{TouchInfo, TouchPhase};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputState {
-    Pressed,
-    Released,
-}
 
 #[derive(Debug, Clone)]
 /// Manages the state of all input devices (keyboard, mouse, touch, sensors).
@@ -304,20 +303,27 @@ impl InputManager {
         self.text_input.push(ch);
     }
 
-    pub(crate) fn handle_ime_preedit(&mut self, value: String) {
-        if !self.text_input_enabled {
-            self.ime_preedit = None;
-            return;
-        }
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn handle_ime(&mut self, ime: Ime) {
+        match ime {
+            Ime::Preedit(value, _cursor) => {
+                if !self.text_input_enabled {
+                    self.ime_preedit = None;
+                    return;
+                }
 
-        self.ime_preedit = if value.is_empty() { None } else { Some(value) };
-    }
-
-    pub(crate) fn handle_ime_commit(&mut self, value: &str) {
-        if self.text_input_enabled && !value.is_empty() {
-            self.text_input.push_str(value);
+                self.ime_preedit = if value.is_empty() { None } else { Some(value) };
+            }
+            Ime::Commit(value) => {
+                if self.text_input_enabled && !value.is_empty() {
+                    self.text_input.push_str(&value);
+                }
+                self.ime_preedit = None;
+            }
+            Ime::Enabled | Ime::Disabled => {
+                self.ime_preedit = None;
+            }
         }
-        self.ime_preedit = None;
     }
 
     #[allow(dead_code)]
@@ -325,26 +331,28 @@ impl InputManager {
         self.cursor_position = Some((x, y));
     }
 
-    pub(crate) fn handle_mouse_input(&mut self, state: InputState, button: SpotMouseButton) {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn handle_mouse_input(&mut self, state: ElementState, button: MouseButton) {
+        let button = SpotMouseButton::from_winit(button);
         match (state, button.bit_index(), button) {
-            (InputState::Pressed, Some(i), _) => {
+            (ElementState::Pressed, Some(i), _) => {
                 let mask = 1u8 << i;
                 if (self.mouse_down & mask) == 0 {
                     self.mouse_down |= mask;
                     self.mouse_pressed |= mask;
                 }
             }
-            (InputState::Released, Some(i), _) => {
+            (ElementState::Released, Some(i), _) => {
                 let mask = 1u8 << i;
                 self.mouse_down &= !mask;
                 self.mouse_released |= mask;
             }
-            (InputState::Pressed, None, SpotMouseButton::Other(v)) => {
+            (ElementState::Pressed, None, SpotMouseButton::Other(v)) => {
                 if self.mouse_other_down.insert(v) {
                     self.mouse_other_pressed.insert(v);
                 }
             }
-            (InputState::Released, None, SpotMouseButton::Other(v)) => {
+            (ElementState::Released, None, SpotMouseButton::Other(v)) => {
                 self.mouse_other_down.remove(&v);
                 self.mouse_other_released.insert(v);
             }
@@ -352,26 +360,54 @@ impl InputManager {
         }
     }
 
-    pub(crate) fn handle_mouse_wheel(&mut self, x: f32, y: f32) {
-        self.scroll_delta.0 += x;
-        self.scroll_delta.1 += y;
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn handle_mouse_wheel(&mut self, delta: MouseScrollDelta) {
+        match delta {
+            MouseScrollDelta::LineDelta(x, y) => {
+                self.scroll_delta.0 += x;
+                self.scroll_delta.1 += y;
+            }
+            MouseScrollDelta::PixelDelta(p) => {
+                self.scroll_delta.0 += p.x as f32;
+                self.scroll_delta.1 += p.y as f32;
+            }
+        }
     }
 
-    pub(crate) fn handle_keyboard_input(&mut self, state: InputState, key: Key) {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn handle_keyboard_input(&mut self, state: ElementState, physical_key: PhysicalKey) {
+        let PhysicalKey::Code(code) = physical_key else {
+            return;
+        };
+
+        let Some(key) = Key::from_winit_key_code(code) else {
+            return;
+        };
+
         let (w, mask) = key_word_bit(key);
 
         match state {
-            InputState::Pressed => {
+            ElementState::Pressed => {
                 if (self.keys_down[w] & mask) == 0 {
                     self.keys_down[w] |= mask;
                     self.keys_pressed[w] |= mask;
                 }
             }
-            InputState::Released => {
+            ElementState::Released => {
                 self.keys_down[w] &= !mask;
                 self.keys_released[w] |= mask;
             }
         }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn handle_touch(&mut self, touch: Touch, scale_factor: f64) {
+        let x = Pt::from_physical_px(touch.location.x, scale_factor);
+        let y = Pt::from_physical_px(touch.location.y, scale_factor);
+        let pos = (x, y);
+        let phase = TouchPhase::from_winit(touch.phase);
+
+        self.handle_touch_raw(touch.id, pos, phase);
     }
 
     pub(crate) fn handle_touch_raw(&mut self, id: u64, position: (Pt, Pt), phase: TouchPhase) {

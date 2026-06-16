@@ -13,12 +13,36 @@ use web_time::Instant;
 
 pub(crate) type GraphicsInitState = platform::GraphicsInitState;
 
+#[cfg(target_os = "android")]
+pub mod android;
+pub mod backend;
+#[cfg(all(
+    not(target_os = "android"),
+    any(
+        not(all(target_arch = "wasm32", target_os = "unknown")),
+        all(target_arch = "wasm32", target_os = "unknown")
+    )
+))]
+pub mod desktop;
 #[cfg(target_os = "ios")]
 pub mod ios;
-pub mod sdl;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+pub mod wasm;
+pub mod winit_backend;
 
-pub(crate) use self::sdl::PlatformData;
-pub(crate) use self::sdl::run_sdl;
+pub(crate) use self::backend::WindowBackend;
+pub(crate) use self::winit_backend::WinitWgpuBackend;
+
+#[cfg(target_os = "android")]
+pub(crate) use self::android::PlatformData;
+#[cfg(all(
+    not(target_os = "android"),
+    any(
+        not(all(target_arch = "wasm32", target_os = "unknown")),
+        all(target_arch = "wasm32", target_os = "unknown")
+    )
+))]
+pub(crate) use self::desktop::PlatformData;
 
 /// A helper for running game logic at a fixed frequency while rendering at a variable rate.
 ///
@@ -69,6 +93,14 @@ impl FixedTimestep {
             updates
         } else {
             0
+        }
+    }
+
+    pub(crate) fn next_deadline(&self) -> Instant {
+        let now = Instant::now();
+        match self.previous {
+            Some(previous) => previous + self.step.saturating_sub(self.lag),
+            None => now,
         }
     }
 
@@ -200,6 +232,7 @@ pub(crate) fn make_screen_target(ctx: &Context) -> crate::Image {
 }
 
 impl App {
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
         let instance = platform::create_wgpu_instance();
 
@@ -213,6 +246,25 @@ impl App {
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
             timing: FixedTimestep::new(Duration::from_secs_f64(1.0 / 60.0)),
+        }
+    }
+
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub(crate) fn new_wasm<T: Spot + 'static>(
+        window_config: WindowConfig,
+        canvas_id: Option<String>,
+    ) -> Self {
+        let instance = platform::create_wgpu_instance();
+        Self {
+            platform: PlatformData::new_wasm(canvas_id),
+            instance,
+            surface: None,
+            ctx: Box::pin(Context::new()),
+            scene: SceneHost::new::<T>(),
+            window_config,
+            init_state: GraphicsInitState::NotStarted,
+            scale_factor: 1.0,
+            timing: FixedTimestep::new(Duration::from_nanos(8_333_333)),
         }
     }
 }

@@ -16,7 +16,7 @@ pub struct WindowConfig {
     pub resizable: bool,
     /// Whether to start in fullscreen mode.
     pub fullscreen: bool,
-    #[cfg(target_family = "wasm")]
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     /// Optional canvas element ID for WebAssembly.
     pub canvas_id: Option<String>,
     /// Whether the window should have a transparent background.
@@ -31,7 +31,7 @@ impl Default for WindowConfig {
             height: Pt(600.0),
             resizable: true,
             fullscreen: false,
-            #[cfg(target_family = "wasm")]
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             canvas_id: None,
             transparent: false,
         }
@@ -40,14 +40,15 @@ impl Default for WindowConfig {
 
 /// Starts the application with the specified scene type `T` and configuration.
 ///
-/// This function is the main entry point for SDL-backed platforms.
+/// This function is the main entry point for most platforms. On desktop and web,
+/// it initializes the event loop and starts the renderer.
 #[cfg(not(target_os = "android"))]
 pub fn run<T: Spot + 'static>(window: WindowConfig) {
-    window::run_sdl::<T>(window);
+    <window::WinitWgpuBackend as window::WindowBackend>::run::<T>(window);
 }
 
 /// Starts the application on Android with the specified scene type `T`.
 #[cfg(target_os = "android")]
-pub fn run<T: Spot + 'static>(window: WindowConfig, _app: AndroidApp) {
-    window::run_sdl::<T>(window);
+pub fn run<T: Spot + 'static>(window: WindowConfig, app: AndroidApp) {
+    <window::WinitWgpuBackend as window::WindowBackend>::run::<T>(window, app);
 }
