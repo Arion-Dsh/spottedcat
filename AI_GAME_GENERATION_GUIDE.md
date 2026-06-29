@@ -2,8 +2,8 @@
 
 This guide is designed to help AI models (like LLMs) generate high-quality Rust code using the `spottedcat` engine. 
 
-> [!WARNING]
-> **ALPHA VERSION**: This library is in an alpha state. The API is subject to frequent breaking changes. Use with caution.
+> [!NOTE]
+> **VERSION 1.0**: This guide targets the stable 1.0 API. Breaking API changes are reserved for future major versions.
 
 ## 1. Core Architecture: The `Spot` Trait
 

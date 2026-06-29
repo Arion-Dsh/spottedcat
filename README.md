@@ -4,15 +4,14 @@ Spottedcat is a lightweight cross-platform 2D/3D game engine built with Rust and
 It provides a simple API for rendering, input, audio, text, and scene management across desktop, web, iOS, and Android.
 Designed for fast prototyping and creative interactive projects, it aims to stay small, practical, and easy to use.
 
-> [!WARNING]
-> **ALPHA VERSION**: This library is currently in an alpha state. The API is subject to frequent breaking changes and significant refactoring. Use with caution in production environments.
+> [!NOTE]
+> **VERSION 1.0**: Spottedcat has reached its first stable release. Breaking API changes will be reserved for future major versions.
 
 ## Stability
 
-- Stable-ish core direction: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run` are the primary surfaces the crate is trying to converge around.
-- Still volatile: scene payload internals, shader extension points, platform-specific behavior, audio internals, and lower-level rendering details may change between minor releases.
-- Release expectation: until `1.0`, minor versions may include breaking API changes, behavior fixes, and platform-specific adjustments.
-- Production guidance: pin an exact crate version if you ship with `spottedcat` today, and review changelogs before upgrading.
+- Stable core API: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run` are the primary supported surfaces.
+- Compatibility: minor and patch releases preserve the public API wherever possible; breaking changes are reserved for major releases.
+- Production guidance: review release notes before upgrading and pin an exact crate version when reproducible builds are required.
 
 ## Why spottedcat?
 
@@ -41,14 +40,14 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-spottedcat = "0.9.7"
+spottedcat = "1.0.0"
 ```
 
 By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
 
 ```toml
 [dependencies]
-spottedcat = { version = "0.9.7", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "1.0.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 ### Basic Example
