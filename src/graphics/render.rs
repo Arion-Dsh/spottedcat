@@ -777,6 +777,7 @@ impl Graphics {
             present_ms = present_started_at.elapsed().as_secs_f64() * 1000.0;
         }
 
+        self.image_renderer.flush_pending_uploads(&self.queue);
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
         crate::graphics::profile::record_render_frame(
@@ -817,6 +818,7 @@ impl Graphics {
             );
         }
 
+        self.image_renderer.flush_pending_uploads(&self.queue);
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 

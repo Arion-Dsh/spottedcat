@@ -116,6 +116,12 @@ pub struct ImageRenderer {
     pub(crate) instance_stride: u32,
     next_instance: u32,
     max_instances: u32,
+    pending_user_globals: Vec<u8>,
+    pending_engine_globals: Vec<u8>,
+    pending_instances: Vec<u8>,
+    flushed_user_globals: usize,
+    flushed_engine_globals: usize,
+    flushed_instances: usize,
     extra_texture_bind_groups: HashMap<ExtraTextureBindGroupKey, wgpu::BindGroup>,
 }
 
@@ -341,13 +347,19 @@ impl ImageRenderer {
             instance_stride,
             next_instance: 0,
             max_instances,
+            pending_user_globals: Vec::with_capacity(user_globals_buffer_size as usize),
+            pending_engine_globals: Vec::with_capacity(engine_globals_buffer_size as usize),
+            pending_instances: Vec::with_capacity(instance_buffer_size as usize),
+            flushed_user_globals: 0,
+            flushed_engine_globals: 0,
+            flushed_instances: 0,
             extra_texture_bind_groups: HashMap::new(),
         }
     }
 
     pub fn upload_user_globals_bytes(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         bytes: &[u8],
     ) -> anyhow::Result<u32> {
         if bytes.len() != Self::GLOBALS_SIZE_BYTES {
@@ -362,13 +374,15 @@ impl ImageRenderer {
         let slot = self.next_user_globals;
         self.next_user_globals = self.next_user_globals.saturating_add(1);
         let offset = slot as wgpu::BufferAddress * self.globals_stride as wgpu::BufferAddress;
-        queue.write_buffer(&self.user_globals_buffer, offset, bytes);
+        let end = offset as usize + bytes.len();
+        self.pending_user_globals.resize(end, 0);
+        self.pending_user_globals[offset as usize..end].copy_from_slice(bytes);
         Ok(slot * self.globals_stride)
     }
 
     pub fn upload_engine_globals_bytes(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         bytes: &[u8],
     ) -> anyhow::Result<u32> {
         if bytes.len() != Self::ENGINE_GLOBALS_SIZE_BYTES {
@@ -382,11 +396,9 @@ impl ImageRenderer {
         }
 
         let offset = self.next_engine_globals * self.engine_globals_stride;
-        queue.write_buffer(
-            &self.engine_globals_buffer,
-            offset as wgpu::BufferAddress,
-            bytes,
-        );
+        let end = offset as usize + bytes.len();
+        self.pending_engine_globals.resize(end, 0);
+        self.pending_engine_globals[offset as usize..end].copy_from_slice(bytes);
 
         let dyn_offset = offset;
         self.next_engine_globals += 1;
@@ -480,11 +492,47 @@ impl ImageRenderer {
         self.next_instance = 0;
         self.next_user_globals = 0;
         self.next_engine_globals = 0;
+        self.pending_user_globals.clear();
+        self.pending_engine_globals.clear();
+        self.pending_instances.clear();
+        self.flushed_user_globals = 0;
+        self.flushed_engine_globals = 0;
+        self.flushed_instances = 0;
+    }
+
+    /// Flushes all data appended since the previous flush in three contiguous
+    /// writes. This avoids creating a temporary wgpu staging allocation for
+    /// every UI batch while keeping offsets stable for already encoded draws.
+    pub fn flush_pending_uploads(&mut self, queue: &wgpu::Queue) {
+        if self.flushed_user_globals < self.pending_user_globals.len() {
+            queue.write_buffer(
+                &self.user_globals_buffer,
+                self.flushed_user_globals as u64,
+                &self.pending_user_globals[self.flushed_user_globals..],
+            );
+            self.flushed_user_globals = self.pending_user_globals.len();
+        }
+        if self.flushed_engine_globals < self.pending_engine_globals.len() {
+            queue.write_buffer(
+                &self.engine_globals_buffer,
+                self.flushed_engine_globals as u64,
+                &self.pending_engine_globals[self.flushed_engine_globals..],
+            );
+            self.flushed_engine_globals = self.pending_engine_globals.len();
+        }
+        if self.flushed_instances < self.pending_instances.len() {
+            queue.write_buffer(
+                &self.instance_buffer,
+                self.flushed_instances as u64,
+                &self.pending_instances[self.flushed_instances..],
+            );
+            self.flushed_instances = self.pending_instances.len();
+        }
     }
 
     pub fn upload_instances(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         instances: &[InstanceData],
     ) -> anyhow::Result<std::ops::Range<u32>> {
         let count = instances.len() as u32;
@@ -498,11 +546,10 @@ impl ImageRenderer {
         let start = self.next_instance;
         let offset_bytes =
             start as wgpu::BufferAddress * self.instance_stride as wgpu::BufferAddress;
-        queue.write_buffer(
-            &self.instance_buffer,
-            offset_bytes,
-            bytemuck::cast_slice(instances),
-        );
+        let bytes = bytemuck::cast_slice(instances);
+        let end = offset_bytes as usize + bytes.len();
+        self.pending_instances.resize(end, 0);
+        self.pending_instances[offset_bytes as usize..end].copy_from_slice(bytes);
         self.next_instance += count;
         Ok(start..(start + count))
     }

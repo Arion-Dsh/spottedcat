@@ -50,8 +50,8 @@ struct VsOut {
     @location(0) uv: vec2<f32>,
     @location(1) local_uv: vec2<f32>,
     @location(2) uv_scale: vec2<f32>,
-    @location(3) src_uv: vec2<f32>,
-    @location(4) repeat_mask: f32,
+    @location(3) uv_origin: vec2<f32>,
+    @location(4) repeat: vec4<f32>,
 };
 
 @group(0) @binding(0) var tex: texture_2d<f32>;
@@ -252,6 +252,8 @@ fn vs_main(in: VsIn) -> VsOut {
         in.uv_rect.y + uv.y * in.uv_rect.w,
     );
     out.uv_scale = in.uv_rect.zw;
+    out.uv_origin = in.uv_rect.xy;
+    out.repeat = in.repeat;
 "#,
     );
 
@@ -265,27 +267,24 @@ fn vs_main(in: VsIn) -> VsOut {
     }
 
     wgsl.push_str(
-        r#"    let tile_count = max(in.repeat.xy, vec2<f32>(1.0, 1.0));
-    let tiled_uv = out.local_uv * tile_count;
+        r#"    return out;
+}
+
+@fragment
+fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
+    let tile_count = max(in.repeat.xy, vec2<f32>(1.0, 1.0));
+    let tiled_uv = in.local_uv * tile_count;
     let repeat_enabled = in.repeat.zw > vec2<f32>(0.5, 0.5);
     let src_local_uv = vec2<f32>(
         select(min(tiled_uv.x, 1.0), fract(tiled_uv.x), repeat_enabled.x),
         select(min(tiled_uv.y, 1.0), fract(tiled_uv.y), repeat_enabled.y),
     );
-    out.repeat_mask =
+    let repeat_mask =
         select(select(0.0, 1.0, tiled_uv.x <= 1.0), 1.0, repeat_enabled.x) *
         select(select(0.0, 1.0, tiled_uv.y <= 1.0), 1.0, repeat_enabled.y);
-    out.src_uv = vec2<f32>(
-        in.uv_rect.x + src_local_uv.x * in.uv_rect.z,
-        in.uv_rect.y + src_local_uv.y * in.uv_rect.w,
-    );
-    return out;
-}
-
-@fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let src_sample = textureSample(tex, samp, in.src_uv);
-    let src = vec4<f32>(src_sample.rgb, src_sample.a * in.repeat_mask);
+    let src_uv = in.uv_origin + src_local_uv * in.uv_scale;
+    let src_sample = textureSample(tex, samp, src_uv);
+    let src = vec4<f32>(src_sample.rgb, src_sample.a * repeat_mask);
     let opacity = _sp_internal.opacity * _sp_internal.shader_opacity;
     let screen = _sp_internal.screen;
     let scale_factor = _sp_internal.scale_factor;
