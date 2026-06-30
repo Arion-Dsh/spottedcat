@@ -1,0 +1,6 @@
+[package]
+name = "flappy_cat"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+

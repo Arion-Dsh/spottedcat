@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -16,6 +16,9 @@ exclude = [
 ]
 
 
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 wgpu = { version = "28", features = ["gles"] }

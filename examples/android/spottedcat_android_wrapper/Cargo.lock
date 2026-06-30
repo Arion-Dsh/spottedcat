@@ -2520,7 +2520,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ab_glyph",
  "android-activity",
@@ -2550,7 +2550,7 @@ dependencies = [
 
 [[package]]
 name = "spottedcat_android_wrapper"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "image",
  "jni 0.21.1",

@@ -1,253 +1,204 @@
-# spottedcat
+# Spottedcat
 
-Spottedcat is a lightweight cross-platform 2D/3D game engine built with Rust and wgpu.
-It provides a simple API for rendering, input, audio, text, and scene management across desktop, web, iOS, and Android.
-Designed for fast prototyping and creative interactive projects, it aims to stay small, practical, and easy to use.
+**Lightweight cross-platform 2D/3D game engine for Rust.**
+
+Spottedcat is small, fast, and a little wild—named after the rusty-spotted cat and built for desktop, Web/WASM, iOS, Android, and AI-assisted game creation.
 
 > [!NOTE]
-> **VERSION 1.0**: Spottedcat has reached its first stable release. Breaking API changes will be reserved for future major versions.
+> **Spottedcat 1.0 is stable.** Public API breakage is reserved for future major versions; minor and patch releases focus on compatibility, fixes, and additive improvements.
 
-## Stability
+## Why Spottedcat?
 
-- Stable core API: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run` are the primary supported surfaces.
-- Compatibility: minor and patch releases preserve the public API wherever possible; breaking changes are reserved for major releases.
-- Production guidance: review release notes before upgrading and pin an exact crate version when reproducible builds are required.
+- **Small core API**: build around `Spot`, `Context`, `Image`, `Text`, `Model`, and `run`.
+- **2D and 3D**: draw images, text, custom shaders, primitives, GLTF models, billboards, instanced models, and foggy 3D scenes.
+- **Cross-platform**: target desktop, Web/WASM, iOS, and Android from one Rust codebase.
+- **AI-friendly**: stable lifecycle, focused examples, and a dedicated guide make it easier for AI tools to generate runnable game prototypes.
+- **Practical by default**: start with zero default features for lean 2D apps; enable 3D, effects, GLTF, image helpers, or sensors only when needed.
 
-## Why spottedcat?
+## Links
 
-The library is named after the **Rusty-spotted cat** (*Prionailurus rubiginosus*), the world's smallest wild cat. Just like its namesake, this library aims to be tiny, agile, and remarkably efficient.
+- Documentation: [rustyspottedcat.dev](https://rustyspottedcat.dev)
+- API reference: [docs.rs/spottedcat](https://docs.rs/spottedcat)
+- Crate: [crates.io/crates/spottedcat](https://crates.io/crates/spottedcat)
+- AI generation guide: [AI_GAME_GENERATION_GUIDE.md](AI_GAME_GENERATION_GUIDE.md)
 
+## Install
 
-## Features
-
-- **Simple API**: Minimal core types to learn: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run`.
-- **GPU-accelerated**: Built on wgpu for high-performance rendering.
-- **2D & 3D Support**: Draw 2D UI and images, or load and render 3D models with PBR materials and skeletal animation.
-- **3D Billboards**: Easily render 2D textures as 3D billboards that properly depth-sort with 3D objects.
-- **Instanced Rendering**: Draw thousands of identical 3D models (grass, particles, crowds) natively in a single CPU draw call via `draw_instanced`.
-- **Custom Shaders**: Inject custom WGSL code into the rendering pipeline for both 2D and 3D.
-- **Image operations**: Load from files, create from raw data, extract sub-images.
-- **Text rendering**: Custom font support, text wrapping, and styling (color, stroke).
-- **Audio support**: Play sounds, sine waves, and handle fades/volume.
-- **Input management**: High-level API for Keyboard, Mouse, and Touch events.
-- **Scene management**: Easy switching between game scenes with payload support.
-- **Resource management**: Built-in dependency injection for shared resources.
-- **Cross-platform**: Support for Desktop, Web (WASM), iOS, and Android.
-
-## Quick Start
-
-Add to your `Cargo.toml`:
+Minimal 2D core:
 
 ```toml
 [dependencies]
-spottedcat = "1.0.0"
+spottedcat = "1.0.1"
 ```
 
-By default, only the 2D core is enabled for maximum efficiency. To use 3D models or asset loaders (PNG/GLTF), enable the corresponding features:
+Common feature set for richer projects:
 
 ```toml
 [dependencies]
-spottedcat = { version = "1.0.0", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "1.0.1", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
-### Basic Example
+Feature guide:
+
+| Feature | Use when you need |
+| --- | --- |
+| `model-3d` | 3D models, primitives, billboards, cameras, and model shaders |
+| `effects` | 3D effects such as fog |
+| `utils` | PNG/JPEG/WebP helper loading and async image loading |
+| `gltf` | GLTF model loading; also enables `model-3d` and `utils` |
+| `sensors` | Motion and step APIs on supported mobile platforms |
+
+## Minimal app
+
+Spottedcat apps are ordinary Rust types that implement `Spot`:
 
 ```rust
-use spottedcat::{Context, Spot, Image, DrawOption, Pt, WindowConfig};
+use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 use std::time::Duration;
 
-struct MyApp {
-    image: Image,
+struct Game {
+    player: Image,
 }
 
-impl Spot for MyApp {
+impl Spot for Game {
     fn initialize(ctx: &mut Context) -> Self {
-        // Create an image from raw RGBA8 data
-        let rgba = vec![255u8; 64 * 64 * 4]; // Red square
-        let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &rgba)
-            .expect("Failed to create image");
-        Self { image }
+        let rgba = vec![255; 32 * 32 * 4];
+        let player = Image::new(ctx, Pt::from(32.0), Pt::from(32.0), &rgba)
+            .expect("create player image");
+
+        Self { player }
     }
 
     fn update(&mut self, _ctx: &mut Context, _dt: Duration) {
-        // Handle logic here
+        // Move your world forward here.
     }
 
     fn draw(&mut self, ctx: &mut Context, screen: Image) {
         let (w, h) = spottedcat::window_size(ctx);
-        
-        // Draw image at center
-        let opts = DrawOption::default()
-            .with_position([w / 2.0, h / 2.0])
-            .with_scale([2.0, 2.0]);
-            
-        screen.draw(ctx, &self.image, opts);
+        screen.draw(
+            ctx,
+            &self.player,
+            DrawOption::default().with_position([w / 2.0, h / 2.0]),
+        );
     }
 
     fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
-    spottedcat::run::<MyApp>(WindowConfig {
-        title: "SpottedCat Example".to_string(),
+    run::<Game>(WindowConfig {
+        title: "Spottedcat".to_string(),
         ..Default::default()
     });
 }
 ```
 
-### Built-in Intro Scene
+Run an example:
 
-If you want the game to show a branded startup intro before entering your own
-scene, wrap your root scene with `OneShotSplash<T>`:
-
-```rust
-use spottedcat::{Context, OneShotSplash, Spot, WindowConfig, run};
-
-struct MyGame;
-
-impl Spot for MyGame {
-    fn initialize(_ctx: &mut Context) -> Self {
-        Self
-    }
-
-    fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
-
-    fn draw(&mut self, _ctx: &mut Context) {}
-}
-
-fn main() {
-    run::<OneShotSplash<MyGame>>(WindowConfig::default());
-}
+```bash
+cargo run --example input_example
+cargo run --example fog_world --features model-3d,effects
+cargo run --example gltf_loader --features gltf
 ```
 
-The default intro uses a font-free pixel-art Rusty-spotted cat logo and
-automatically switches to your main scene after a short delay. Players can
-also skip with Space, Enter, mouse click, or touch. The splash is shown once
-per process, so Android surface restoration resumes directly into your game.
+## AI-assisted creation
 
-## AI Assistant Guide
+Spottedcat is intentionally easy for AI coding tools to read and extend:
 
-For comprehensive guidance on generating games and working with the `spottedcat` engine, please refer to the dedicated [AI Game Generation Guide](AI_GAME_GENERATION_GUIDE.md).
+- the game loop is explicit: `initialize`, `update`, `draw`, `remove`
+- examples are small enough to use as generation anchors
+- the 1.0 API gives AI tools a stable surface to target
+- the repository includes a Codex skill for turning game ideas into playable prototypes
 
-## API Overview
+If you use Codex, try:
 
-### Core Components
-
-- **`Context`**: Central state for managing draw commands, input, audio, and resources. Hides internal methods to ensure consistency.
-- **`Spot`**: Trait defining application lifecycle (`initialize`, `update`, `draw`, `remove`).
-- **`Image`**: GPU texture handle for 2D drawing. Created via `Image::new(ctx, ...)` and rendered via `target.draw(ctx, &image, ...)`. Use the provided `screen` in `Spot::draw` as the default target.
-- **`Model`**: 3D model handle created via `spottedcat::model::create(...)` and rendered via `spottedcat::model::*`.
-- **`Text`**: High-level text structure for 2D layout.
-- **`Interpolated<T>`**: Wrapper for game state that provides smooth interpolation between fixed logic updates.
-- **`DrawOption`**: Unified configuration for layer, position, rotation, scale, and clipping in 2D.
-- **`DrawOption3D`**: Configuration for 3D model placement (position, rotation, scale).
-
-### API Style
-
-- **Context-based operations (`ctx:*`)** live at crate top-level `spottedcat::*` (for example: `register_font`, `set_window_size`, `key_down`, `play_sound`), while image creation and drawing live on `Image` methods and model creation lives at `spottedcat::model::create`.
-- **Assets**
- 
-Forces pending asset rebuild/re-upload to GPU to run immediately with `spottedcat::rebuild_assets(ctx)`.
-- **Resource operations** stay inside their domains:
-  - `Image` methods for creation, sub-image extraction, and target-based drawing.
-  - `Texture` for managing underlying GPU textures and creating render targets.
-  - `spottedcat::model::*` for model create/draw/instancing/shader draw (via `target.draw`).
-  - `spottedcat::text::*` for text draw/measure (via `target.draw`).
-
-- For encoded PNG/JPEG/WebP bytes, enable the `utils` feature and use `spottedcat::utils::image::from_image(...)` or `from_rgba_image(...)` after decoding with the `image` crate. These helpers preserve pixel dimensions and derive the default logical size from the current `scale_factor`.
-
-### Key Systems
-
-- **Input**: Check keys with `spottedcat::key_down(ctx, ...)`, mouse with `spottedcat::mouse_down(ctx, ...)`, or get `spottedcat::mouse_pos(ctx)`.
-- **Audio**: Play sounds with `spottedcat::play_sound(ctx, ...)`.
-- **Scenes**: Transition between states using `spottedcat::switch_scene::<NewScene>()`.
-- **Asynchronous Asset Loading**: Enable the `utils` feature and use `AsyncImageLoader` to load and decode images on a background thread. Query progress with `progress_ratio(ctx)` and check completion with `is_done(ctx)` to implement smooth loading bars and perform one-time sub-image slicing.
-- **Resources**: Share data between systems via `spottedcat::get_resource::<T>(ctx)`.
-
-
-### Sensors
-
-Enable the `sensors` feature to access motion and step APIs.
-
-- `today_step_count(ctx)` returns the current day's steps when the platform can provide them.
-- `step_detected(ctx)` reports whether a new step was observed during the current frame.
-
-Step semantics are intentionally limited to "today" for cross-platform consistency:
-
-- **iOS** uses `CMPedometer` updates starting from the beginning of the current local day.
-- **Android** derives today's steps from `TYPE_STEP_COUNTER` while the sensor stays registered.
-- Neither API should be treated as a lifetime or historical total. Historical fitness data belongs in HealthKit or Health Connect integration.
-
-### Model 3D
-
-The `model-3d` feature gates the 3D model stack, including `Model`, `DrawOption3D`, custom model shaders, mesh loaders, and lighting. This feature is **disabled by default** to minimize the engine's footprint when only 2D features are needed.
-
-## Performance & Timing
-
-Spottedcat uses a decoupled main loop to ensure consistent game logic across different hardware while maintaining smooth visuals:
-
-- **Fixed-Step Update (`UPS`)**: `Spot::update` is called at a fixed frequency (defaults to 60Hz). All physics and gameplay logic should happen here. The `dt` provided is constant.
-- **Variable-Rate Draw (`FPS`)**: `Spot::draw` is called as fast as the display refresh rate or OS allows.
-- **State Interpolation**: To prevent "stutter" when FPS and UPS don't match, use the `Interpolated<T>` wrapper for game state (like positions). It automatically smooths out values in `draw` calls using the engine's internal interpolation factor.
-
-```rust
-// In your Spot implementation
-fn draw(&mut self, ctx: &mut Context, screen: Image) {
-    // value(ctx) returns the smoothly interpolated position
-    let pos = self.player_pos.value(ctx); 
-    screen.draw(ctx, &self.player_img, DrawOption::new().with_position(pos));
-}
+```text
+$spot-game-builder
 ```
 
-## Advanced 2D Features
+Good prompt shape:
 
-### Automatic Texture Atlasing
-For performance efficiency, Spottedcat automatically manages small images (<512px) in a shared internal texture atlas. This reduces GPU state changes and draw calls under the hood without requiring any manual sprite sheet management from the developer.
+```text
+Use Spottedcat 1.0 to make a tiny playable 2D dodge game.
+Start from one Spot scene, read keyboard input, draw simple images,
+show score text, and keep the code close to the existing examples.
+```
 
-## Custom Shaders
+See [AI_GAME_GENERATION_GUIDE.md](AI_GAME_GENERATION_GUIDE.md) for LLM-oriented API guidance.
 
-You can register custom WGSL shaders for `Image` rendering with `register_image_shader_desc` (2D) and custom full WGSL model shaders with `register_model_shader` (3D).
+## Examples
 
-For the current 2D `Image` shader contract, including full WGSL registration, `group/binding` layout, `screen/history` inputs, and `ShaderOpts` mapping, see [`docs/image-shader.md`](docs/image-shader.md).
+Useful starting points:
 
-For the current 3D `Model` shader contract, including `group/binding` layout and required entry points, see [`docs/model-shader.md`](docs/model-shader.md).
+| Goal | Example |
+| --- | --- |
+| Input and HUD | `examples/input_example.rs` |
+| Image loading | `examples/rgb_image.rs`, `examples/async_loading_example.rs` |
+| Text rendering | `examples/centered_text_test.rs` |
+| Audio | `examples/audio_test.rs` |
+| 2D shaders | `examples/image_shader_template.rs` |
+| 3D world | `examples/fog_world.rs` |
+| GLTF models | `examples/gltf_loader.rs`, `examples/animated_gltf.rs` |
+| Instancing | `examples/instancing_test.rs` |
+| WASM demos | `examples/wasm/` |
+| Mobile wrappers | `examples/ios/`, `examples/android/` |
 
-To avoid writing full WGSL from scratch, use the built-in template helpers:
+For a guided mini-game, see the Flappy Cat guide on [rustyspottedcat.dev](https://rustyspottedcat.dev/guide/flappy-cat).
 
-- `spottedcat::image_shader_template()`
-- `spottedcat::model_shader_template()`
+## Core concepts
 
-The recommended 2D path is `spottedcat::ImageShaderTemplate` plus `spottedcat::register_image_shader_template(...)`, which exposes explicit `shared`, `vertex_body`, and `fragment_body` slots.
+### `Spot`
 
-The recommended 3D path is `spottedcat::ModelShaderTemplate` plus `spottedcat::register_model_shader_template(...)`, which exposes `shared` and `fragment_body` slots on top of the engine's fixed model pipeline contract.
+`Spot` is the application or scene lifecycle:
 
-### 3D Shader Layout
+- `initialize` loads assets and creates state.
+- `update` runs fixed-step gameplay logic.
+- `draw` renders the current frame.
+- `resumed` and `suspended` handle platform lifecycle when needed.
+- `remove` cleans up scene-specific state.
 
-Custom 3D model shaders now use full WGSL sources. See [`docs/model-shader.md`](docs/model-shader.md) for the binding layout, required vertex inputs, and entry-point names.
+Keep gameplay mutation in `update` and rendering in `draw`. Use interpolation when fixed updates and display refresh do not line up.
 
-See `examples/image_shader_template.rs` and `examples/metal_sphere.rs` for template-based examples, and `examples/advanced_image_shader_full.rs` plus `examples/advanced_model_shader_full.rs` for the advanced full-WGSL path.
+### Rendering
 
-## Platform Support
+- `Image` handles 2D textures, render targets, sub-images, layers, transforms, clipping, and custom 2D shaders.
+- `Text` handles font-backed text rendering, wrapping, color, and stroke.
+- `Model` handles 3D primitives, GLTF content, billboards, instancing, lighting, fog, and custom model shaders when `model-3d` is enabled.
+
+### Platform support
 
 Declared support:
 
-- **Desktop**: Windows, macOS, Linux.
-- **Web**: SDL3-backed WASM builds target Emscripten.
-- **Android**: SDL3-backed Android windowing.
-- **iOS**: Support for UIKit and native sensor access.
+- **Desktop**: Windows, macOS, Linux
+- **Web**: WASM builds
+- **iOS**: UIKit integration and native sensor access
+- **Android**: Android GameActivity integration and native sensor access
 
+Generated platform outputs such as `target/`, `.gradle/`, `pkg/`, `.xcframework/`, and IDE caches are intentionally excluded from version control.
 
-- **WASM example**: [`examples/wasm/web`](examples/wasm/web) and [`examples/wasm/wasm_demo`](examples/wasm/wasm_demo)
-- **Android example**: [`examples/android/GameActivityExample`](examples/android/GameActivityExample) and [`examples/android/spottedcat_android_wrapper`](examples/android/spottedcat_android_wrapper)
-- **iOS example**: [`examples/ios/SpottedcatIosSimulatorExample`](examples/ios/SpottedcatIosSimulatorExample) and [`examples/ios/spottedcat_ios_wrapper`](examples/ios/spottedcat_ios_wrapper)
+## Stability
 
-Generated outputs for these examples such as `target/`, `.gradle/`, `pkg/`, `.xcframework/`, and IDE caches are intentionally excluded from version control.
+Spottedcat 1.0 treats the main user-facing surfaces as stable:
+
+- `Context`
+- `Spot`
+- `Image`
+- `Text`
+- `Model`
+- `WindowConfig`
+- `run`
+
+Minor and patch releases should preserve public API compatibility wherever possible. Pin an exact crate version if you need fully reproducible builds.
+
+## Name
+
+The name comes from the **rusty-spotted cat** (*Prionailurus rubiginosus*): tiny, quick, and a little wild. It also nods to Rust, the language behind the engine.
 
 ## License
 
-This project is licensed under either of:
+Licensed under either of:
 
 - Apache License, Version 2.0
-- MIT license
+- MIT License
 
 at your option.

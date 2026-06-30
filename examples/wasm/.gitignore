@@ -2,4 +2,8 @@
 pkg/
 wasm_demo/target/
 wasm_demo/pkg/
+flappy_cat/target/
+flappy_cat/pkg/
+showcase_demos/target/
+showcase_demos/pkg/
 node_modules/
