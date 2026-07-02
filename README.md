@@ -2,10 +2,14 @@
 
 **Lightweight cross-platform 2D/3D game engine for Rust.**
 
+[![Crates.io](https://img.shields.io/crates/v/spottedcat.svg)](https://crates.io/crates/spottedcat)
+[![docs.rs](https://docs.rs/spottedcat/badge.svg)](https://docs.rs/spottedcat)
+[![Example Checks](https://github.com/arion-dsh/spottedcat/actions/workflows/examples.yml/badge.svg)](https://github.com/arion-dsh/spottedcat/actions/workflows/examples.yml)
+[![License](https://img.shields.io/crates/l/spottedcat.svg)](https://github.com/arion-dsh/spottedcat#license)
+
 Spottedcat is small, fast, and a little wild—named after the rusty-spotted cat and built for desktop, Web/WASM, iOS, Android, and AI-assisted game creation.
 
-> [!NOTE]
-> **Spottedcat 1.0 is stable.** Public API breakage is reserved for future major versions; minor and patch releases focus on compatibility, fixes, and additive improvements.
+The `Example Checks` workflow compiles the desktop examples in `scripts/check_examples.sh`, including the default, `utils`, `model-3d`, `effects`, and `gltf` feature combinations.
 
 ## Why Spottedcat?
 
