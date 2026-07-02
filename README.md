@@ -108,15 +108,8 @@ Spottedcat is intentionally easy for AI coding tools to read and extend:
 - the game loop is explicit: `initialize`, `update`, `draw`, `remove`
 - examples are small enough to use as generation anchors
 - the 1.0 API gives AI tools a stable surface to target
-- the repository includes a Codex skill for turning game ideas into playable prototypes
 
-If you use Codex, try:
-
-```text
-$spot-game-builder
-```
-
-Good prompt shape:
+If you use Codex or another AI coding tool, a good prompt shape is:
 
 ```text
 Use Spottedcat 1.0 to make a tiny playable 2D dodge game.
