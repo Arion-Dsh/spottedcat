@@ -1,6 +1,8 @@
 use spottedcat::{Context, DrawOption, DrawOption3D, Model, Pt, Spot, Text, WindowConfig};
 use std::time::Duration;
 
+mod example_font;
+
 struct InstancingTest {
     cube: Model,
     transforms: Vec<[[f32; 4]; 4]>,
@@ -14,6 +16,7 @@ struct InstancingTest {
 
 impl Spot for InstancingTest {
     fn initialize(ctx: &mut Context) -> Self {
+        let font_id = example_font::register(ctx);
         let cube = spottedcat::model::create_cube(ctx, 0.5).unwrap();
 
         let mut transforms = Vec::with_capacity(10000);
@@ -32,9 +35,6 @@ impl Spot for InstancingTest {
                 ]);
             }
         }
-
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
         let fps_text = Text::new("FPS: 0", font_id)
             .with_font_size(Pt::from(24.0))
             .with_color([0.0, 1.0, 0.0, 1.0]);

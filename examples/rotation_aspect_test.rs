@@ -1,11 +1,13 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig};
 
+mod example_font;
+
 const DISC_SIZE: usize = 160;
 
 struct RotationAspectTest {
     disc: Image,
-    font_id: u32,
     angle: f32,
+    font_id: u32,
 }
 
 fn make_disc_rgba() -> Vec<u8> {
@@ -60,6 +62,7 @@ fn top_left_for_center_rotation(center_x: f32, center_y: f32, size: f32, angle: 
 
 impl Spot for RotationAspectTest {
     fn initialize(ctx: &mut Context) -> Self {
+        let font_id = example_font::register(ctx);
         let disc = Image::new(
             ctx,
             Pt::from(DISC_SIZE as f32),
@@ -67,13 +70,11 @@ impl Spot for RotationAspectTest {
             &make_disc_rgba(),
         )
         .expect("disc image should load");
-        let font_id =
-            spottedcat::register_font(ctx, include_bytes!("../assets/DejaVuSans.ttf").to_vec());
 
         Self {
             disc,
-            font_id,
             angle: 0.0,
+            font_id,
         }
     }
 

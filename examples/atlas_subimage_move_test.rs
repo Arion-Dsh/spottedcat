@@ -1,5 +1,7 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 
+mod example_image;
+
 /// Tests three layers of sub-image + render-target nesting:
 ///   happy-tree (original)
 ///     └─ canvas_a (render target, 512x512)  ← c1 (sub of original) drawn here
@@ -36,17 +38,7 @@ impl Spot for SubImageNestTest {
             return;
         }
 
-        // Load happy-tree
-        const BYTES: &[u8] = include_bytes!("../assets/happy-tree.png");
-        let img = image::load_from_memory(BYTES).unwrap();
-        let rgba = img.to_rgba8();
-        let tree = Image::new(
-            ctx,
-            Pt::from(img.width() as f32),
-            Pt::from(img.height() as f32),
-            &rgba,
-        )
-        .unwrap();
+        let tree = example_image::happy_tree(ctx);
 
         // Sub-image layer 1: tree canopy (top 512x512, centered)
         let c1 = Image::sub_image(

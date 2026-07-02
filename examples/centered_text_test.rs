@@ -1,5 +1,7 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 
+mod example_font;
+
 struct CenteredTextTestSpot {
     font_id: u32,
     outer_image: Image,
@@ -8,9 +10,7 @@ struct CenteredTextTestSpot {
 
 impl Spot for CenteredTextTestSpot {
     fn initialize(ctx: &mut Context) -> Self {
-        // Load default font
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
+        let font_id = example_font::register(ctx);
 
         // Create a larger outer image with a 400x150 logical display size
         let outer_width = 400u32;

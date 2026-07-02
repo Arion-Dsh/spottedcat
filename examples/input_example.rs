@@ -1,5 +1,7 @@
 use spottedcat::{Context, DrawOption, Key, Spot, Text};
 
+mod example_font;
+
 struct InputExample {
     x: f32,
     y: f32,
@@ -9,8 +11,7 @@ struct InputExample {
 
 impl Spot for InputExample {
     fn initialize(ctx: &mut Context) -> Self {
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
+        let font_id = example_font::register(ctx);
 
         Self {
             x: 200.0,

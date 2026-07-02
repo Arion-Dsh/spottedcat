@@ -4,6 +4,8 @@ use spottedcat::{
 };
 use std::time::Duration;
 
+mod example_font;
+
 struct FogWorld {
     cube: Model,
     sphere: Model,
@@ -19,6 +21,7 @@ struct FogWorld {
 
 impl Spot for FogWorld {
     fn initialize(ctx: &mut Context) -> Self {
+        let font_id = example_font::register(ctx);
         spottedcat::set_camera_pos(ctx, [0.0, 3.6, 14.0]);
         spottedcat::set_camera_target(ctx, 0.0, 1.2, -12.0);
         spottedcat::set_camera_up(ctx, 0.0, 1.0, 0.0);
@@ -55,9 +58,6 @@ impl Spot for FogWorld {
         let giant_bg = spottedcat::model::create_sphere(ctx, 1.0)
             .unwrap()
             .with_material(bg_tex);
-
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
         let fps_text = Text::new("FPS: 0", font_id)
             .with_font_size(Pt::from(24.0))
             .with_color([0.0, 1.0, 0.0, 1.0]);

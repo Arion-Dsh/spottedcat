@@ -1,5 +1,8 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig};
 
+mod example_font;
+mod example_image;
+
 struct HappyTreeDesktop {
     image: Image,
     font_id: u32,
@@ -7,13 +10,8 @@ struct HappyTreeDesktop {
 
 impl Spot for HappyTreeDesktop {
     fn initialize(ctx: &mut Context) -> Self {
-        const HAPPY_TREE_BYTES: &[u8] = include_bytes!("../assets/happy-tree.png");
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-
-        let img = image::load_from_memory(HAPPY_TREE_BYTES).expect("happy tree should decode");
-        let image =
-            spottedcat::utils::image::from_image(ctx, &img).expect("happy tree should load");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
+        let font_id = example_font::register(ctx);
+        let image = example_image::happy_tree(ctx);
 
         Self { image, font_id }
     }

@@ -1,5 +1,7 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, Text, WindowConfig};
 
+mod example_font;
+
 const WIDTH: usize = 300;
 const HEIGHT: usize = 120;
 
@@ -31,12 +33,10 @@ fn make_rgb_bars() -> Vec<u8> {
 
 impl Spot for RgbImageExample {
     fn initialize(ctx: &mut Context) -> Self {
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-
+        let font_id = example_font::register(ctx);
         let rgba = make_rgb_bars();
         let image = Image::new(ctx, Pt::from(WIDTH as f32), Pt::from(HEIGHT as f32), &rgba)
             .expect("rgb image should load");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
 
         Self { image, font_id }
     }

@@ -1,14 +1,16 @@
 use spottedcat::{Context, DrawOption, OneShotSplash, Pt, Spot, Text, WindowConfig, run};
 
+mod example_font;
+
 struct GameplayScene {
     font_id: u32,
 }
 
 impl Spot for GameplayScene {
     fn initialize(ctx: &mut Context) -> Self {
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
-        Self { font_id }
+        Self {
+            font_id: example_font::register(ctx),
+        }
     }
 
     fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
@@ -46,9 +48,7 @@ impl Spot for GameplayScene {
         );
     }
 
-    fn remove(&mut self, ctx: &mut Context) {
-        spottedcat::unregister_font(ctx, self.font_id);
-    }
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

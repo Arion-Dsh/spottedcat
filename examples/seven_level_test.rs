@@ -1,13 +1,16 @@
 use spottedcat::{Context, DrawOption, Image, Pt, Spot, WindowConfig, run};
 
+mod example_font;
+
 struct SevenLevelNestTestSpot {
+    font_id: u32,
     images: Vec<Image>,
     white_image: Image,
-    font_id: u32,
 }
 
 impl Spot for SevenLevelNestTestSpot {
     fn initialize(ctx: &mut Context) -> Self {
+        let font_id = example_font::register(ctx);
         let mut images = Vec::new();
 
         // Level 1-7 - Render targets
@@ -22,18 +25,14 @@ impl Spot for SevenLevelNestTestSpot {
             spottedcat::Texture::new_render_target(ctx, Pt::from(100.0), Pt::from(100.0)).view(),
         );
 
-        // Load default font
-        const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, FONT.to_vec());
-
         let white_image =
             spottedcat::Image::new(ctx, Pt::from(1.0), Pt::from(1.0), &[255, 255, 255, 255])
                 .expect("Failed to create white image");
 
         Self {
+            font_id,
             images,
             white_image,
-            font_id,
         }
     }
 

@@ -3,6 +3,8 @@ use spottedcat::{
     register_image_shader_desc,
 };
 
+mod example_font;
+
 const FILL_SHADER_SRC: &str = r#"
 @group(0) @binding(0) var tex: texture_2d<f32>;
 @group(0) @binding(1) var samp: sampler;
@@ -73,7 +75,6 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
 struct FlipTest {
     image: Image,
-    font_id: u32,
     text_obj: Text,
     time: f32,
     yellow_shader_id: u32,
@@ -81,11 +82,9 @@ struct FlipTest {
 
 impl Spot for FlipTest {
     fn initialize(ctx: &mut Context) -> Self {
+        let font_id = example_font::register(ctx);
         let img_raw = vec![255u8; 64 * 64 * 4];
         let image = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &img_raw).unwrap();
-
-        let font_data = include_bytes!("../assets/DejaVuSans.ttf");
-        let font_id = spottedcat::register_font(ctx, font_data.to_vec());
         let text_obj = Text::new("Flipped!", font_id)
             .with_font_size(Pt::from(16.0))
             .with_color([1.0, 1.0, 1.0, 1.0]);
@@ -95,7 +94,6 @@ impl Spot for FlipTest {
 
         Self {
             image,
-            font_id,
             text_obj,
             time: 0.0,
             yellow_shader_id,
@@ -240,9 +238,7 @@ impl Spot for FlipTest {
         );
     }
 
-    fn remove(&mut self, ctx: &mut Context) {
-        spottedcat::unregister_font(ctx, self.font_id);
-    }
+    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
