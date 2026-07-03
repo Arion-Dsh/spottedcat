@@ -237,8 +237,6 @@ impl Spot for FlipTest {
                 .with_position([Pt::from(fsw * 0.5 - 20.0), Pt::from(move_y + 10.0)]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

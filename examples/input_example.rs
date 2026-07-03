@@ -80,8 +80,6 @@ impl Spot for InputExample {
             mouse_opts,
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

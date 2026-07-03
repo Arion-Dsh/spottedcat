@@ -28,8 +28,6 @@ const LOGO_BOTTOM_INSET: usize = 10;
 ///         Self
 ///     }
 ///
-///     fn update(&mut self, _ctx: &mut spottedcat::Context, _dt: std::time::Duration) {}
-///
 ///     fn draw(&mut self, _ctx: &mut spottedcat::Context, _screen: spottedcat::Image) {}
 /// }
 ///
@@ -88,23 +86,20 @@ impl<TNext: Spot + 'static> Spot for OneShotSplash<TNext> {
     }
 
     fn resumed(&mut self, ctx: &mut Context) {
-        match &mut self.inner {
-            OneShotSplashInner::Splash(splash) => splash.resumed(ctx),
-            OneShotSplashInner::Next(next) => next.resumed(ctx),
+        if let OneShotSplashInner::Next(next) = &mut self.inner {
+            next.resumed(ctx);
         }
     }
 
     fn suspended(&mut self, ctx: &mut Context) {
-        match &mut self.inner {
-            OneShotSplashInner::Splash(splash) => splash.suspended(ctx),
-            OneShotSplashInner::Next(next) => next.suspended(ctx),
+        if let OneShotSplashInner::Next(next) = &mut self.inner {
+            next.suspended(ctx);
         }
     }
 
     fn remove(&mut self, ctx: &mut Context) {
-        match &mut self.inner {
-            OneShotSplashInner::Splash(splash) => splash.remove(ctx),
-            OneShotSplashInner::Next(next) => next.remove(ctx),
+        if let OneShotSplashInner::Next(next) = &mut self.inner {
+            next.remove(ctx);
         }
     }
 }
@@ -227,12 +222,6 @@ impl<TNext: Spot + 'static> BrandedSplash<TNext> {
             );
         }
     }
-
-    fn resumed(&mut self, _ctx: &mut Context) {}
-
-    fn suspended(&mut self, _ctx: &mut Context) {}
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 impl<TNext: Spot + 'static> BrandedSplash<TNext> {

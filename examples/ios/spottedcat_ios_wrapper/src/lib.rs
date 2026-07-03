@@ -317,13 +317,11 @@ pub extern "C" fn spottedcat_ios_start() {
                 self.update_count = 0;
             }
 
-            // 1. Draw 3D model
             let opts_3d = DrawOption3D::default()
                 .with_position([0.0, 0.0, 0.0])
                 .with_rotation([0.0, self.rotation, 0.0]);
             screen.draw(ctx, &self.model, opts_3d);
 
-            // 2. Draw UI directly to screen
             let title_opts = DrawOption::default().with_position([Pt::from(20.0), Pt::from(20.0)]);
             screen.draw(ctx, &self.text, title_opts);
 

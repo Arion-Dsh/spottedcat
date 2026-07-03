@@ -6,8 +6,7 @@ use ab_glyph::FontArc;
 use super::core::Graphics;
 use crate::Pt;
 
-// Font management is now handled by the Context for persistence.
-// Graphics only caches the parsed FontArc for performance.
+// Context owns font data; Graphics caches parsed fonts.
 
 impl Graphics {
     /// Render a single glyph to the atlas and cache it

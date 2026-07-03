@@ -300,7 +300,6 @@ impl Graphics {
             self.gpu_generation, ctx.registry.gpu_generation
         );
 
-        // Reset transient caches
         self.font_cache.clear();
         self.glyph_cache.clear();
         if let Some(atlas) = self.font_atlas.as_mut() {
@@ -310,13 +309,11 @@ impl Graphics {
             atlas.pages.clear();
         }
 
-        // 1. Restore Shaders
         self.image_pipelines.clear();
         for (&id, source) in &ctx.registry.image_shaders {
             self.restore_image_shader(id, source);
         }
 
-        // 2. Restore Fonts
         for (&id, data) in &ctx.registry.fonts {
             let font = ab_glyph::FontArc::try_from_vec(data.clone()).unwrap_or_else(|e| {
                 panic!(
@@ -327,7 +324,6 @@ impl Graphics {
             self.font_cache.insert(id as u64, font);
         }
 
-        // 3. Restore texture resources
         self.gpu_generation = ctx.registry.gpu_generation;
         self.text_shader_id = 1;
 
@@ -335,7 +331,7 @@ impl Graphics {
         self.rebuild_textures(ctx)?;
         self.restore_3d_assets(ctx);
 
-        // CRITICAL: Immediately process registrations to recreate all assets (including Canvases) for the new device
+        // Recreate registered assets before the first frame on the new device.
         self.process_registrations(ctx)?;
 
         eprintln!(

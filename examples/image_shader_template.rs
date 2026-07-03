@@ -84,8 +84,6 @@ return vec4<f32>(composed, alpha);
             bindings,
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn build_sprite_rgba() -> Vec<u8> {

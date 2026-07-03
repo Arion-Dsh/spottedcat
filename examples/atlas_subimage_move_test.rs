@@ -156,8 +156,6 @@ impl Spot for SubImageNestTest {
                 .with_scale([0.75, 0.75]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

@@ -577,7 +577,6 @@ pub fn android_main(app: AndroidApp) {
                 }
             }
 
-            // 1. Check direct touch events
             let mut active_touch = false;
             let current_touches = spottedcat::touches(ctx);
             if !current_touches.is_empty() && self.touch_log_cooldown <= 0.0 {
@@ -589,7 +588,6 @@ pub fn android_main(app: AndroidApp) {
             }
 
             for touch in current_touches {
-                // Any active touch updates the position
                 if self.touch_pos.is_none()
                     || (touch.position.0 - self.touch_pos.unwrap().0)
                         .as_f32()
@@ -605,7 +603,6 @@ pub fn android_main(app: AndroidApp) {
                 active_touch = true;
             }
 
-            // 2. Fallback to mouse/cursor
             if !active_touch {
                 if let Some(cursor) = spottedcat::cursor_position(ctx) {
                     self.touch_pos = Some(cursor);
@@ -641,7 +638,6 @@ pub fn android_main(app: AndroidApp) {
             let block_gap = 12.0;
             let mut cursor_y = top_padding;
 
-            // 1. Draw UI elements directly to screen
             draw_text_block(ctx, screen, &self.text, panel_x, &mut cursor_y, block_gap);
             draw_text_block(ctx, screen, &self.fps_text, panel_x, &mut cursor_y, section_gap);
             draw_text_block(ctx, screen, &self.step_text, panel_x, &mut cursor_y, section_gap);
@@ -661,7 +657,6 @@ pub fn android_main(app: AndroidApp) {
                 .with_scale([tree_scale, tree_scale]);
             screen.draw(ctx, &self.happy_tree, tree_opts);
 
-            // 2. Draw 3D model with gyroscope tilt
             let opts_3d = DrawOption3D::default()
                 .with_position([
                     if landscape { 0.9 } else { 0.0 },
@@ -675,7 +670,6 @@ pub fn android_main(app: AndroidApp) {
                 ]);
             screen.draw(ctx, &self.model, opts_3d);
 
-            // 3. Draw bridge info at bottom
             let (_, bridge_height): (f32, f32) = spottedcat::text::measure(ctx, &self.bridge_text);
             screen.draw(
                 ctx,
@@ -723,8 +717,6 @@ pub fn android_main(app: AndroidApp) {
                 DrawOption::default().with_position([Pt::from(10.0), Pt::from(30.0)]),
             );
         }
-        fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
-        fn remove(&mut self, _ctx: &mut Context) {}
     }
 
     #[cfg(target_os = "android")]

@@ -39,8 +39,6 @@
 //!             
 //!         screen.draw(ctx, &self.image, opts);
 //!     }
-//!
-//!     fn remove(&mut self, _ctx: &mut Context) {}
 //! }
 //!
 //! fn main() {

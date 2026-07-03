@@ -12,10 +12,8 @@ struct MetalSphere {
 
 impl Spot for MetalSphere {
     fn initialize(ctx: &mut Context) -> Self {
-        // 1. Create a smooth sphere
         let sphere = spottedcat::model::create_sphere(ctx, 1.0).unwrap();
 
-        // 2. Register a metallic shader from the model template API.
         let shader_id = register_model_shader_template(
             ctx,
             ModelShaderTemplate::new()
@@ -57,7 +55,6 @@ return vec4<f32>(final_rgb, src.a * model_globals.extra.x);
             .with_position([0.0, 0.0, 0.0])
             .with_rotation([0.0, self.rotation, 0.0]);
 
-        // Draw with our metallic shader
         spottedcat::model::draw_with_shader(
             ctx,
             screen,
@@ -68,8 +65,6 @@ return vec4<f32>(final_rgb, src.a * model_globals.extra.x);
             None,
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

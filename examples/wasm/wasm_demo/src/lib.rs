@@ -50,13 +50,11 @@ impl Spot for WasmDemo {
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let (_w, _h) = window_size(ctx);
 
-        // 1. Draw 3D model
         let opts_3d = DrawOption3D::default()
             .with_position([0.0, 0.0, 0.0])
             .with_rotation([0.55, 0.75 + self.rotation * 0.45, 0.0]);
         screen.draw(ctx, &self.model, opts_3d);
 
-        // 2. Draw UI directly to screen
         let title_opts = DrawOption::default().with_position([Pt::from(20.0), Pt::from(20.0)]);
         screen.draw(ctx, &self.title, title_opts);
 
@@ -81,7 +79,6 @@ impl Spot for WasmDemo {
         }
     }
 
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 #[wasm_bindgen]

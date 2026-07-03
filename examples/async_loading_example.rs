@@ -15,8 +15,7 @@ impl Spot for AsyncLoadingExample {
             loading_timer: 0.0,
         };
 
-        // Note: Asset registration must now happen on the thread owning the Context.
-        // Image 1: Normal initialization (starts as Pending)
+        // Asset registration happens on the thread that owns the context.
         let rgba1 = vec![255u8; 100 * 100 * 4];
         example.image1 = Some(Image::new(ctx, Pt::from(100.0), Pt::from(100.0), &rgba1).unwrap());
 
@@ -26,7 +25,7 @@ impl Spot for AsyncLoadingExample {
     fn update(&mut self, ctx: &mut Context, dt: Duration) {
         self.loading_timer += dt.as_secs_f32();
 
-        // Simulate a second image being registered late (e.g. triggered by user)
+        // Register a second image after startup.
         if self.loading_timer > 3.0 && self.image2.is_none() {
             println!("Context: Registering second image late...");
             let rgba2 = vec![100u8; 100 * 100 * 4];
@@ -35,7 +34,6 @@ impl Spot for AsyncLoadingExample {
     }
 
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
-        // Draw Image 1
         if let Some(img) = self.image1 {
             if img.is_ready(ctx) {
                 screen.draw(
@@ -44,12 +42,10 @@ impl Spot for AsyncLoadingExample {
                     DrawOption::default().with_position([Pt::from(50.0), Pt::from(50.0)]),
                 );
             } else {
-                // Use is_ready() to show a placeholder or loading state
                 println!("Image 1 is still Pending GPU upload...");
             }
         }
 
-        // Draw Image 2
         if let Some(img) = self.image2 {
             if img.is_ready(ctx) {
                 screen.draw(
@@ -62,8 +58,6 @@ impl Spot for AsyncLoadingExample {
             }
         }
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

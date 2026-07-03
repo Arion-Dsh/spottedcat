@@ -618,7 +618,7 @@ impl Model {
     /// Renders thousands of instances of this model with a single draw call.
     ///
     /// `transforms` should be an array of 4x4 matrices representing the View/Model transformations
-    /// for each instance. This achieves massive performance improvements for identical meshes.
+    /// for each instance, allowing identical meshes to share a draw call.
     ///
     /// The `target` image is used as the render target (e.g., `screen`).
     pub(crate) fn draw_instanced(

@@ -95,8 +95,6 @@ pub fn switch_scene_with<T: Spot + 'static, P: Any>(payload: P) {
 /// impl Spot for MyScene {
 ///     fn initialize(ctx: &mut Context) -> Self { Self }
 ///
-///     fn update(&mut self, ctx: &mut Context, dt: std::time::Duration) { }
-///
 ///     fn draw(&mut self, ctx: &mut Context, screen: Image) {
 ///         // Draw to the provided screen
 ///     }
@@ -118,7 +116,7 @@ pub trait Spot {
     ///
     /// # Arguments
     /// * `dt` - The time elapsed since the last frame.
-    fn update(&mut self, ctx: &mut Context, dt: Duration);
+    fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
 
     /// Called when the application is resumed (e.g., from background).
     fn resumed(&mut self, _ctx: &mut Context) {}

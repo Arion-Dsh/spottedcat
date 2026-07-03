@@ -37,10 +37,6 @@ fn main() {
                 screen.draw(ctx, text, opts);
             }
         }
-
-        fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
-
-        fn remove(&mut self, _ctx: &mut Context) {}
     }
 
     run::<TextPerformanceSpot>(WindowConfig::default());

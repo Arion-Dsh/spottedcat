@@ -118,8 +118,6 @@ impl Spot for AnimatedGltfApp {
                 .with_scale([1.0, 1.0, 1.0]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

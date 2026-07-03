@@ -667,8 +667,6 @@ impl MeshData {
     }
 }
 
-// Matrix math helpers - removed and consolidated in crate::math.
-
 #[cfg(test)]
 mod tests {
     fn project_point(matrix: [[f32; 4]; 4], point: [f32; 3]) -> [f32; 4] {

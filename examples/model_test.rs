@@ -118,8 +118,6 @@ impl Spot for ModelTest {
                 .with_scale([0.06, 0.06, 2.2]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

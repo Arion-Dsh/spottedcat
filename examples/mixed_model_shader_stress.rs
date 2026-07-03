@@ -97,8 +97,6 @@ return vec4<f32>(lit, src.a * model_globals.extra.x);
             }
         }
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

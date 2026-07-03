@@ -201,7 +201,6 @@ impl Graphics {
 
                         let shader_desc = ctx.registry.image_shaders.get(&cmd.shader_id);
 
-                        // Helper to resolve ImageShaderInput to ResolvedImageShaderInput
                         let resolve_input = |input: &ImageShaderInput| -> ResolvedImageShaderInput {
                             match input {
                                 ImageShaderInput::None => {
@@ -428,7 +427,6 @@ impl Graphics {
             });
         }
 
-        // Final Batch
         if !batch.is_empty()
             && let Ok(range) = image_renderer.upload_instances(queue, batch.as_slice())
         {

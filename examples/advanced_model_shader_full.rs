@@ -40,8 +40,6 @@ impl Spot for AdvancedModelShaderFull {
             None,
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

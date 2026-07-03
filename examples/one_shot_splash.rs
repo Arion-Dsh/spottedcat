@@ -13,8 +13,6 @@ impl Spot for GameplayScene {
         }
     }
 
-    fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
-
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let (window_w, window_h) = spottedcat::window_size(ctx);
 
@@ -47,8 +45,6 @@ impl Spot for GameplayScene {
             ]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

@@ -291,8 +291,6 @@ mod tests {
         }
 
         fn draw(&mut self, _ctx: &mut Context, _screen: crate::Image) {}
-
-        fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
     }
 
     impl Spot for PayloadScene {
@@ -301,8 +299,6 @@ mod tests {
         }
 
         fn draw(&mut self, _ctx: &mut Context, _screen: crate::Image) {}
-
-        fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
     }
 
     impl Spot for FinalScene {
@@ -311,8 +307,6 @@ mod tests {
         }
 
         fn draw(&mut self, _ctx: &mut Context, _screen: crate::Image) {}
-
-        fn update(&mut self, _ctx: &mut Context, _dt: Duration) {}
     }
 
     #[derive(Debug, PartialEq)]

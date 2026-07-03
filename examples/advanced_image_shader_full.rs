@@ -3,8 +3,7 @@ use spottedcat::{
     ShaderOpts, Spot, WindowConfig, register_image_shader_desc,
 };
 
-// No structs or @group declarations needed!
-// The internal prelude handles EngineGlobals, VsIn, VsOut, and standard bindings.
+// The internal prelude provides EngineGlobals, VsIn, VsOut, and standard bindings.
 const FULL_SHADER_SOURCE: &str = r#"
 @vertex
 fn vs_main(in: VsIn) -> VsOut {
@@ -26,7 +25,6 @@ fn vs_main(in: VsIn) -> VsOut {
     let local_pos = pos_arr[in.vertex_index];
     let uv = uv_arr[in.vertex_index];
     
-    // Engine constants are automatically injected by the prelude
     let sw_inv_2 = _sp_internal.screen.x;
     let sh_inv_2 = _sp_internal.screen.y;
     let sw_inv = _sp_internal.screen.z;
@@ -59,16 +57,13 @@ fn vs_main(in: VsIn) -> VsOut {
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let src = textureSample(tex, samp, in.uv);
     
-    // NATIVE SEMANTIC BINDINGS:
-    // We didn't even have to define 't_history' or 't_screen' manually!
-    // The engine auto-injected them because we set the semantic slots in Registration.
+    // Semantic slots expose history and screen textures under stable names.
     let history = textureSample(t_history, extra_samp, in.uv);
     let screen = textureSample(t_screen, extra_samp, in.uv);
     
     let time = user_globals[0].x;
     let tint = user_globals[1].rgb;
     
-    // We used a custom alias for the noise texture
     let noise_uv = fract(in.local_uv * 3.0 + vec2<f32>(time * 0.13, time * 0.09));
     let noise = textureSample(t_noise, extra_samp, noise_uv).rgb;
 
@@ -95,16 +90,14 @@ impl Spot for FullShaderExample {
         let sprite = Image::new(ctx, Pt::from(96.0), Pt::from(96.0), &build_sprite_rgba()).unwrap();
         let noise = Image::new(ctx, Pt::from(64.0), Pt::from(64.0), &build_noise_rgba()).unwrap();
 
-        // Registration with Semantic Slots:
-        // No manual index repeat in Draw anymore!
         let shader_id = register_image_shader_desc(
             ctx,
             ImageShaderDesc::from_wgsl(FULL_SHADER_SOURCE)
                 .with_internal_prelude(true)
                 .with_extra_textures(true)
-                .with_history_slot(0) // Marks slot 0 as "History"
+                .with_history_slot(0)
                 .with_texture_alias(1, "t_noise")
-                .with_screen_slot(2) // Marks slot 2 as "Screen snapshot"
+                .with_screen_slot(2)
                 .with_blend_mode(ImageShaderBlendMode::Add),
         );
 
@@ -129,8 +122,6 @@ impl Spot for FullShaderExample {
         shader_opts.set_vec4(0, [self.time, 0.0, 0.0, 0.0]);
         shader_opts.set_vec4(1, [1.0, 0.45, 0.9, 1.0]);
 
-        // Semantic Drawing:
-        // NO INDEXES! The engine knows History is slot 0 and Screen is slot 2.
         let bindings = ImageShaderBindings::new()
             .with_history()
             .with_image("t_noise", self.noise)
@@ -147,8 +138,6 @@ impl Spot for FullShaderExample {
             bindings,
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn build_sprite_rgba() -> Vec<u8> {

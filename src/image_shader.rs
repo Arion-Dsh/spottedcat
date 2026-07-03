@@ -136,7 +136,7 @@ impl Eq for ImageShaderInput {}
 
 /// Per-draw image shader bindings.
 ///
-/// This struct supports both **Semantic Bindings** (recommended) and **Positional Bindings** (legacy).
+/// Supports semantic bindings and positional bindings.
 ///
 /// ### Semantic Bindings
 /// Semantic bindings associate a texture with a specific *role* (like `history` or `screen`)
@@ -147,14 +147,14 @@ impl Eq for ImageShaderInput {}
 ///
 /// fn build_bindings(noise_img: Image) -> ImageShaderBindings {
 ///     ImageShaderBindings::new()
-///         .with_history() // Automatically finds the history slot
-///         .with_image("t_noise", noise_img) // Automatically finds the "t_noise" slot
+///         .with_history()
+///         .with_image("t_noise", noise_img)
 /// }
 /// ```
 ///
 /// ### Positional Bindings
 /// Positional bindings explicitly target a specific slot (0-3).
-/// Note: Semantic bindings (like `.with_history()`) take precedence and will
+/// Semantic bindings such as `.with_history()` take precedence and
 /// overwrite positional bindings if they share the same slot.
 ///
 /// ```rust
@@ -168,7 +168,7 @@ impl Eq for ImageShaderInput {}
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageShaderBindings {
-    /// Manual index-based overrides. Legacy/Internal.
+    /// Index-based overrides.
     pub(crate) extra_inputs: [ImageShaderInput; MAX_IMAGE_SHADER_EXTRA_TEXTURES],
     /// Semantic history intent.
     pub(crate) history: bool,
@@ -194,7 +194,7 @@ impl ImageShaderBindings {
         Self::default()
     }
 
-    /// Binds an extra image to the requested shader slot (Manual/Legacy).
+    /// Binds an extra image to the requested shader slot.
     pub fn with_extra_image(mut self, slot: usize, image: Image) -> Self {
         if slot < MAX_IMAGE_SHADER_EXTRA_TEXTURES {
             self.extra_inputs[slot] = ImageShaderInput::Image(image);
@@ -202,7 +202,7 @@ impl ImageShaderBindings {
         self
     }
 
-    /// Binds the current target snapshot to the requested shader slot (Manual/Legacy).
+    /// Binds the current target snapshot to the requested shader slot.
     pub fn with_screen_at_slot(mut self, slot: usize) -> Self {
         if slot < MAX_IMAGE_SHADER_EXTRA_TEXTURES {
             self.extra_inputs[slot] = ImageShaderInput::Screen;
@@ -210,7 +210,7 @@ impl ImageShaderBindings {
         self
     }
 
-    /// Binds the previous-frame target snapshot to the requested shader slot (Manual/Legacy).
+    /// Binds the previous-frame target snapshot to the requested shader slot.
     pub fn with_history_at_slot(mut self, slot: usize) -> Self {
         if slot < MAX_IMAGE_SHADER_EXTRA_TEXTURES {
             self.extra_inputs[slot] = ImageShaderInput::History;
@@ -218,19 +218,19 @@ impl ImageShaderBindings {
         self
     }
 
-    /// SEMANTIC: Binds the current target snapshot to whichever slot the shader expects.
+    /// Binds the current target snapshot by semantic role.
     pub fn with_screen(mut self) -> Self {
         self.screen = true;
         self
     }
 
-    /// SEMANTIC: Binds the previous-frame target snapshot to whichever slot the shader expects.
+    /// Binds the previous-frame target snapshot by semantic role.
     pub fn with_history(mut self) -> Self {
         self.history = true;
         self
     }
 
-    /// SEMANTIC: Binds an image to a named slot in the shader.
+    /// Binds an image to a named shader slot.
     pub fn with_image(mut self, name: impl Into<String>, image: Image) -> Self {
         self.named_inputs
             .insert(name.into(), ImageShaderInput::Image(image));

@@ -16,8 +16,6 @@ impl Spot for HappyTreeDesktop {
         Self { image, font_id }
     }
 
-    fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
-
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let (w, h) = spottedcat::window_size(ctx);
         let image_x = (w - self.image.width()) / 2.0;
@@ -47,8 +45,6 @@ impl Spot for HappyTreeDesktop {
             DrawOption::default().with_position([Pt::from(24.0), Pt::from(24.0)]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

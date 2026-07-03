@@ -64,7 +64,6 @@ impl Spot for InstancingTest {
             self.frame_count = 0;
         }
 
-        // Dynamically update 10,000 matrices on CPU as an extreme test
         let mut idx = 0;
         for x in -50..50 {
             for y in -50..50 {
@@ -73,7 +72,6 @@ impl Spot for InstancingTest {
                 let dist = (px * px + py * py).sqrt();
                 let pz = (dist - self.time * 5.0).sin() * 2.0;
 
-                // Rotation
                 let rot = self.time + (x as f32 * y as f32 * 0.01);
                 let cx = rot.cos();
                 let sx = rot.sin();
@@ -90,7 +88,6 @@ impl Spot for InstancingTest {
     }
 
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
-        // Draw 10000 cubes in 1 call!
         spottedcat::model::draw_instanced(
             ctx,
             screen,
@@ -101,21 +98,18 @@ impl Spot for InstancingTest {
             &self.transforms,
         );
 
-        // Draw FPS
         screen.draw(
             ctx,
             &self.fps_text,
             DrawOption::default().with_position([Pt::from(10.0), Pt::from(10.0)]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
     unsafe {
         std::env::set_var("SPOT_PROFILE_RENDER", "1");
-    } // Print render stats
+    }
     spottedcat::run::<InstancingTest>(WindowConfig {
         title: "Instancing Test (10000 Cubes)".to_string(),
         width: spottedcat::Pt::from(1280.0),

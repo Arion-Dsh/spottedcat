@@ -115,8 +115,6 @@ impl Spot for RenderStateStress {
             self.instanced_transforms.clone(),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

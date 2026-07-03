@@ -10,14 +10,10 @@ struct GltfApp {
 
 impl Spot for GltfApp {
     fn initialize(ctx: &mut Context) -> Self {
-        // 1. Setup scene-wide PBR lighting
         spottedcat::set_ambient_light(ctx, [0.2, 0.2, 0.2, 1.0]);
-        // A bright directional light from the top-right
         spottedcat::set_light(ctx, 0, [10.0, 10.0, 10.0, 0.0], [1.0, 1.0, 1.0, 1.0]);
-        // Set camera position (matching the hardcoded view matrix in render.rs)
         spottedcat::set_camera_pos(ctx, [0.0, 0.0, 5.0]);
 
-        // 2. Create a model (using a sphere for PBR demonstration)
         let model = spottedcat::model::create_sphere(ctx, 1.0).unwrap();
 
         Self {
@@ -32,28 +28,24 @@ impl Spot for GltfApp {
 
     fn draw(&mut self, ctx: &mut Context, screen: spottedcat::Image) {
         let opts = DrawOption3D::default()
-            .with_position([0.0, 0.0, 0.0]) // Already at -5 in view space
+            .with_position([0.0, 0.0, 0.0])
             .with_rotation([0.0, self.rotation, 0.0]);
 
         screen.draw(ctx, &self.model, opts);
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
     spottedcat::run::<GltfApp>(WindowConfig::default());
 }
 
-/// A reference implementation of a glTF loader using the `gltf` crate.
-/// This would live in your application layer.
+/// Loads mesh and skin data using the `gltf` crate.
 pub fn load_gltf(ctx: &mut Context, path: &str) -> anyhow::Result<(Model, u32)> {
     let (document, buffers, _) = gltf::import(path)?;
 
     let mut all_vertices = Vec::new();
     let mut all_indices = Vec::new();
 
-    // 1. Extract Mesh Data
     for mesh in document.meshes() {
         for primitive in mesh.primitives() {
             let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
@@ -90,7 +82,7 @@ pub fn load_gltf(ctx: &mut Context, path: &str) -> anyhow::Result<(Model, u32)> 
                     pos,
                     uv,
                     normal: norm,
-                    tangent: [1.0, 0.0, 0.0], // Default tangent
+                    tangent: [1.0, 0.0, 0.0],
                     joint_indices: [
                         joints[0] as u32,
                         joints[1] as u32,
@@ -111,7 +103,6 @@ pub fn load_gltf(ctx: &mut Context, path: &str) -> anyhow::Result<(Model, u32)> 
 
     let model = spottedcat::model::create(ctx, &all_vertices, &all_indices)?;
 
-    // 2. Extract Skin Data
     let mut skin_id = 0;
     if let Some(skin) = document.skins().next() {
         let reader = skin.reader(|buffer| Some(&buffers[buffer.index()]));
@@ -120,7 +111,6 @@ pub fn load_gltf(ctx: &mut Context, path: &str) -> anyhow::Result<(Model, u32)> 
             .map(|i| i.collect())
             .unwrap_or_default();
 
-        // Build hierarchy
         let mut node_parents = std::collections::HashMap::new();
         for node in document.nodes() {
             for child in node.children() {

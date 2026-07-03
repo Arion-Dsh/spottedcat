@@ -380,22 +380,18 @@ impl App {
                         crate::android::logcat_info("MainEvent::Resume");
                         self.platform.floating_surface = None;
 
-                        // IMPORTANT: On Android, the native window might be same pointer but its 
-                        // buffers could be reset or it might need format re-setting after wake up.
+                        // Resume can invalidate buffers without changing the native window pointer.
                         if let Some(window) = self.platform.native_window.clone() {
                             unsafe {
                                 ndk_sys::ANativeWindow_setBuffersGeometry(window.ptr().as_ptr() as *mut _, 0, 0, 1);
                             }
 
-                            // Recreate the surface to ensure it's fresh and matched to the resumed window state.
-                            // This addresses the "occasional blank screen" issue after a few frames.
                             eprintln!("[spot][android] Re-creating surface on resume to ensure stability");
                             crate::android::logcat_info(
                                 "recreating native surface on resume to ensure stability",
                             );
                             self.setup_native_window_surface(&window);
 
-                            // Reset previous time to avoid huge dt jump after sleep
                             self.timing.reset();
                         } else {
                             eprintln!("[spot][android] Resume: No native window available. Waiting for InitWindow.");
@@ -780,8 +776,7 @@ impl App {
                     }
                 }
 
-                // Render to ACTIVE surface
-                // If floating surface exists, we are in floating mode, prioritize it.
+                // Floating mode renders to its own surface.
                 let mut graphics = self.ctx.detach_graphics();
                 let draw_result = if let Some(surface) = self.platform.floating_surface.as_ref() {
                     graphics
@@ -834,14 +829,11 @@ impl App {
                     self.request_redraw();
                 }
 
-                // Force Android driver to reclaim memory by polling with Wait.
-                // This addresses the memory leak (~0.8MB/10s at 60FPS) observed on Android
-                // even with minimal rendering.
+                // Wait for submitted work so the driver can reclaim transient resources.
                 if let Some(g) = self.ctx.graphics_mut() {
                     g.poll_device(true);
                 }
 
-                // Periodic health check log every 300 frames (~5 seconds)
                 frame_count += 1;
                 if frame_count % 300 == 0 {
                     eprintln!("[spot][android] Loop alive. Frame: {}", frame_count);

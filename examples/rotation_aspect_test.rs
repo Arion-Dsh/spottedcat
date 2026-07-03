@@ -151,8 +151,6 @@ impl Spot for RotationAspectTest {
             DrawOption::default().with_position([Pt::from(right_x + 36.0), Pt::from(labels_y)]),
         );
     }
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {

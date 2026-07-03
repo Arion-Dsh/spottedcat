@@ -100,10 +100,6 @@ impl Spot for CenteredTextTestSpot {
                 .with_position([Pt::from(text_abs_pos[0]), Pt::from(text_abs_pos[1])]),
         );
     }
-
-    fn update(&mut self, _ctx: &mut Context, _dt: std::time::Duration) {}
-
-    fn remove(&mut self, _ctx: &mut Context) {}
 }
 
 fn main() {
