@@ -249,7 +249,7 @@ mod tests {
 
         let mid = q1.interpolate(q2, 0.5);
         // Should be roughly 45 degrees
-        assert!(mid.0[2] > 0.0 && mid.0[2] < 0.7071);
-        assert!(mid.0[3] > 0.7071);
+        assert!(mid.0[2] > 0.0 && mid.0[2] < std::f32::consts::FRAC_1_SQRT_2);
+        assert!(mid.0[3] > std::f32::consts::FRAC_1_SQRT_2);
     }
 }

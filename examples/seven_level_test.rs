@@ -47,15 +47,15 @@ impl Spot for SevenLevelNestTestSpot {
             [1.0, 1.0, 1.0, 1.0], // White (Level 7)
         ];
 
-        for i in 0..7 {
+        for (i, color) in colors.into_iter().enumerate() {
             let target = self.images[i];
             target.draw_with_shader(
                 ctx,
-                &self.white_image,
+                self.white_image,
                 1,
                 DrawOption::default()
                     .with_scale([target.width().as_f32(), target.height().as_f32()]),
-                spottedcat::ShaderOpts::default().with_color(colors[i]),
+                spottedcat::ShaderOpts::default().with_color(color),
             );
         }
 

@@ -138,7 +138,7 @@ impl Spot for FlipTest {
             let mut shader_opts = ShaderOpts::default().with_opacity(shader_alpha);
             shader_opts.set_vec4(0, color);
 
-            screen.draw_with_shader(ctx, &self.image, 1, opts, shader_opts);
+            screen.draw_with_shader(ctx, self.image, 1, opts, shader_opts);
 
             let mut t = self.text_obj.clone();
             t.set_content(label);
@@ -201,7 +201,7 @@ impl Spot for FlipTest {
                 .with_position([Pt::from(x), Pt::from(y)])
                 .with_scale([-s, -s]);
 
-            screen.draw_with_shader(ctx, &self.image, self.yellow_shader_id, opts, yellow_opts);
+            screen.draw_with_shader(ctx, self.image, self.yellow_shader_id, opts, yellow_opts);
         };
         yellow_draw(ctx, fsw - 100.0, fsh - 100.0);
 
@@ -220,7 +220,7 @@ impl Spot for FlipTest {
 
         screen.draw_with_shader(
             ctx,
-            &self.image,
+            self.image,
             self.yellow_shader_id, // User-registered Fill Shader
             DrawOption::default()
                 .with_position([Pt::from(fsw * 0.5), Pt::from(move_y)])

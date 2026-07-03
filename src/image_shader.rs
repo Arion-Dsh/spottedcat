@@ -106,18 +106,13 @@ impl ImageShaderDesc {
 }
 
 /// Optional per-draw bindings for custom image shaders.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ImageShaderInput {
+    #[default]
     None,
     Image(Image),
     Screen,
     History,
-}
-
-impl Default for ImageShaderInput {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl PartialEq for ImageShaderInput {
@@ -166,7 +161,7 @@ impl Eq for ImageShaderInput {}
 ///         .with_extra_image(1, mask_img)
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ImageShaderBindings {
     /// Index-based overrides.
     pub(crate) extra_inputs: [ImageShaderInput; MAX_IMAGE_SHADER_EXTRA_TEXTURES],
@@ -176,17 +171,6 @@ pub struct ImageShaderBindings {
     pub(crate) screen: bool,
     /// Semantic named image intents.
     pub(crate) named_inputs: std::collections::HashMap<String, ImageShaderInput>,
-}
-
-impl Default for ImageShaderBindings {
-    fn default() -> Self {
-        Self {
-            extra_inputs: Default::default(),
-            history: false,
-            screen: false,
-            named_inputs: Default::default(),
-        }
-    }
 }
 
 impl ImageShaderBindings {

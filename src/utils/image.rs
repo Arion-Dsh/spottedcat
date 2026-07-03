@@ -29,11 +29,13 @@ pub fn from_rgba_image(ctx: &mut Context, image: &image::RgbaImage) -> anyhow::R
 
 use std::sync::mpsc::{self, Receiver};
 
+type ImageLoadResult = Result<(u32, u32, Vec<u8>), String>;
+
 /// A handle to an image that is loading asynchronously.
 #[derive(Debug)]
 pub struct LoadingImage {
     path: String,
-    rx: Receiver<Result<(u32, u32, Vec<u8>), String>>,
+    rx: Receiver<ImageLoadResult>,
     image: Option<Image>,
     error: Option<String>,
 }

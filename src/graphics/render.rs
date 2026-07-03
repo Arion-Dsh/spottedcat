@@ -45,7 +45,7 @@ fn expect_image_pipeline<'a>(
     }
 }
 
-fn expect_resource_bind_group<'a>(ctx: &'a Context, texture_id: u32) -> &'a wgpu::BindGroup {
+fn expect_resource_bind_group(ctx: &Context, texture_id: u32) -> &wgpu::BindGroup {
     ctx.registry
         .textures
         .get(texture_id as usize)
@@ -60,7 +60,7 @@ fn expect_resource_bind_group<'a>(ctx: &'a Context, texture_id: u32) -> &'a wgpu
         })
 }
 
-fn expect_texture_view<'a>(ctx: &'a Context, texture_id: u32) -> &'a wgpu::TextureView {
+fn expect_texture_view(ctx: &Context, texture_id: u32) -> &wgpu::TextureView {
     ctx.registry
         .textures
         .get(texture_id as usize)
@@ -233,22 +233,22 @@ impl Graphics {
 
                         // 2. Apply semantic intents (ignoring None)
                         if let Some(desc) = shader_desc {
-                            if cmd.shader_bindings.history {
-                                if let Some(slot) = desc.history_slot {
-                                    extra_inputs[slot] =
-                                        ResolvedImageShaderInput::History(cmd.target_texture_id);
-                                }
+                            if cmd.shader_bindings.history
+                                && let Some(slot) = desc.history_slot
+                            {
+                                extra_inputs[slot] =
+                                    ResolvedImageShaderInput::History(cmd.target_texture_id);
                             }
-                            if cmd.shader_bindings.screen {
-                                if let Some(slot) = desc.screen_slot {
-                                    extra_inputs[slot] =
-                                        ResolvedImageShaderInput::Screen(cmd.target_texture_id);
-                                }
+                            if cmd.shader_bindings.screen
+                                && let Some(slot) = desc.screen_slot
+                            {
+                                extra_inputs[slot] =
+                                    ResolvedImageShaderInput::Screen(cmd.target_texture_id);
                             }
                             for (name, input) in &cmd.shader_bindings.named_inputs {
-                                for i in 0..4 {
-                                    if desc.extra_texture_names[i].as_deref() == Some(name) {
-                                        extra_inputs[i] = resolve_input(input);
+                                for (index, extra_input) in extra_inputs.iter_mut().enumerate() {
+                                    if desc.extra_texture_names[index].as_deref() == Some(name) {
+                                        *extra_input = resolve_input(input);
                                         break;
                                     }
                                 }
@@ -503,7 +503,6 @@ impl Graphics {
             wgpu::SurfaceError::Lost
         })?;
 
-        let targets_ms;
         #[allow(unused_mut, unused_assignments)]
         let mut shadow_ms = 0.0;
         #[allow(unused_mut, unused_assignments)]
@@ -519,7 +518,7 @@ impl Graphics {
 
         let targets_started_at = Instant::now();
         self.render_all_targets(ctx, &draws);
-        targets_ms = targets_started_at.elapsed().as_secs_f64() * 1000.0;
+        let targets_ms = targets_started_at.elapsed().as_secs_f64() * 1000.0;
 
         let frame_started_at = Instant::now();
         let wait_started_at = Instant::now();
@@ -1039,6 +1038,7 @@ impl Graphics {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update_shader_snapshot(
         cache: &mut HashMap<u32, crate::graphics::texture::GpuTexture>,
         device: &wgpu::Device,

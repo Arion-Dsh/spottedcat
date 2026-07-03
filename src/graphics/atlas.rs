@@ -16,6 +16,7 @@ struct Node {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::DynamicAtlas;
     use crate::{Context, Pt};
@@ -71,10 +72,10 @@ impl Node {
     fn insert_node(&mut self, rect_w: i32, rect_h: i32) -> Option<(i32, i32)> {
         // If we are already split, recurse into children
         if self.split {
-            if let Some(left) = self.left.as_mut() {
-                if let Some(pos) = left.insert_node(rect_w, rect_h) {
-                    return Some(pos);
-                }
+            if let Some(left) = self.left.as_mut()
+                && let Some(pos) = left.insert_node(rect_w, rect_h)
+            {
+                return Some(pos);
             }
             if let Some(right) = self.right.as_mut() {
                 return right.insert_node(rect_w, rect_h);
@@ -182,6 +183,7 @@ impl DynamicAtlas {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_region(
         &mut self,
         registry: &mut crate::context::ResourceRegistry,
@@ -203,21 +205,22 @@ impl DynamicAtlas {
         // Try to fit in existing pages
         for page_idx in 0..self.pages.len() {
             let page = &mut self.pages[page_idx];
-            if page.pixel_width >= total_w && page.pixel_height >= total_h {
-                if let Some((x, y)) = page.packer.insert(total_w as i32, total_h as i32) {
-                    return self.write_to_page(
-                        registry,
-                        scale_factor,
-                        page_idx,
-                        x as u32,
-                        y as u32,
-                        logical_w,
-                        logical_h,
-                        w_px,
-                        h_px,
-                        rgba,
-                    );
-                }
+            if page.pixel_width >= total_w
+                && page.pixel_height >= total_h
+                && let Some((x, y)) = page.packer.insert(total_w as i32, total_h as i32)
+            {
+                return self.write_to_page(
+                    registry,
+                    scale_factor,
+                    page_idx,
+                    x as u32,
+                    y as u32,
+                    logical_w,
+                    logical_h,
+                    w_px,
+                    h_px,
+                    rgba,
+                );
             }
         }
 
@@ -304,6 +307,7 @@ impl DynamicAtlas {
         self.pages.len() - 1
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn write_to_page(
         &mut self,
         registry: &mut crate::context::ResourceRegistry,

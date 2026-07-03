@@ -23,26 +23,14 @@ thread_local! {
     static QUIT_REQUEST: RefCell<bool> = const { RefCell::new(false) };
 }
 
-fn request_scene_switch<F>(factory: F)
+fn request_scene_switch<F>(factory: F, payload: Option<ScenePayload>)
 where
     F: Fn(&mut Context) -> Box<dyn Spot> + Send + Sync + 'static,
 {
     SCENE_SWITCH_REQUEST.with(|request| {
         *request.borrow_mut() = Some(SceneSwitchRequest {
             factory: Box::new(factory),
-            payload: None,
-        });
-    });
-}
-
-fn request_scene_switch_with<F>(factory: F, payload: ScenePayload)
-where
-    F: Fn(&mut Context) -> Box<dyn Spot> + Send + Sync + 'static,
-{
-    SCENE_SWITCH_REQUEST.with(|request| {
-        *request.borrow_mut() = Some(SceneSwitchRequest {
-            factory: Box::new(factory),
-            payload: Some(payload),
+            payload,
         });
     });
 }
@@ -64,7 +52,7 @@ pub(crate) fn take_quit_request() -> bool {
 ///
 /// The current scene will be removed and the new scene will be initialized.
 pub fn switch_scene<T: Spot + 'static>() {
-    request_scene_switch(|ctx| Box::new(T::initialize(ctx)));
+    request_scene_switch(|ctx| Box::new(T::initialize(ctx)), None);
 }
 
 /// Switches to a new scene of type `T` and passes a payload.
@@ -72,12 +60,12 @@ pub fn switch_scene<T: Spot + 'static>() {
 /// The payload can be retrieved in the new scene's `initialize` method
 /// using `ctx.take_resource::<P>()`.
 pub fn switch_scene_with<T: Spot + 'static, P: Any>(payload: P) {
-    request_scene_switch_with(
+    request_scene_switch(
         |ctx| Box::new(T::initialize(ctx)),
-        ScenePayload {
+        Some(ScenePayload {
             type_id: TypeId::of::<P>(),
             value: Rc::new(payload),
-        },
+        }),
     );
 }
 

@@ -182,7 +182,9 @@ impl SceneHost {
             return false;
         };
 
-        clear_scene_payload(ctx);
+        if let Some(last) = ctx.take_resource::<ScenePayloadTypeId>() {
+            ctx.take_resource_dyn(last.0);
+        }
         if let Some(payload) = request.payload {
             ctx.insert_resource_dyn(payload.type_id, payload.value);
             ctx.insert_resource(Rc::new(ScenePayloadTypeId(payload.type_id)));
@@ -192,12 +194,6 @@ impl SceneHost {
         self.spot = Some((request.factory)(ctx));
         self.is_floating_scene = false;
         true
-    }
-}
-
-fn clear_scene_payload(ctx: &mut Context) {
-    if let Some(last) = ctx.take_resource::<ScenePayloadTypeId>() {
-        ctx.take_resource_dyn(last.0);
     }
 }
 
@@ -364,7 +360,7 @@ mod tests {
         let app = App::new::<RootScene>(crate::WindowConfig::default());
         let before_move = app.ctx.as_ref().get_ref() as *const Context;
 
-        let app = Some(app).unwrap();
+        let app = app;
         let after_move = app.ctx.as_ref().get_ref() as *const Context;
 
         assert_eq!(before_move, after_move);

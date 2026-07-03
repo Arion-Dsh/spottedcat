@@ -169,22 +169,6 @@ pub fn pt(x: f32) -> Pt {
     Pt::from(x)
 }
 
-pub fn unregister_font(ctx: &mut Context, font_id: u32) {
-    assets::unregister_font(ctx, font_id);
-}
-
-/// Registers a sound from raw bytes and returns a unique sound ID.
-pub fn register_sound(ctx: &mut Context, bytes: Vec<u8>) -> Option<u32> {
-    sound::register_sound(ctx, bytes)
-}
-
-/// Unregisters a sound and frees its resources.
-pub fn unregister_sound(ctx: &mut Context, sound_id: u32) {
-    sound::unregister_sound(ctx, sound_id)
-}
-
-/// Forces pending asset compression work to run immediately.
-
 #[cfg(feature = "model-3d")]
 /// Sets camera eye, target and up vectors in one call.
 pub fn set_camera(ctx: &mut Context, eye: [f32; 3], target: [f32; 3], up: [f32; 3]) {
@@ -319,11 +303,6 @@ pub fn mouse_released(ctx: &Context, btn: MouseButton) -> bool {
 /// Returns the current mouse position in logical coordinates.
 pub fn mouse_pos(ctx: &Context) -> Option<(Pt, Pt)> {
     ctx.input().cursor_position()
-}
-
-/// Alias for [`mouse_pos`].
-pub fn cursor_position(ctx: &Context) -> Option<(Pt, Pt)> {
-    mouse_pos(ctx)
 }
 
 /// Returns a slice of active touch points.

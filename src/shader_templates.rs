@@ -318,20 +318,17 @@ pub fn image_shader_prelude_with_full_metadata_internal(
     history_slot: Option<usize>,
     screen_slot: Option<usize>,
 ) -> String {
-    let mut final_names = [None, None, None, None];
-    for i in 0..4 {
-        final_names[i] = texture_names[i].clone();
-    }
+    let mut final_names = texture_names.clone();
 
-    if let Some(slot) = history_slot {
-        if final_names[slot].is_none() {
-            final_names[slot] = Some("t_history".to_string());
-        }
+    if let Some(slot) = history_slot
+        && final_names[slot].is_none()
+    {
+        final_names[slot] = Some("t_history".to_string());
     }
-    if let Some(slot) = screen_slot {
-        if final_names[slot].is_none() {
-            final_names[slot] = Some("t_screen".to_string());
-        }
+    if let Some(slot) = screen_slot
+        && final_names[slot].is_none()
+    {
+        final_names[slot] = Some("t_screen".to_string());
     }
 
     let user_group = if uses_extra_textures { 2 } else { 1 };
@@ -341,8 +338,8 @@ pub fn image_shader_prelude_with_full_metadata_internal(
 
     if uses_extra_textures {
         wgsl.push('\n');
-        for i in 0..4 {
-            let name = final_names[i].as_deref().unwrap_or_else(|| match i {
+        for (index, texture_name) in final_names.iter().enumerate() {
+            let name = texture_name.as_deref().unwrap_or_else(|| match index {
                 0 => "t0",
                 1 => "t1",
                 2 => "t2",
@@ -350,7 +347,7 @@ pub fn image_shader_prelude_with_full_metadata_internal(
                 _ => unreachable!(),
             });
             wgsl.push_str(&format!(
-                "@group(1) @binding({i}) var {name}: texture_2d<f32>;\n"
+                "@group(1) @binding({index}) var {name}: texture_2d<f32>;\n"
             ));
         }
         wgsl.push_str("@group(1) @binding(4) var extra_samp: sampler;\n");

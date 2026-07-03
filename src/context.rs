@@ -326,22 +326,22 @@ impl Context {
         rgba: &[u8],
     ) -> crate::Image {
         // Transparent auto-atlasing for small images
-        if let Some(graphics) = self.runtime.graphics.as_mut() {
-            if pixel_width <= 512 && pixel_height <= 512 {
-                if let Some(atlas) = graphics.shared_atlas.as_mut() {
-                    let scale_factor = self.runtime.scale_factor;
-                    if let Ok(img) = atlas.add_region(
-                        &mut self.registry,
-                        scale_factor,
-                        width,
-                        height,
-                        pixel_width,
-                        pixel_height,
-                        rgba,
-                    ) {
-                        return img;
-                    }
-                }
+        if pixel_width <= 512
+            && pixel_height <= 512
+            && let Some(graphics) = self.runtime.graphics.as_mut()
+            && let Some(atlas) = graphics.shared_atlas.as_mut()
+        {
+            let scale_factor = self.runtime.scale_factor;
+            if let Ok(img) = atlas.add_region(
+                &mut self.registry,
+                scale_factor,
+                width,
+                height,
+                pixel_width,
+                pixel_height,
+                rgba,
+            ) {
+                return img;
             }
         }
 

@@ -554,6 +554,7 @@ impl ImageRenderer {
         Ok(start..(start + count))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_batch<'rp>(
         &self,
         pass: &mut wgpu::RenderPass<'rp>,
