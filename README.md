@@ -32,14 +32,14 @@ Minimal 2D core:
 
 ```toml
 [dependencies]
-spottedcat = "1.0.1"
+spottedcat = "1.0.2"
 ```
 
 Common feature set for richer projects:
 
 ```toml
 [dependencies]
-spottedcat = { version = "1.0.1", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "1.0.2", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 Feature guide:
@@ -122,6 +122,27 @@ show score text, and keep the code close to the existing examples.
 ```
 
 See [AI_GAME_GENERATION_GUIDE.md](AI_GAME_GENERATION_GUIDE.md) for LLM-oriented API guidance.
+
+### Install the Codex skill in a game project
+
+Install the Spot CLI once:
+
+```bash
+cargo install spottedcat
+```
+
+Then run this command from the root of any game project that uses Spottedcat:
+
+```bash
+spot install-skill
+```
+
+It installs `spot-game-builder` into the current project's
+`.agents/skills/spot-game-builder` directory. To target another project, run:
+
+```bash
+spot install-skill --project /path/to/your-game
+```
 
 ## Examples
 
