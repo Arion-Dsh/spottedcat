@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::drawable::DrawCommand3D;
 use crate::graphics::model_raw::{MeshData, ModelRenderer};
+use crate::graphics::texture::GpuTexture;
 use crate::image::ImageEntry;
 use crate::model::{Bone, RawVertex, SkinData};
 
@@ -98,6 +99,8 @@ pub(crate) struct Graphics3D {
     pub(crate) fog_background_pipeline: wgpu::RenderPipeline,
     pub(crate) gpu_models: Vec<Option<MeshData>>,
     pub(crate) gpu_skins: Vec<Option<SkinData>>,
+    /// Reused by sequential offscreen passes; every pass clears depth before drawing.
+    pub(crate) offscreen_depth_textures: HashMap<(u32, u32), GpuTexture>,
     pub(crate) depth_texture: wgpu::Texture,
     pub(crate) depth_view: wgpu::TextureView,
     pub(crate) white_image_id: u32,
@@ -738,6 +741,7 @@ impl Graphics {
             fog_background_pipeline,
             gpu_models: Vec::new(),
             gpu_skins: Vec::new(),
+            offscreen_depth_textures: HashMap::new(),
             depth_texture,
             depth_view,
             shadow_texture,

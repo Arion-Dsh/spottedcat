@@ -1189,22 +1189,25 @@ impl Graphics {
                     .unwrap_or(false);
 
                 if has_3d {
-                    let depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("spot_offscreen_depth"),
-                        size: wgpu::Extent3d {
-                            width: width.max(1),
-                            height: height.max(1),
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Depth24Plus,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                        view_formats: &[],
-                    });
-                    let depth_view =
-                        depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let depth_size = (width.max(1), height.max(1));
+                    let device = &self.device;
+                    let depth_texture = self
+                        .model_3d
+                        .as_mut()
+                        .expect("3D resources must exist when rendering 3D content")
+                        .offscreen_depth_textures
+                        .entry(depth_size)
+                        .or_insert_with(|| {
+                            crate::graphics::texture::GpuTexture::create_empty_with_usage_and_mips(
+                                device,
+                                depth_size.0,
+                                depth_size.1,
+                                wgpu::TextureFormat::Depth24Plus,
+                                wgpu::TextureUsages::RENDER_ATTACHMENT,
+                                1,
+                            )
+                        })
+                        .clone();
 
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("target_3d_render_pass"),
@@ -1218,7 +1221,7 @@ impl Graphics {
                             },
                         })],
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &depth_view,
+                            view: &depth_texture.0.view,
                             depth_ops: Some(wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(1.0),
                                 store: wgpu::StoreOp::Store,
