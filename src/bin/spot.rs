@@ -16,6 +16,10 @@ const SKILL_FILES: &[(&str, &str)] = &[
         "references/repo-map.md",
         include_str!("../../skills/spot-game-builder/references/repo-map.md"),
     ),
+    (
+        "references/api-patterns.md",
+        include_str!("../../skills/spot-game-builder/references/api-patterns.md"),
+    ),
 ];
 
 fn print_help() {

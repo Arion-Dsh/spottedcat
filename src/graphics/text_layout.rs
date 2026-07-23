@@ -17,13 +17,12 @@ impl Graphics {
     ) -> anyhow::Result<()> {
         use crate::text::{CachedGlyph, TextLayout};
         use ab_glyph::{Font as _, FontArc, PxScale, ScaleFont as _};
-        use std::sync::atomic::Ordering;
 
         {
             let cache_lock = text.layout_cache.as_ref().lock().unwrap();
-            if !text.dirty.load(Ordering::SeqCst)
-                && let Some(layout) = cache_lock.as_ref()
+            if let Some(layout) = cache_lock.as_ref()
                 && layout.scale == image_scale
+                && layout.revision == text.layout_revision
             {
                 return Ok(());
             }
@@ -64,27 +63,10 @@ impl Graphics {
         };
 
         let mut caret_pos = [Pt(0.0), Pt(0.0)];
-
         let mut global_min_y = scaled.ascent();
-        for line in &lines {
-            for ch in line.chars() {
-                let id = scaled.glyph_id(ch);
-                if let Some(glyph) = scaled.outline_glyph(ab_glyph::Glyph {
-                    id,
-                    scale,
-                    position: ab_glyph::point(0.0, 0.0),
-                }) {
-                    global_min_y = global_min_y.min(glyph.px_bounds().min.y);
-                }
-            }
-        }
-        let y_offset = -global_min_y;
-
         let ascent = scaled.ascent();
         let descent = scaled.descent();
         let line_height = ascent - descent + scaled.line_gap();
-
-        caret_pos[1] += Pt::from_physical_px((y_offset - ascent) as f64, scale_factor);
 
         let sx = image_scale[0];
         let sy = image_scale[1];
@@ -93,7 +75,7 @@ impl Graphics {
 
         for line in lines {
             let mut prev: Option<ab_glyph::GlyphId> = None;
-            let baseline_y = caret_pos[1] + Pt::from_physical_px(ascent as f64, scale_factor);
+            let baseline_y = caret_pos[1];
 
             for ch in line.chars() {
                 let glyph_id = scaled.glyph_id(ch);
@@ -122,6 +104,7 @@ impl Graphics {
                         Pt::from_physical_px(scaled.h_advance(glyph_id) as f64, scale_factor);
                     continue;
                 };
+                global_min_y = global_min_y.min(entry.offset[1]);
 
                 let img_id = entry.image.id();
                 let img_entry = if let Some(Some(e)) = ctx.registry.images.get(img_id as usize) {
@@ -167,15 +150,21 @@ impl Graphics {
             caret_pos[1] += Pt::from_physical_px(line_height as f64, scale_factor);
         }
 
+        let y_offset = -global_min_y;
+        let layout_y_offset = Pt::from_physical_px(y_offset as f64, scale_factor).as_f32() * sy;
+        for glyph in &mut cached_glyphs {
+            glyph.instance.pos[1] += layout_y_offset;
+        }
+
         let new_layout = TextLayout {
             glyphs: cached_glyphs,
             bounds: (0.0, 0.0, y_offset),
             scale: image_scale,
+            revision: text.layout_revision,
         };
 
         let mut cache_lock = text.layout_cache.as_ref().lock().unwrap();
         *cache_lock = Some(new_layout);
-        text.dirty.store(false, Ordering::SeqCst);
 
         Ok(())
     }

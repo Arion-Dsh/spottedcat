@@ -40,7 +40,7 @@ impl ImageShaderDesc {
     /// optional `@group(1)` extra textures when enabled,
     /// then user globals and engine globals.
     ///
-    /// See `docs/image-shader.md` for the full binding contract.
+    /// See <https://rustyspottedcat.dev/graphics/shaders> for the full binding contract.
     pub fn from_wgsl(source: impl Into<String>) -> Self {
         Self {
             source: source.into(),

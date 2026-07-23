@@ -1,164 +1,95 @@
 ---
 name: spot-game-builder
-description: Plan and implement games quickly with the spottedcat (`spot`) Rust engine. Use when Codex needs to turn a game idea into working code in a repo that uses `spottedcat`, especially for scaffolding a new `Spot` scene, choosing 2D vs 3D engine features, mapping gameplay into `Context`/`Spot`/draw calls, reusing the repo's examples, wiring input, text, audio, fog, models, or preparing desktop, WASM, Android, or iOS game builds. Also use when the request is phrased in Chinese, such as “用 spot 快速做游戏”, “帮我用 spottedcat 做一个小游戏”, “把这个玩法实现成 Spot 场景”, “基于这个仓库做游戏原型”, or in English, such as “build a game with spottedcat”, “prototype a game in spot”, “turn this game idea into a Spot scene”, “add gameplay/HUD/audio to this spottedcat project”, or “use the repo examples to make a playable demo”.
+description: Build and modify playable Rust games that depend on the Spottedcat (`spottedcat` or `spot`) engine. Use when an AI coding agent needs to scaffold or extend a `Spot` scene, choose 2D/3D features, implement gameplay, input, images, text, audio, cameras, models, fog, shaders, scene transitions, or prepare desktop, WebAssembly, Android, or iOS builds in a consumer game project. Trigger for requests such as “用 spot 做游戏”, “用 spottedcat 实现这个玩法”, “build a game with spottedcat”, or “add gameplay/HUD/audio to this Spot scene”.
 ---
 
 # Spot Game Builder
 
-## Overview
+Build the smallest playable slice that fits the existing game project. Treat the current repository as the application being developed, not as the Spottedcat engine source.
 
-Use this skill to move from a game idea to a playable `spottedcat` prototype with as little ceremony as possible. Favor a small vertical slice first, reuse existing engine examples aggressively, and keep the implementation aligned with the engine's stable surfaces: `Context`, `Spot`, `Image`, `Model`, `Text`, and `run`.
+## Establish the project boundary
 
-## Workflow
+Inspect before editing:
 
-### 1. Confirm the engine root and existing baseline
+- `Cargo.toml` and `Cargo.lock` for the actual `spottedcat` version, source, and enabled features
+- existing `src/`, assets, scenes, platform wrappers, and project commands
+- the current `Spot` implementation and local code conventions
+- existing user changes that must be preserved
 
-Look for:
+If the dependency is a local `path`, inspect that checkout for exact APIs and examples. If it is a registry or Git dependency, prefer the version already selected by the project. Do not upgrade Spottedcat, edit the engine dependency, or assume unreleased APIs unless the user asks.
 
-- `Cargo.toml` with package name `spottedcat`
-- `README.md`
-- `AI_GAME_GENERATION_GUIDE.md`
-- `examples/`
+Read [references/api-patterns.md](references/api-patterns.md) before adding or changing Spottedcat code. Read [references/repo-map.md](references/repo-map.md) only when choosing an upstream example, locating deeper engine documentation, or handling a platform target.
 
-If those files exist, treat that repo as the primary engine source of truth. Read `AI_GAME_GENERATION_GUIDE.md` first for architecture and lifecycle expectations. Read [references/repo-map.md](references/repo-map.md) when you need example selection, feature flags, or build commands.
+## Build a vertical slice
 
-### 2. Turn the request into a tiny playable slice
+Reduce the request to:
 
-Before writing code, reduce the request into:
+- the repeated player action
+- the visible response
+- the input methods
+- 2D, 3D, or mixed rendering
+- one goal, hazard, score, timer, or restart loop
 
-- player fantasy: what the player does repeatedly
-- camera/render mode: 2D, 3D, or mixed UI + 3D
-- inputs: keyboard, mouse, touch, sensors
-- renderables: image, text, model, instancing, fog, shader
-- win loop: survive, dodge, collect, score, explore
+Implement that loop before menus, save systems, generalized frameworks, or content pipelines. Extend existing scenes and patterns when possible.
 
-Start with the smallest playable version that proves the loop. Examples:
+## Choose the smallest engine surface
 
-- "做一个俯视角射击原型" -> move, aim, spawn bullets, one enemy type, score text
-- "做一个 3D 雾气场景漫游" -> camera, environment models, movement, fog tuning, FPS overlay
-- "做一个手机计步小游戏" -> sensor input, simple HUD, daily step readout, one interaction loop
+- Use the default feature set for 2D, text, input, and audio.
+- Add `utils` for encoded image decoding and asynchronous image helpers.
+- Add `model-3d` for models, cameras, lights, billboards, or instancing.
+- Add `effects` for fog; it includes `model-3d`.
+- Add `gltf` for glTF loading; it includes `model-3d` and `utils`.
+- Add `sensors` only for supported mobile motion or step APIs.
 
-Avoid building menus, save systems, and content pipelines before the core loop feels real.
+Do not enable every feature preemptively. Match the dependency version and feature style already used by the project.
 
-### 3. Choose the engine path
+## Implement around `Spot`
 
-Use this decision rule:
+Keep responsibilities explicit:
 
-- Choose pure 2D when the game can be expressed with `Image`, `Text`, `DrawOption`, and screen-space coordinates.
-- Choose 3D when the request needs `Model`, camera placement, lighting, fog, billboards, or instancing.
-- Choose mixed 2D + 3D when the world is 3D but HUD or overlays should remain 2D text/images.
+1. `initialize`: register fonts, images, sounds, shaders, and models; create scene state.
+2. `update`: read input and advance gameplay using the supplied fixed `dt`.
+3. `draw`: submit rendering using the supplied `screen`; avoid gameplay mutation and repeated asset creation.
+4. `resumed` / `suspended`: handle platform lifecycle only when needed.
+5. `remove`: clear scene-specific global state or other explicit cleanup.
 
-Choose features conservatively:
+Honor these invariants:
 
-- no extra features for minimal 2D
-- `model-3d` for procedural 3D primitives and model drawing
-- `effects` when using fog or effect helpers
-- `utils` when loading PNGs and similar helper-driven assets
-- `gltf` when loading glTF models
-- `sensors` for motion or step APIs on supported platforms
+- Always use the callback's `&mut Context`.
+- Treat 2D origin as top-left and use `Pt` for logical coordinates.
+- Multiply rates by `dt.as_secs_f32()` in `update`.
+- Treat `WindowConfig::update_hz` as simulation frequency, not render FPS; it must be greater than zero.
+- Use `Interpolated<T>` or `ctx.draw_interpolation()` when fixed updates need smooth variable-rate presentation.
+- Keep reusable `Image`, `Text`, `Model`, and shader handles in scene state.
+- Update existing `Text` with setters when content changes; do not rebuild stable text every draw.
+- Decode or load expensive assets outside the render loop. Register GPU resources through the lifecycle context.
+- Import only public `spottedcat` APIs. Do not depend on engine internals.
 
-### 4. Reuse the nearest example instead of inventing structure
+## Reuse upstream examples carefully
 
-Pick the closest baseline from the repo and adapt it:
+Use the closest upstream example to confirm API shape, then adapt it to the consumer project's structure and dependency version. Do not copy engine-repository commands, paths, assets, or platform wrappers into the game project without checking that they apply.
 
-- `examples/input_example.rs` for movement, input polling, and text HUD
-- `examples/audio_test.rs` for quick sound verification
-- `examples/fog_world.rs` for 3D scene setup, camera, fog, and overlay text
-- `examples/instancing_test.rs` for many repeated 3D objects
-- `examples/gltf_loader.rs` for asset-loaded 3D content
-- `examples/wasm/` or mobile wrappers when the target is browser or device-specific
+When an example conflicts with the checked-out dependency source or compiler diagnostics, follow the dependency version in the game project.
 
-Do not rewrite engine conventions from scratch when an example already demonstrates the needed pattern.
+## Validate proportionally
 
-### 5. Implement around `Spot`
+Start with the cheapest relevant check:
 
-Structure game code around one `Spot` implementation per scene or prototype state.
+1. format touched Rust files
+2. run `cargo check` for the consumer project
+3. run its focused tests or target-specific check
+4. run the game when visual or interactive behavior must be verified
+5. build WASM/mobile only when that platform is in scope
 
-Typical shape:
+Fix API and feature errors before changing gameplay architecture. If a native dependency or platform toolchain blocks validation, report the exact command and error while preserving the working desktop/core result.
 
-1. `initialize`
-Load or register assets, set camera/light/fog defaults, and create the initial state.
-2. `update`
-Read input and advance simulation. This runs at a **fixed frequency** (usually 60Hz), so `dt` is constant. All physics/logic should be here.
-3. `draw`
-Issue draw calls for the frame. This runs at the **display refresh rate** (variable). Use `ctx.draw_interpolation()` or `Interpolated<T>` for smooth movement.
-Keep gameplay mutation out of rendering unless the pattern is trivial and already established in the repo.
-4. `resumed` / `suspended`
-Use when platform lifecycle matters, especially on mobile.
-5. `remove`
-Clean up scene-specific state and clear temporary global scene configuration like fog when needed.
+## Finish the task
 
-Honor these rules:
+Deliver runnable code, not only a plan, when implementation was requested. Summarize:
 
-- Always use the lifecycle `ctx` that the engine provides.
-- Multiply motion and time-based effects by delta time.
-- Treat 2D origin as top-left.
-- Use `Pt` for logical 2D units and viewport-relative helpers when layout should scale.
-- For encoded PNG/JPEG/WebP bytes, prefer `spottedcat::utils::image::from_image(...)` or `from_rgba_image(...)` when the `utils` feature is enabled. Those helpers keep source pixel dimensions and derive the default logical size from the current `scale_factor`.
-- Keep the first implementation simple enough to run immediately.
+- the playable behavior added
+- required features or assets
+- commands that passed
+- platform-specific work that remains unverified
 
-### 6. Map common game needs to `spottedcat`
-
-- sprite or HUD element -> `Image::new` plus `target.draw(ctx, &image, opts)`
-- smooth movement -> use `Interpolated<T>` for positions/rotations and read via `.value(ctx)` in `draw`
-- on-screen text -> `register_font`, `Text::new`, `target.draw(ctx, &text, opts)`
-- player movement -> `key_down`, `key_pressed`, `mouse_down`, `mouse_pos`, `touches`
-- simple sound feedback -> `register_sound` + `play_sound`, or `play_sine` for fast smoke tests
-- 3D blockout -> `model::create_cube`, `create_plane`, `create_sphere`
-- large repeated props -> `model::draw_instanced`
-- scene transitions -> `switch_scene` or `switch_scene_with`
-- shared state -> `insert_resource` and `get_resource`
-- atmosphere -> `set_fog`, light helpers, camera helpers
-- custom 2D effects -> `ImageShaderTemplate` plus `bindings.with_history()` / `.with_screen()` (Semantic Bindings)
-
-### 7. Verify in the cheapest environment first
-
-Prefer this validation order unless the request is platform-specific:
-
-1. compile or run on desktop first
-2. verify the closest example or new prototype locally
-3. move to WASM or mobile only after the core loop behaves correctly
-
-When debugging:
-
-- start with `cargo check`
-- then run the narrowest example or target
-- separate engine misuse from game logic mistakes
-- read existing examples before adding new abstractions
-
-### 8. Escalate complexity only after the slice works
-
-After the first playable slice works, then add:
-
-- more scenes
-- asset loading
-- custom shaders
-- better camera behavior
-- platform packaging
-- content polish
-
-When the request is broad, prefer shipping a playable prototype plus a clear next-step list instead of an unfinished full game architecture.
-
-## Prompt Patterns
-
-These are good triggers for this skill:
-
-- "用 spot 快速做一个 2D 平台跳跃原型"
-- "帮我在 spottedcat 里搭一个 3D 雾景漫游 demo"
-- "把这个游戏想法映射成 `Spot` 场景和实现步骤"
-- "基于这个 repo 的 examples 做一个可玩的小游戏"
-- "帮我给这个 spottedcat 项目加输入、HUD 和音效"
-- "Use spottedcat to build a small 2D platformer prototype"
-- "Help me create a 3D foggy exploration demo in spot"
-- "Turn this game idea into a `Spot` scene and implementation plan"
-- "Use this repo's examples to build a playable mini-game"
-- "Add input, HUD, and audio to this spottedcat game project"
-
-## Reference Use
-
-Read [references/repo-map.md](references/repo-map.md) when you need:
-
-- the recommended example to start from
-- `Cargo.toml` feature selection
-- common local run commands
-- a quick map of repo files that matter for game work
+Avoid claiming visual quality, frame rate, or device support that was not actually tested.

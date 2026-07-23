@@ -1,94 +1,56 @@
-# Spot Repo Map
+# Spottedcat upstream reference map
 
-Use this reference when you need to choose a starting point, the right feature flags, or a local run command for `spottedcat`.
+Use this file only when an upstream example, engine source detail, or platform guide is needed. Paths refer to the Spottedcat engine repository, not the consumer game project.
 
-## Core files
+## Documentation
 
-- `README.md`
-High-level engine overview, stable surfaces, feature list, and supported platforms.
-- `AI_GAME_GENERATION_GUIDE.md`
-Best first read for architecture, lifecycle, `Spot`, input, 2D, 3D, audio, and context rules.
-- `Cargo.toml`
-Feature flags and example declarations.
-- `src/lib.rs`
-Public API surface and top-level docs.
+- Main guide: <https://rustyspottedcat.dev>
+- API reference: <https://docs.rs/spottedcat>
+- Examples: <https://github.com/Arion-Dsh/spottedcat/tree/main/examples>
+- 2D rendering: <https://rustyspottedcat.dev/graphics/2d>
+- 3D rendering: <https://rustyspottedcat.dev/graphics/3d>
+- Custom shaders: <https://rustyspottedcat.dev/graphics/shaders>
+- Web and mobile: <https://rustyspottedcat.dev/platforms/>
 
-## Engine concepts to bias toward
-
-- `Context` is the runtime hub for rendering, input, audio, and resources.
-- `Spot` is the main lifecycle trait. Most game work starts here.
-- `Image` and `Text` cover most 2D and HUD needs.
-- `Model` and `DrawOption3D` cover 3D primitives and loaded geometry.
-- `run::<T>(WindowConfig)` is the normal app entrypoint.
-
-## Feature flags
-
-- default: lightweight 2D-oriented baseline
-- `model-3d`: enable 3D model APIs and helpers
-- `effects`: enable fog-related workflows on top of `model-3d`
-- `utils`: image/helper utilities
-- `gltf`: glTF loading, also enables `model-3d` and `utils`
-- `sensors`: motion and step APIs
-
-Choose the smallest set that unlocks the requested work.
+When the consumer uses an older release, verify signatures against that release's docs or locally downloaded source rather than copying `main` blindly.
 
 ## Example chooser
 
-- `examples/input_example.rs`
-Start here for movement, keyboard handling, delta-time motion, and text overlays.
-- `examples/audio_test.rs`
-Start here for quick sound proof-of-life.
-- `examples/fog_world.rs`
-Start here for 3D camera setup, fog, lighting, procedural meshes, and FPS text.
-- `examples/happy_tree_desktop.rs`
-Start here when the request involves loading encoded 2D art through the `image` crate and preserving scale-factor-aware default sizing.
-- `examples/instancing_test.rs`
-Start here when many repeated 3D props are needed.
-- `examples/gltf_loader.rs`
-Start here when the request depends on external model assets.
-- `examples/billboard.rs`
-Start here when 2D art must live inside a 3D scene.
-- `examples/wasm/`
-Read when the target is browser-hosted.
-- `examples/android/`
-Read when packaging or embedding for Android matters.
-- `examples/ios/`
-Read when packaging or embedding for iOS matters.
+| Need | Upstream example |
+| --- | --- |
+| Keyboard movement and text HUD | `examples/input_example.rs` |
+| Audio | `examples/audio_test.rs` |
+| Decoded image loading | `examples/happy_tree_desktop.rs` |
+| Asynchronous images | `examples/async_loading_example.rs` |
+| 2D shader template | `examples/image_shader_template.rs` |
+| 3D camera, lighting, and fog | `examples/fog_world.rs` |
+| Repeated 3D models | `examples/instancing_test.rs` |
+| glTF loading | `examples/gltf_loader.rs` |
+| 2D art in a 3D scene | `examples/billboard.rs` |
+| Browser wrapper | `examples/wasm/` |
+| Android wrapper | `examples/android/` |
+| iOS wrapper | `examples/ios/` |
 
-## Fast local commands
+## Resolve the installed API
 
-Run from the repo root unless a platform example says otherwise.
+Use the consumer project first:
 
 ```bash
+cargo tree -p spottedcat
+cargo metadata --format-version 1
+```
+
+For a local path dependency, inspect its `src/lib.rs`, `Cargo.toml`, and nearest example. For a registry dependency, inspect docs.rs for the selected release or the dependency source identified by Cargo metadata. Search exact symbols instead of guessing names.
+
+## Consumer-project validation
+
+Run commands from the game project and use its existing aliases or task runner when present:
+
+```bash
+cargo fmt --check
 cargo check
-cargo run --example input_example
-cargo run --example audio_test
-cargo run --example happy_tree_desktop --features utils
-cargo run --example fog_world --features model-3d,effects
-cargo run --example gltf_loader --features gltf
+cargo test
+cargo run
 ```
 
-WASM flow:
-
-```bash
-cd examples/wasm/wasm_demo
-wasm-pack build --target web
-```
-
-Android flow:
-
-- inspect `examples/android/build_spottedcat_android_libs.sh`
-- inspect `examples/android/GameActivityExample/`
-
-iOS flow:
-
-- inspect `examples/ios/build_spottedcat_xcframework.sh`
-- inspect `examples/ios/SpottedcatIosSimulatorExample/`
-
-## Practical implementation bias
-
-- Prefer one small `Spot` scene before introducing scene switching.
-- Prefer procedural placeholder art or generated textures before building an asset pipeline.
-- Prefer desktop verification before browser or mobile deployment.
-- Prefer adapting an existing example over inventing a new architecture.
-- Prefer a vertical slice over a broad but incomplete framework.
+For WASM, Android, and iOS, follow the consumer project's wrapper and build scripts. Upstream wrapper directories are structural references, not drop-in commands for every game.

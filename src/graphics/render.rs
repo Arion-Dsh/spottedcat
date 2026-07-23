@@ -488,6 +488,12 @@ impl Graphics {
         surface: &wgpu::Surface<'_>,
         ctx: &mut Context,
     ) -> Result<(), wgpu::SurfaceError> {
+        let profile_enabled = crate::graphics::profile::render_profiling_enabled();
+        let engine_started_at = profile_enabled.then(Instant::now);
+        let profile_frame_id = profile_enabled
+            .then(crate::graphics::profile::next_render_frame_id)
+            .unwrap_or(0);
+        let prepare_started_at = profile_enabled.then(Instant::now);
         #[cfg(feature = "model-3d")]
         if !ctx.runtime.model_3d.draw_list.is_empty() {
             self.ensure_model_3d();
@@ -502,6 +508,9 @@ impl Graphics {
             eprintln!("[spot][graphics] prepare_frame_resources failed: {:?}", e);
             wgpu::SurfaceError::Lost
         })?;
+        let prepare_ms = prepare_started_at
+            .map(|started| started.elapsed().as_secs_f64() * 1000.0)
+            .unwrap_or(0.0);
 
         #[allow(unused_mut, unused_assignments)]
         let mut shadow_ms = 0.0;
@@ -516,11 +525,20 @@ impl Graphics {
         }
         self.image_renderer.begin_frame();
 
+        let mut gpu_frame_query = self
+            .gpu_profiler
+            .as_mut()
+            .and_then(|profiler| profiler.begin_frame(profile_frame_id, &self.device));
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("command_encoder"),
+            });
+
         let targets_started_at = Instant::now();
-        self.render_all_targets(ctx, &draws);
+        self.render_all_targets(ctx, &draws, &mut encoder, gpu_frame_query.as_mut());
         let targets_ms = targets_started_at.elapsed().as_secs_f64() * 1000.0;
 
-        let frame_started_at = Instant::now();
         let wait_started_at = Instant::now();
         let frame = match surface.get_current_texture() {
             Ok(f) => f,
@@ -533,12 +551,6 @@ impl Graphics {
         let surface_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("command_encoder"),
-            });
-
         let width = self.config.width;
         let height = self.config.height;
         let final_screen_texture = self.ensure_final_screen_texture(width, height);
@@ -558,7 +570,16 @@ impl Graphics {
                 .unwrap_or(false)
         {
             let shadow_started_at = Instant::now();
-            self.render_shadow_pass(&mut encoder, ctx, width, height, 0);
+            self.render_shadow_pass(
+                &mut encoder,
+                ctx,
+                width,
+                height,
+                0,
+                gpu_frame_query
+                    .as_mut()
+                    .and_then(|query| query.timestamp_writes()),
+            );
             shadow_ms = shadow_started_at.elapsed().as_secs_f64() * 1000.0;
         }
 
@@ -604,7 +625,9 @@ impl Graphics {
                     },
                 })],
                 depth_stencil_attachment,
-                timestamp_writes: None,
+                timestamp_writes: gpu_frame_query
+                    .as_mut()
+                    .and_then(|query| query.timestamp_writes()),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -657,7 +680,9 @@ impl Graphics {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: gpu_frame_query
+                    .as_mut()
+                    .and_then(|query| query.timestamp_writes()),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -722,7 +747,9 @@ impl Graphics {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: gpu_frame_query
+                    .as_mut()
+                    .and_then(|query| query.timestamp_writes()),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -775,48 +802,61 @@ impl Graphics {
         }
 
         self.image_renderer.flush_pending_uploads(&self.queue);
+        #[cfg(feature = "model-3d")]
+        if let Some(model_3d) = self.model_3d.as_ref() {
+            model_3d.model_renderer.flush_pending_uploads(&self.queue);
+        }
+        if let Some(query) = gpu_frame_query {
+            query.resolve_and_map(&mut encoder);
+        }
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
-        crate::graphics::profile::record_render_frame(
-            wait_ms,
-            frame_started_at.elapsed().as_secs_f64() * 1000.0,
-            targets_ms,
-            shadow_ms,
-            main_3d_ms,
-            overlay_ms,
-            present_ms,
-        );
+        if let Some(engine_started_at) = engine_started_at {
+            crate::graphics::profile::record_render_frame(
+                crate::graphics::profile::FrameProfileInput {
+                    frame_id: profile_frame_id,
+                    engine_ms: engine_started_at.elapsed().as_secs_f64() * 1000.0,
+                    wait_ms,
+                    prepare_ms,
+                    targets_ms,
+                    shadow_ms,
+                    main_3d_ms,
+                    overlay_ms,
+                    present_ms,
+                },
+            );
+        }
 
         Ok(())
     }
 
-    fn render_all_targets(&mut self, ctx: &mut Context, drawables: &[DrawCommand]) {
+    fn render_all_targets(
+        &mut self,
+        ctx: &mut Context,
+        drawables: &[DrawCommand],
+        encoder: &mut wgpu::CommandEncoder,
+        gpu_frame_query: Option<&mut crate::graphics::profile::GpuFrameQuery>,
+    ) {
         let target_ids = self.collect_target_ids(ctx, drawables);
         if target_ids.is_empty() {
             return;
         }
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("target_encoder"),
-            });
         let mut rendered = HashSet::new();
         let mut visiting = HashSet::new();
+        let mut gpu_frame_query = gpu_frame_query;
 
         for target_texture_id in target_ids {
             self.render_target_recursive(
                 ctx,
                 drawables,
                 target_texture_id,
-                &mut encoder,
+                encoder,
                 &mut rendered,
                 &mut visiting,
+                &mut gpu_frame_query,
             );
         }
-
-        self.image_renderer.flush_pending_uploads(&self.queue);
-        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     fn collect_target_ids(&self, ctx: &Context, drawables: &[DrawCommand]) -> Vec<u32> {
@@ -870,6 +910,7 @@ impl Graphics {
         encoder: &mut wgpu::CommandEncoder,
         rendered: &mut HashSet<u32>,
         visiting: &mut HashSet<u32>,
+        gpu_frame_query: &mut Option<&mut crate::graphics::profile::GpuFrameQuery>,
     ) {
         if rendered.contains(&target_texture_id) {
             return;
@@ -884,12 +925,18 @@ impl Graphics {
         for dependency in self.target_dependencies(ctx, drawables, target_texture_id) {
             if dependency != target_texture_id {
                 self.render_target_recursive(
-                    ctx, drawables, dependency, encoder, rendered, visiting,
+                    ctx,
+                    drawables,
+                    dependency,
+                    encoder,
+                    rendered,
+                    visiting,
+                    gpu_frame_query,
                 );
             }
         }
 
-        self.render_target_pass(ctx, drawables, target_texture_id, encoder);
+        self.render_target_pass(ctx, drawables, target_texture_id, encoder, gpu_frame_query);
 
         visiting.remove(&target_texture_id);
         rendered.insert(target_texture_id);
@@ -1119,6 +1166,7 @@ impl Graphics {
         drawables: &[DrawCommand],
         target_texture_id: u32,
         encoder: &mut wgpu::CommandEncoder,
+        gpu_frame_query: &mut Option<&mut crate::graphics::profile::GpuFrameQuery>,
     ) {
         let (width, height, bounds) = {
             let entry = ctx
@@ -1149,7 +1197,16 @@ impl Graphics {
                 .map(|model_3d| !model_3d.shadow_draw_indices_3d.is_empty())
                 .unwrap_or(false)
             {
-                self.render_shadow_pass(encoder, ctx, width, height, target_texture_id);
+                self.render_shadow_pass(
+                    encoder,
+                    ctx,
+                    width,
+                    height,
+                    target_texture_id,
+                    gpu_frame_query
+                        .as_deref_mut()
+                        .and_then(|query| query.timestamp_writes()),
+                );
             }
         }
 
@@ -1228,7 +1285,9 @@ impl Graphics {
                             }),
                             stencil_ops: None,
                         }),
-                        timestamp_writes: None,
+                        timestamp_writes: gpu_frame_query
+                            .as_deref_mut()
+                            .and_then(|query| query.timestamp_writes()),
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
@@ -1267,7 +1326,9 @@ impl Graphics {
                         },
                     })],
                     depth_stencil_attachment: None,
-                    timestamp_writes: None,
+                    timestamp_writes: gpu_frame_query
+                        .as_deref_mut()
+                        .and_then(|query| query.timestamp_writes()),
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });

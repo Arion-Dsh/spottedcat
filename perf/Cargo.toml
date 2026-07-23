@@ -1,0 +1,46 @@
+[package]
+name = "spottedcat-perf"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+spottedcat = { path = ".." }
+
+[features]
+default = []
+model-3d = ["spottedcat/model-3d"]
+
+[[bench]]
+name = "cpu"
+path = "benches/cpu.rs"
+harness = false
+
+[[bench]]
+name = "render_2d"
+path = "benches/render_2d.rs"
+harness = false
+
+[[bench]]
+name = "render_3d"
+path = "benches/render_3d.rs"
+harness = false
+required-features = ["model-3d"]
+
+[[bin]]
+name = "spot-perf-compare"
+path = "src/bin/spot-perf-compare.rs"
+
+[[example]]
+name = "text_performance_test"
+path = "examples/text_performance_test.rs"
+
+[[example]]
+name = "mixed_model_shader_stress"
+path = "examples/mixed_model_shader_stress.rs"
+required-features = ["model-3d"]
+
+[[example]]
+name = "render_state_stress"
+path = "examples/render_state_stress.rs"
+required-features = ["model-3d"]

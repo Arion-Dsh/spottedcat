@@ -232,6 +232,7 @@ impl App {
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub(crate) fn new<T: Spot + 'static>(window_config: WindowConfig) -> Self {
         let instance = platform::create_wgpu_instance();
+        let update_step = window_config.fixed_update_step();
 
         Self {
             platform: PlatformData::new(),
@@ -242,7 +243,7 @@ impl App {
             window_config,
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
-            timing: FixedTimestep::new(Duration::from_secs_f64(1.0 / 60.0)),
+            timing: FixedTimestep::new(update_step),
             gamepads: gamepad::GamepadRuntime::new(),
         }
     }
@@ -253,6 +254,7 @@ impl App {
         canvas_id: Option<String>,
     ) -> Self {
         let instance = platform::create_wgpu_instance();
+        let update_step = window_config.fixed_update_step();
         Self {
             platform: PlatformData::new_wasm(canvas_id),
             instance,
@@ -262,7 +264,7 @@ impl App {
             window_config,
             init_state: GraphicsInitState::NotStarted,
             scale_factor: 1.0,
-            timing: FixedTimestep::new(Duration::from_nanos(8_333_333)),
+            timing: FixedTimestep::new(update_step),
             gamepads: gamepad::GamepadRuntime::new(),
         }
     }

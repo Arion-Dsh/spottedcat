@@ -60,6 +60,11 @@ pub struct ModelRenderer {
     pub(crate) texture_bind_groups: HashMap<MaterialBindGroupKey, wgpu::BindGroup>,
     pub(crate) skin_bone_offsets: HashMap<u32, u32>,
     shader_opts_offsets: HashMap<ModelShaderOptsKey, u32>,
+    pending_model_globals: Vec<u8>,
+    pending_user_shader_opts: Vec<u8>,
+    pending_bone_matrices: Vec<u8>,
+    pending_instances: Vec<[[f32; 4]; 4]>,
+    shared_instance_ranges: HashMap<(usize, usize), std::ops::Range<u32>>,
 }
 
 impl ModelRenderer {
@@ -408,6 +413,11 @@ impl ModelRenderer {
             texture_bind_groups: HashMap::new(),
             skin_bone_offsets: HashMap::new(),
             shader_opts_offsets: HashMap::new(),
+            pending_model_globals: Vec::new(),
+            pending_user_shader_opts: Vec::new(),
+            pending_bone_matrices: Vec::new(),
+            pending_instances: Vec::new(),
+            shared_instance_ranges: HashMap::new(),
         }
     }
 
@@ -520,6 +530,11 @@ impl ModelRenderer {
         self.next_bone_batch = 0;
         self.skin_bone_offsets.clear();
         self.shader_opts_offsets.clear();
+        self.pending_model_globals.clear();
+        self.pending_user_shader_opts.clear();
+        self.pending_bone_matrices.clear();
+        self.pending_instances.clear();
+        self.shared_instance_ranges.clear();
     }
 
     pub fn bone_offset_for_skin(
@@ -539,18 +554,18 @@ impl ModelRenderer {
 
     pub fn upload_globals(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         globals: &ModelGlobals,
     ) -> anyhow::Result<u32> {
         if self.next_model_globals >= self.max_model_globals {
             return Err(anyhow::anyhow!("max model globals exceeded"));
         }
         let offset = self.next_model_globals * self.model_globals_stride;
-        queue.write_buffer(
-            &self.model_globals_buffer,
-            offset as wgpu::BufferAddress,
-            bytemuck::bytes_of(globals),
-        );
+        let end = offset as usize + self.model_globals_stride as usize;
+        self.pending_model_globals.resize(end, 0);
+        let bytes = bytemuck::bytes_of(globals);
+        self.pending_model_globals[offset as usize..offset as usize + bytes.len()]
+            .copy_from_slice(bytes);
 
         let dyn_offset = offset;
         self.next_model_globals += 1;
@@ -559,7 +574,7 @@ impl ModelRenderer {
 
     pub fn upload_shader_opts_bytes(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         bytes: &[u8],
     ) -> anyhow::Result<u32> {
         if bytes.len() != Self::USER_SHADER_OPTS_SIZE {
@@ -582,7 +597,10 @@ impl ModelRenderer {
         let slot = self.next_user_shader_opts;
         self.next_user_shader_opts += 1;
         let offset = slot as wgpu::BufferAddress * self.user_opts_stride as wgpu::BufferAddress;
-        queue.write_buffer(&self.user_shader_opts_buffer, offset, bytes);
+        let end = offset as usize + self.user_opts_stride as usize;
+        self.pending_user_shader_opts.resize(end, 0);
+        self.pending_user_shader_opts[offset as usize..offset as usize + bytes.len()]
+            .copy_from_slice(bytes);
         let offset = offset as u32;
         self.shader_opts_offsets.insert(key, offset);
         Ok(offset)
@@ -590,7 +608,7 @@ impl ModelRenderer {
 
     pub fn upload_bone_matrices(
         &mut self,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         matrices: &[[[f32; 4]; 4]],
     ) -> anyhow::Result<u32> {
         if matrices.is_empty() {
@@ -608,7 +626,10 @@ impl ModelRenderer {
             return Err(anyhow::anyhow!("too many bones! max is 256"));
         }
 
-        queue.write_buffer(&self.bone_matrices_buffer, offset, bytes);
+        let end = offset as usize + self.bone_matrices_stride as usize;
+        self.pending_bone_matrices.resize(end, 0);
+        self.pending_bone_matrices[offset as usize..offset as usize + bytes.len()]
+            .copy_from_slice(bytes);
         Ok(offset as u32)
     }
 
@@ -617,18 +638,60 @@ impl ModelRenderer {
     }
 
     pub fn upload_instances(
-        &self,
-        queue: &wgpu::Queue,
+        &mut self,
+        _queue: &wgpu::Queue,
         instances: &[[[f32; 4]; 4]],
-    ) -> anyhow::Result<()> {
-        if instances.len() > self.max_instances as usize {
+    ) -> anyhow::Result<std::ops::Range<u32>> {
+        let start = self.pending_instances.len();
+        let end = start.saturating_add(instances.len());
+        if end > self.max_instances as usize {
             return Err(anyhow::anyhow!(
-                "too many instances! max is {}",
+                "too many instances in one frame! max is {}",
                 self.max_instances
             ));
         }
-        queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(instances));
-        Ok(())
+        self.pending_instances.extend_from_slice(instances);
+        Ok(start as u32..end as u32)
+    }
+
+    pub fn upload_shared_instances(
+        &mut self,
+        queue: &wgpu::Queue,
+        instances: &std::sync::Arc<[[[f32; 4]; 4]]>,
+    ) -> anyhow::Result<std::ops::Range<u32>> {
+        let key = (
+            std::sync::Arc::as_ptr(instances) as *const () as usize,
+            instances.len(),
+        );
+        if let Some(range) = self.shared_instance_ranges.get(&key) {
+            return Ok(range.clone());
+        }
+        let range = self.upload_instances(queue, instances.as_ref())?;
+        self.shared_instance_ranges.insert(key, range.clone());
+        Ok(range)
+    }
+
+    pub fn flush_pending_uploads(&self, queue: &wgpu::Queue) {
+        if !self.pending_model_globals.is_empty() {
+            queue.write_buffer(&self.model_globals_buffer, 0, &self.pending_model_globals);
+        }
+        if !self.pending_user_shader_opts.is_empty() {
+            queue.write_buffer(
+                &self.user_shader_opts_buffer,
+                0,
+                &self.pending_user_shader_opts,
+            );
+        }
+        if !self.pending_bone_matrices.is_empty() {
+            queue.write_buffer(&self.bone_matrices_buffer, 0, &self.pending_bone_matrices);
+        }
+        if !self.pending_instances.is_empty() {
+            queue.write_buffer(
+                &self.instance_buffer,
+                0,
+                bytemuck::cast_slice(&self.pending_instances),
+            );
+        }
     }
 }
 

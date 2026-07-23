@@ -317,11 +317,17 @@ impl Graphics {
                         }
                     }
 
-                    if let Err(e) = model_renderer.upload_instances(queue, &transforms) {
-                        eprintln!("[spot][render] Failed to upload shadow instances: {}", e);
-                        index = next_index;
-                        continue;
-                    }
+                    let instance_range = match model_renderer.upload_instances(queue, &transforms) {
+                        Ok(range) => range,
+                        Err(e) => {
+                            eprintln!("[spot][render] Failed to upload shadow instances: {}", e);
+                            index = next_index;
+                            continue;
+                        }
+                    };
+                    let instance_buffer_offset = instance_range.start as wgpu::BufferAddress
+                        * std::mem::size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress;
+                    let instance_count = instance_range.end - instance_range.start;
 
                     let mut bone_offset = 0;
                     if let Some(skin_id) = skin_id_cmd
@@ -357,21 +363,19 @@ impl Graphics {
                             if let Some(Some(mesh)) = models.get(part.id as usize) {
                                 if current_mesh_id != Some(part.id) {
                                     rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                                    rpass.set_vertex_buffer(
-                                        1,
-                                        model_renderer.instance_buffer.slice(..),
-                                    );
                                     rpass.set_index_buffer(
                                         mesh.index_buffer.slice(..),
                                         wgpu::IndexFormat::Uint32,
                                     );
                                     current_mesh_id = Some(part.id);
                                 }
-                                rpass.draw_indexed(
-                                    0..mesh.index_count,
-                                    0,
-                                    0..transforms.len() as u32,
+                                rpass.set_vertex_buffer(
+                                    1,
+                                    model_renderer
+                                        .instance_buffer
+                                        .slice(instance_buffer_offset..),
                                 );
+                                rpass.draw_indexed(0..mesh.index_count, 0, 0..instance_count);
                             }
                         }
                     }
@@ -392,11 +396,18 @@ impl Graphics {
                         continue;
                     }
 
-                    if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {
-                        eprintln!("[spot][render] Failed to upload instances: {}", e);
-                        index += 1;
-                        continue;
-                    }
+                    let instance_range =
+                        match model_renderer.upload_shared_instances(queue, transforms) {
+                            Ok(range) => range,
+                            Err(e) => {
+                                eprintln!("[spot][render] Failed to upload instances: {}", e);
+                                index += 1;
+                                continue;
+                            }
+                        };
+                    let instance_buffer_offset = instance_range.start as wgpu::BufferAddress
+                        * std::mem::size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress;
+                    let instance_count = instance_range.end - instance_range.start;
 
                     let mut bone_offset = 0;
                     if let Some(skin_id) = skin_id_cmd
@@ -432,21 +443,19 @@ impl Graphics {
                             if let Some(Some(mesh)) = models.get(part.id as usize) {
                                 if current_mesh_id != Some(part.id) {
                                     rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                                    rpass.set_vertex_buffer(
-                                        1,
-                                        model_renderer.instance_buffer.slice(..),
-                                    );
                                     rpass.set_index_buffer(
                                         mesh.index_buffer.slice(..),
                                         wgpu::IndexFormat::Uint32,
                                     );
                                     current_mesh_id = Some(part.id);
                                 }
-                                rpass.draw_indexed(
-                                    0..mesh.index_count,
-                                    0,
-                                    0..transforms.len() as u32,
+                                rpass.set_vertex_buffer(
+                                    1,
+                                    model_renderer
+                                        .instance_buffer
+                                        .slice(instance_buffer_offset..),
                                 );
+                                rpass.draw_indexed(0..mesh.index_count, 0, 0..instance_count);
                             }
                         }
                     }
@@ -519,6 +528,7 @@ impl Graphics {
         width: u32,
         height: u32,
         target_texture_id: u32,
+        timestamp_writes: Option<wgpu::RenderPassTimestampWrites<'_>>,
     ) {
         self.ensure_model_3d();
         {
@@ -533,7 +543,7 @@ impl Graphics {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
+                timestamp_writes,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -965,10 +975,17 @@ impl Graphics {
                         }
                     }
 
-                    if let Err(e) = model_renderer.upload_instances(queue, transforms.as_ref()) {
-                        eprintln!("[spot][render] Failed to upload instances: {}", e);
-                        continue;
-                    }
+                    let instance_range =
+                        match model_renderer.upload_shared_instances(queue, transforms) {
+                            Ok(range) => range,
+                            Err(e) => {
+                                eprintln!("[spot][render] Failed to upload instances: {}", e);
+                                continue;
+                            }
+                        };
+                    let instance_buffer_offset = instance_range.start as wgpu::BufferAddress
+                        * std::mem::size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress;
+                    let instance_count = instance_range.end - instance_range.start;
 
                     for part in model.parts.iter() {
                         if let Some(Some(mesh)) = models.get(part.id as usize) {
@@ -1000,10 +1017,6 @@ impl Graphics {
                                 }
                                 if current_mesh_binding != Some((part.id, true)) {
                                     rpass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                                    rpass.set_vertex_buffer(
-                                        1,
-                                        model_renderer.instance_buffer.slice(..),
-                                    );
                                     rpass.set_index_buffer(
                                         mesh.index_buffer.slice(..),
                                         wgpu::IndexFormat::Uint32,
@@ -1068,11 +1081,13 @@ impl Graphics {
                                     }
                                 }
 
-                                rpass.draw_indexed(
-                                    0..mesh.index_count,
-                                    0,
-                                    0..transforms.len() as u32,
+                                rpass.set_vertex_buffer(
+                                    1,
+                                    model_renderer
+                                        .instance_buffer
+                                        .slice(instance_buffer_offset..),
                                 );
+                                rpass.draw_indexed(0..mesh.index_count, 0, 0..instance_count);
                             }
                         }
                     }

@@ -294,8 +294,15 @@ impl App {
 
         self.ctx.begin_frame();
         let screen = super::make_screen_target(&self.ctx);
+        let scene_draw_started_at =
+            crate::graphics::profile::render_profiling_enabled().then(std::time::Instant::now);
         if let Some(spot) = self.scene.spot_mut() {
             spot.draw(&mut self.ctx, screen);
+        }
+        if let Some(scene_draw_started_at) = scene_draw_started_at {
+            crate::graphics::profile::record_scene_draw(
+                scene_draw_started_at.elapsed().as_secs_f64() * 1000.0,
+            );
         }
 
         self.scene.apply_pending_switch(&mut self.ctx);
@@ -462,8 +469,15 @@ impl ApplicationHandler for App {
             }
 
             self.ctx.set_delta_time(dt);
+            let scene_update_started_at =
+                crate::graphics::profile::render_profiling_enabled().then(std::time::Instant::now);
             if let Some(spot) = self.scene.spot_mut() {
                 spot.update(&mut self.ctx, dt);
+            }
+            if let Some(scene_update_started_at) = scene_update_started_at {
+                crate::graphics::profile::record_scene_update(
+                    scene_update_started_at.elapsed().as_secs_f64() * 1000.0,
+                );
             }
             self.ctx.input_mut().end_frame();
         });
@@ -476,6 +490,10 @@ impl ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(graphics) = self.ctx.runtime.graphics.as_mut() {
+            graphics.finish_profiling();
+        }
+        crate::graphics::profile::finalize_render_profiling();
         self.surface.take();
         self.platform.window.take();
     }

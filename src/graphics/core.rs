@@ -61,6 +61,7 @@ pub(crate) struct Graphics {
     pub(crate) shader_screen_snapshots: HashMap<u32, GpuTexture>,
     pub(crate) shader_history_snapshots: HashMap<u32, GpuTexture>,
     pub(crate) final_screen_texture: Option<GpuTexture>,
+    pub(crate) gpu_profiler: Option<crate::graphics::profile::GpuTimestampProfiler>,
 }
 
 impl std::fmt::Debug for Graphics {
@@ -122,10 +123,25 @@ impl Graphics {
         let adapter_limits = adapter.limits();
         let max_texture_dimension_2d = adapter_limits.max_texture_dimension_2d;
 
+        let timestamp_query_supported =
+            adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+        let enable_gpu_profiling =
+            crate::graphics::profile::gpu_profiling_requested() && timestamp_query_supported;
+        if crate::graphics::profile::gpu_profiling_requested() && !timestamp_query_supported {
+            eprintln!(
+                "[spot][profile] adapter does not support GPU timestamp queries; CPU profiling remains enabled"
+            );
+        }
+        let required_features = if enable_gpu_profiling {
+            wgpu::Features::TIMESTAMP_QUERY
+        } else {
+            wgpu::Features::empty()
+        };
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: adapter_limits,
                 experimental_features: wgpu::ExperimentalFeatures::default(),
                 memory_hints: wgpu::MemoryHints::default(),
@@ -153,6 +169,13 @@ impl Graphics {
 
         config.present_mode = crate::graphics::profile::pick_present_mode(&caps);
         config.usage = crate::platform::surface_usage(&caps);
+
+        if crate::graphics::profile::render_profiling_enabled() {
+            eprintln!(
+                "[spot][profile] surface={}x{} format={:?} present_mode={:?}",
+                config.width, config.height, config.format, config.present_mode
+            );
+        }
 
         surface.configure(&device, &config);
 
@@ -210,6 +233,9 @@ impl Graphics {
             cache: None,
         });
 
+        let gpu_profiler = enable_gpu_profiling
+            .then(|| crate::graphics::profile::GpuTimestampProfiler::new(&device, &queue));
+
         let graphics = Self {
             device,
             queue,
@@ -233,6 +259,7 @@ impl Graphics {
             shader_screen_snapshots: HashMap::new(),
             shader_history_snapshots: HashMap::new(),
             final_screen_texture: None,
+            gpu_profiler,
         };
 
         // Default resources will be registered via the Context in App initialization
@@ -403,6 +430,12 @@ impl Graphics {
 
     pub fn transparent(&self) -> bool {
         self.transparent
+    }
+
+    pub(crate) fn finish_profiling(&mut self) {
+        if let Some(profiler) = self.gpu_profiler.as_mut() {
+            profiler.finish(&self.device);
+        }
     }
 }
 

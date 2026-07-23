@@ -16,7 +16,7 @@ pub struct Text {
     pub(crate) stroke_color: [f32; 4],
     pub(crate) max_width: Option<crate::Pt>,
     pub(crate) layout_cache: std::sync::Arc<std::sync::Mutex<Option<TextLayout>>>,
-    pub(crate) dirty: std::sync::atomic::AtomicBool,
+    pub(crate) layout_revision: u64,
 }
 
 impl Clone for Text {
@@ -30,7 +30,7 @@ impl Clone for Text {
             stroke_color: self.stroke_color,
             max_width: self.max_width,
             layout_cache: std::sync::Arc::new(std::sync::Mutex::new(None)),
-            dirty: std::sync::atomic::AtomicBool::new(true),
+            layout_revision: self.layout_revision,
         }
     }
 }
@@ -52,6 +52,7 @@ pub(crate) struct TextLayout {
     pub(crate) glyphs: Vec<CachedGlyph>,
     pub(crate) bounds: (f32, f32, f32), // width, height, y_offset
     pub(crate) scale: [f32; 2],
+    pub(crate) revision: u64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -91,8 +92,12 @@ impl Text {
             stroke_color: [0.0, 0.0, 0.0, 1.0],
             max_width: None,
             layout_cache: std::sync::Arc::new(std::sync::Mutex::new(None)),
-            dirty: std::sync::atomic::AtomicBool::new(true),
+            layout_revision: 0,
         }
+    }
+
+    fn invalidate_layout(&mut self) {
+        self.layout_revision = self.layout_revision.wrapping_add(1);
     }
 
     /// Sets the text content safely without re-allocating the entire struct.
@@ -100,7 +105,7 @@ impl Text {
         let new_content = content.into();
         if self.content != new_content {
             self.content = new_content;
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
     }
 
@@ -115,7 +120,7 @@ impl Text {
     pub fn set_font_size(&mut self, font_size: crate::Pt) {
         if self.font_size != font_size {
             self.font_size = font_size;
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
     }
 
@@ -123,7 +128,7 @@ impl Text {
     pub fn set_max_width(&mut self, max_width: Option<crate::Pt>) {
         if self.max_width != max_width {
             self.max_width = max_width;
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
     }
 
@@ -131,7 +136,7 @@ impl Text {
     pub fn with_font_size(mut self, font_size: crate::Pt) -> Self {
         if self.font_size != font_size {
             self.font_size = font_size;
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
         self
     }
@@ -146,7 +151,7 @@ impl Text {
     pub fn with_stroke_width(mut self, stroke_width: crate::Pt) -> Self {
         if self.stroke_width != stroke_width {
             self.stroke_width = stroke_width;
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
         self
     }
@@ -155,7 +160,7 @@ impl Text {
     pub fn with_stroke_color(mut self, stroke_color: [f32; 4]) -> Self {
         if self.stroke_color != stroke_color {
             self.stroke_color = stroke_color;
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
         self
     }
@@ -164,7 +169,7 @@ impl Text {
     pub fn with_max_width(mut self, max_width: crate::Pt) -> Self {
         if self.max_width != Some(max_width) {
             self.max_width = Some(max_width);
-            self.dirty.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.invalidate_layout();
         }
         self
     }
@@ -499,9 +504,7 @@ impl Text {
             stroke_color: self.stroke_color,
             max_width: self.max_width,
             layout_cache: self.layout_cache.clone(),
-            dirty: std::sync::atomic::AtomicBool::new(
-                self.dirty.load(std::sync::atomic::Ordering::SeqCst),
-            ),
+            layout_revision: self.layout_revision,
         }
     }
 }
@@ -536,6 +539,23 @@ mod tests {
     use ab_glyph::{Font as _, FontArc, Glyph, PxScale};
 
     const FONT: &[u8] = include_bytes!("../assets/DejaVuSans.ttf");
+
+    #[test]
+    fn draw_clone_snapshots_layout_revision() {
+        let mut text = Text::new("cached", 1);
+
+        let first_draw = text.clone_for_draw();
+        assert_eq!(first_draw.layout_revision, text.layout_revision);
+        assert!(std::sync::Arc::ptr_eq(
+            &text.layout_cache,
+            &first_draw.layout_cache
+        ));
+
+        text.set_content("changed");
+        let changed_draw = text.clone_for_draw();
+        assert_ne!(changed_draw.layout_revision, first_draw.layout_revision);
+        assert_eq!(changed_draw.content, "changed");
+    }
 
     #[test]
     fn measure_matches_rendered_multiline_height() {

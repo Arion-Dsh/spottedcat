@@ -1,4 +1,4 @@
-.PHONY: clean test check check-examples
+.PHONY: clean test check check-examples perf perf-quick
 
 clean:
 	@echo "Running cleanup script..."
@@ -15,3 +15,9 @@ check:
 check-examples:
 	@echo "Running example checks..."
 	@bash scripts/check_examples.sh
+
+perf:
+	@bash scripts/run_performance.sh full
+
+perf-quick:
+	@bash scripts/run_performance.sh quick

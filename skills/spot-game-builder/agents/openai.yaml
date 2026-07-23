@@ -1,4 +1,4 @@
 interface:
   display_name: "Spot Game Builder"
-  short_description: "Build quick Rust games with spottedcat"
-  default_prompt: "Use $spot-game-builder to plan and implement a small game with the spottedcat engine."
+  short_description: "Build consumer games with the Spottedcat engine"
+  default_prompt: "Use $spot-game-builder to implement a playable slice in this Rust game project with Spottedcat."

@@ -1,3 +1,4 @@
+#[path = "../../examples/example_font.rs"]
 mod example_font;
 
 fn main() {

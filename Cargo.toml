@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -13,6 +13,8 @@ exclude = [
     "examples/ios/**",
     "examples/wasm/**",
     "assets/**",
+    "perf/**",
+    "scripts/run_performance.sh",
 ]
 
 
@@ -107,10 +109,6 @@ name = "seven_level_test"
 path = "examples/seven_level_test.rs"
 
 [[example]]
-name = "text_performance_test"
-path = "examples/text_performance_test.rs"
-
-[[example]]
 name = "happy_tree_desktop"
 path = "examples/happy_tree_desktop.rs"
 required-features = ["utils"]
@@ -163,11 +161,6 @@ path = "examples/advanced_model_shader_full.rs"
 required-features = ["model-3d"]
 
 [[example]]
-name = "mixed_model_shader_stress"
-path = "examples/mixed_model_shader_stress.rs"
-required-features = ["model-3d"]
-
-[[example]]
 name = "model_test"
 path = "examples/model_test.rs"
 required-features = ["model-3d"]
@@ -176,11 +169,6 @@ required-features = ["model-3d"]
 name = "atlas_subimage_move_test"
 path = "examples/atlas_subimage_move_test.rs"
 required-features = ["utils"]
-
-[[example]]
-name = "render_state_stress"
-path = "examples/render_state_stress.rs"
-required-features = ["model-3d"]
 
 [[example]]
 name = "touch_test"
