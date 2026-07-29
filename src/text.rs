@@ -626,4 +626,16 @@ mod tests {
         assert_eq!(lines.first().map(String::as_str), Some("h"));
         assert_eq!(lines.last().map(String::as_str), Some("d"));
     }
+
+    #[test]
+    fn explicit_newlines_work_without_automatic_wrapping() {
+        let font = FontArc::try_from_vec(FONT.to_vec()).expect("font");
+        let scaled = font.as_scaled(PxScale::from(24.0));
+        let text = Text::new("score\nstatus\nevent", 1);
+
+        assert_eq!(
+            text.get_wrapped_lines(&scaled),
+            ["score", "status", "event"]
+        );
+    }
 }

@@ -53,14 +53,9 @@ impl Graphics {
         let scale = PxScale::from(px_size);
         let scaled = font.as_scaled(scale);
 
-        let lines = if text.max_width.is_some() {
-            text.get_wrapped_lines(&scaled)
-                .into_iter()
-                .map(std::borrow::Cow::Owned)
-                .collect()
-        } else {
-            vec![std::borrow::Cow::Borrowed(text.content.as_str())]
-        };
+        // Explicit newlines are layout boundaries even when automatic wrapping is disabled.
+        // Keep rendering on the same line-splitting path as measurement so their bounds agree.
+        let lines = text.get_wrapped_lines(&scaled);
 
         let mut caret_pos = [Pt(0.0), Pt(0.0)];
         let mut global_min_y = scaled.ascent();

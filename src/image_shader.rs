@@ -9,6 +9,7 @@ pub enum ImageShaderBlendMode {
     #[default]
     Alpha,
     Add,
+    Subtract,
     Replace,
 }
 
@@ -238,5 +239,12 @@ mod tests {
         assert!(!desc.uses_extra_textures);
         assert!(!desc.internal_prelude);
         assert_eq!(desc.blend_mode, ImageShaderBlendMode::Alpha);
+    }
+
+    #[test]
+    fn image_shader_desc_supports_subtractive_render_target_passes() {
+        let desc = ImageShaderDesc::from_wgsl("shader")
+            .with_blend_mode(ImageShaderBlendMode::Subtract);
+        assert_eq!(desc.blend_mode, ImageShaderBlendMode::Subtract);
     }
 }
