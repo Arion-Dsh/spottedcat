@@ -9,8 +9,9 @@ static NEXT_GPU_TEXTURE_ID: AtomicU64 = AtomicU64::new(1);
 /// A texture owns the underlying pixel data or render target. To draw into it or sample from it,
 /// create an [`Image`][crate::Image] via [`Texture::view`].
 ///
-/// Use `Image::new(...)` for standard sampled images, and `Texture::new_render_target(...)`
-/// to create a texture that can be used as a drawing target.
+/// Use `Image::new(...)` for standard sampled images, `Texture::new_render_target(...)`
+/// for frame-local targets, and `Texture::new_persistent_render_target(...)` for targets
+/// whose contents must survive across frames.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Texture {
     pub(crate) id: u32,
@@ -35,6 +36,23 @@ impl Texture {
     /// Creates a render-target texture that can be drawn into and sampled from.
     pub fn new_render_target(ctx: &mut crate::Context, width: Pt, height: Pt) -> Self {
         ctx.register_render_target_texture(width, height)
+    }
+
+    /// Creates a render target whose existing contents are loaded at the start of each pass.
+    ///
+    /// This is intended for GPU-resident simulation state such as paint, trails, or masks.
+    /// Use [`Texture::new_render_target`] when the entire target is redrawn every frame.
+    pub fn new_persistent_render_target(ctx: &mut crate::Context, width: Pt, height: Pt) -> Self {
+        let texture = ctx.register_render_target_texture(width, height);
+        if let Some(entry) = ctx
+            .registry
+            .textures
+            .get_mut(texture.id as usize)
+            .and_then(Option::as_mut)
+        {
+            entry.preserve_contents = true;
+        }
+        texture
     }
 
     /// Returns the default full-image view for this texture.
@@ -399,6 +417,7 @@ pub(crate) struct TextureEntry {
     pub(crate) pixel_height: u32,
     pub(crate) default_view_id: u32,
     pub(crate) render_target: bool,
+    pub(crate) preserve_contents: bool,
     pub(crate) dynamic_atlas: bool,
     pub(crate) raw_data: Option<Arc<[u8]>>,
     pub(crate) pending_uploads: Vec<TextureUploadRegion>,
@@ -456,6 +475,7 @@ impl TextureEntry {
             pixel_height,
             default_view_id,
             render_target: false,
+            preserve_contents: false,
             dynamic_atlas: false,
             raw_data: Some(raw_data),
             pending_uploads: Vec::new(),
@@ -482,6 +502,7 @@ impl TextureEntry {
             pixel_height,
             default_view_id,
             render_target: false,
+            preserve_contents: false,
             dynamic_atlas: true,
             raw_data: Some(raw_data),
             pending_uploads: Vec::new(),
@@ -507,6 +528,7 @@ impl TextureEntry {
             pixel_height,
             default_view_id,
             render_target: true,
+            preserve_contents: false,
             dynamic_atlas: false,
             raw_data: None,
             pending_uploads: Vec::new(),
@@ -558,5 +580,6 @@ mod tests {
             entry.gpu_format(wgpu::TextureFormat::Rgb10a2Unorm),
             wgpu::TextureFormat::Rgb10a2Unorm
         );
+        assert!(!entry.preserve_contents);
     }
 }

@@ -1168,7 +1168,7 @@ impl Graphics {
         encoder: &mut wgpu::CommandEncoder,
         gpu_frame_query: &mut Option<&mut crate::graphics::profile::GpuFrameQuery>,
     ) {
-        let (width, height, bounds) = {
+        let (width, height, bounds, preserve_contents) = {
             let entry = ctx
                 .registry
                 .textures
@@ -1184,6 +1184,7 @@ impl Graphics {
                     entry.width,
                     entry.height,
                 ),
+                entry.preserve_contents,
             )
         };
 
@@ -1317,7 +1318,7 @@ impl Graphics {
                         resolve_target: None,
                         depth_slice: None,
                         ops: wgpu::Operations {
-                            load: if has_3d {
+                            load: if has_3d || preserve_contents {
                                 wgpu::LoadOp::Load
                             } else {
                                 wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
