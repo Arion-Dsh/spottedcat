@@ -18,13 +18,13 @@ Spottedcat provides a small `Spot` lifecycle, 2D images and text, optional 3D mo
 
 ```toml
 [dependencies]
-spottedcat = "1.0.3"
+spottedcat = "1.0.4"
 ```
 
 Enable optional capabilities as needed:
 
 ```toml
-spottedcat = { version = "1.0.3", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
+spottedcat = { version = "1.0.4", features = ["model-3d", "utils", "gltf", "effects", "sensors"] }
 ```
 
 See the [feature guide](https://rustyspottedcat.dev/guide/core-concepts#choosing-features) for details.

@@ -233,7 +233,7 @@ impl Graphics {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("fog_background_pipeline_layout"),
-            bind_group_layouts: &[bind_group_layout],
+            bind_group_layouts: &[Some(bind_group_layout)],
             immediate_size: 0,
         });
 
@@ -379,10 +379,10 @@ impl Graphics {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("model_pipeline_layout"),
                 bind_group_layouts: &[
-                    &model_renderer.globals_bind_group_layout,
-                    &model_renderer.texture_bind_group_layout,
-                    &model_renderer.bone_matrices_bind_group_layout,
-                    &model_renderer.environment_bind_group_layout,
+                    Some(&model_renderer.globals_bind_group_layout),
+                    Some(&model_renderer.texture_bind_group_layout),
+                    Some(&model_renderer.bone_matrices_bind_group_layout),
+                    Some(&model_renderer.environment_bind_group_layout),
                 ],
                 immediate_size: 0,
             });
@@ -404,8 +404,8 @@ impl Graphics {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -442,8 +442,8 @@ impl Graphics {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
@@ -515,8 +515,8 @@ impl Graphics {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
@@ -581,8 +581,8 @@ impl Graphics {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
@@ -623,8 +623,8 @@ impl Graphics {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("shadow_pipeline_layout"),
                 bind_group_layouts: &[
-                    &model_renderer.globals_bind_group_layout,
-                    &model_renderer.bone_matrices_bind_group_layout,
+                    Some(&model_renderer.globals_bind_group_layout),
+                    Some(&model_renderer.bone_matrices_bind_group_layout),
                 ],
                 immediate_size: 0,
             });
@@ -651,8 +651,8 @@ impl Graphics {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth24Plus,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -709,8 +709,8 @@ impl Graphics {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),

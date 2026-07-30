@@ -108,9 +108,12 @@ pub(crate) fn block_on<F: Future>(mut future: F) -> F::Output {
 pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
     #[cfg(all(not(target_arch = "wasm32"), target_os = "android"))]
     {
-        wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::GL,
-            ..Default::default()
+            flags: Default::default(),
+            memory_budget_thresholds: Default::default(),
+            backend_options: Default::default(),
+            display: None,
         })
     }
     #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
@@ -120,9 +123,12 @@ pub(crate) fn create_wgpu_instance() -> wgpu::Instance {
 
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
-        wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            ..Default::default()
+            flags: Default::default(),
+            memory_budget_thresholds: Default::default(),
+            backend_options: Default::default(),
+            display: None,
         })
     }
 }

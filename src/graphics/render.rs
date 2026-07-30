@@ -487,7 +487,7 @@ impl Graphics {
         &mut self,
         surface: &wgpu::Surface<'_>,
         ctx: &mut Context,
-    ) -> Result<(), wgpu::SurfaceError> {
+    ) -> Result<(), wgpu::SurfaceStatus> {
         let profile_enabled = crate::graphics::profile::render_profiling_enabled();
         let engine_started_at = profile_enabled.then(Instant::now);
         let profile_frame_id = profile_enabled
@@ -500,13 +500,13 @@ impl Graphics {
         }
         self.sync_assets(ctx).map_err(|e| {
             eprintln!("[spot][graphics] sync_assets failed: {:?}", e);
-            wgpu::SurfaceError::Lost
+            wgpu::SurfaceStatus::Validation
         })?;
         let _ = self.process_registrations(ctx);
         let draws = std::mem::take(&mut ctx.runtime.draw_list);
         self.prepare_frame_resources(ctx, &draws).map_err(|e| {
             eprintln!("[spot][graphics] prepare_frame_resources failed: {:?}", e);
-            wgpu::SurfaceError::Lost
+            wgpu::SurfaceStatus::Validation
         })?;
         let prepare_ms = prepare_started_at
             .map(|started| started.elapsed().as_secs_f64() * 1000.0)
@@ -540,11 +540,15 @@ impl Graphics {
         let targets_ms = targets_started_at.elapsed().as_secs_f64() * 1000.0;
 
         let wait_started_at = Instant::now();
-        let frame = match surface.get_current_texture() {
-            Ok(f) => f,
-            Err(e) => {
-                eprintln!("[spot][graphics] get_current_texture failed: {:?}", e);
-                return Err(e);
+        let (frame, surface_suboptimal) = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame) => (frame, false),
+            wgpu::CurrentSurfaceTexture::Suboptimal(frame) => (frame, true),
+            wgpu::CurrentSurfaceTexture::Timeout => return Err(wgpu::SurfaceStatus::Timeout),
+            wgpu::CurrentSurfaceTexture::Occluded => return Err(wgpu::SurfaceStatus::Occluded),
+            wgpu::CurrentSurfaceTexture::Outdated => return Err(wgpu::SurfaceStatus::Outdated),
+            wgpu::CurrentSurfaceTexture::Lost => return Err(wgpu::SurfaceStatus::Lost),
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err(wgpu::SurfaceStatus::Validation);
             }
         };
         let wait_ms = wait_started_at.elapsed().as_secs_f64() * 1000.0;
@@ -811,6 +815,9 @@ impl Graphics {
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
+        if surface_suboptimal {
+            surface.configure(&self.device, &self.config);
+        }
         if let Some(engine_started_at) = engine_started_at {
             crate::graphics::profile::record_render_frame(
                 crate::graphics::profile::FrameProfileInput {

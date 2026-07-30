@@ -8,12 +8,12 @@ use super::core::Graphics;
 
 impl Graphics {
     fn create_image_pipeline_layout(&self, uses_extra_textures: bool) -> wgpu::PipelineLayout {
-        let mut bind_group_layouts = vec![&self.image_renderer.texture_bind_group_layout];
+        let mut bind_group_layouts = vec![Some(&self.image_renderer.texture_bind_group_layout)];
         if uses_extra_textures {
-            bind_group_layouts.push(&self.image_renderer.extra_texture_bind_group_layout);
+            bind_group_layouts.push(Some(&self.image_renderer.extra_texture_bind_group_layout));
         }
-        bind_group_layouts.push(&self.image_renderer.user_globals_bind_group_layout);
-        bind_group_layouts.push(&self.image_renderer.engine_globals_bind_group_layout);
+        bind_group_layouts.push(Some(&self.image_renderer.user_globals_bind_group_layout));
+        bind_group_layouts.push(Some(&self.image_renderer.engine_globals_bind_group_layout));
 
         self.device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

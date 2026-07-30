@@ -141,9 +141,9 @@ impl App {
         let surface = unsafe {
             self.instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: rwh_06::RawDisplayHandle::Android(
+                    raw_display_handle: Some(rwh_06::RawDisplayHandle::Android(
                         rwh_06::AndroidDisplayHandle::new(),
-                    ),
+                    )),
                     raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
                         let handle = rwh_06::AndroidNdkWindowHandle::new(
                             std::ptr::NonNull::new(window.ptr().as_mut() as *mut _ as *mut _)
@@ -269,9 +269,9 @@ impl App {
                     match unsafe {
                         self.instance
                             .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                                raw_display_handle: rwh_06::RawDisplayHandle::Android(
+                                raw_display_handle: Some(rwh_06::RawDisplayHandle::Android(
                                     rwh_06::AndroidDisplayHandle::new(),
-                                ),
+                                )),
                                 raw_window_handle: rwh_06::RawWindowHandle::AndroidNdk({
                                     rwh_06::AndroidNdkWindowHandle::new(
                                         std::ptr::NonNull::new(surface_ptr as *mut _).unwrap(),
@@ -796,7 +796,7 @@ impl App {
                 if let Some(Err(e)) = draw_result {
                     crate::android::logcat_warn(&format!("draw_context failed with {:?}", e));
                     match e {
-                        wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                        wgpu::SurfaceStatus::Lost | wgpu::SurfaceStatus::Outdated => {
                             eprintln!(
                                 "[spot][android] Surface error: {:?}. Attempting recovery by re-creating surface.",
                                 e
@@ -806,19 +806,20 @@ impl App {
                             }
                             self.request_redraw();
                         }
-                        wgpu::SurfaceError::Timeout => {
+                        wgpu::SurfaceStatus::Timeout | wgpu::SurfaceStatus::Occluded => {
                             eprintln!(
                                 "[spot][android] Surface acquisition timeout. Frame skipped."
                             );
                             self.request_redraw();
                         }
-                        wgpu::SurfaceError::OutOfMemory => {
-                            eprintln!("[spot][android] Out of memory error. Surface dropped.");
-                            self.surface.take();
-                        }
-                        _ => {
+                        wgpu::SurfaceStatus::Validation => {
                             eprintln!("[spot][android] Surface draw error: {:?}", e);
                             self.request_redraw();
+                        }
+                        wgpu::SurfaceStatus::Good | wgpu::SurfaceStatus::Suboptimal => {
+                            unreachable!(
+                                "successful surface acquisitions are handled inside draw_context"
+                            )
                         }
                     }
                 } else {

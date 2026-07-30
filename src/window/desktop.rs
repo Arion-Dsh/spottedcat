@@ -260,9 +260,9 @@ impl App {
         }
     }
 
-    fn handle_surface_error(&mut self, event_loop: &ActiveEventLoop, error: wgpu::SurfaceError) {
+    fn handle_surface_error(&mut self, error: wgpu::SurfaceStatus) {
         match error {
-            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+            wgpu::SurfaceStatus::Lost | wgpu::SurfaceStatus::Outdated => {
                 eprintln!(
                     "[spot][surface] Surface lost or outdated: {:?}. Recreating...",
                     error
@@ -270,15 +270,19 @@ impl App {
                 self.recreate_surface();
                 self.request_redraw();
             }
-            wgpu::SurfaceError::OutOfMemory => event_loop.exit(),
-            wgpu::SurfaceError::Timeout | wgpu::SurfaceError::Other => {
+            wgpu::SurfaceStatus::Timeout
+            | wgpu::SurfaceStatus::Occluded
+            | wgpu::SurfaceStatus::Validation => {
                 eprintln!("[spot][surface] draw error: {:?}", error);
                 self.request_redraw();
+            }
+            wgpu::SurfaceStatus::Good | wgpu::SurfaceStatus::Suboptimal => {
+                unreachable!("successful surface acquisitions are handled inside draw_context")
             }
         }
     }
 
-    fn draw_frame(&mut self, event_loop: &ActiveEventLoop) {
+    fn draw_frame(&mut self, _event_loop: &ActiveEventLoop) {
         self.ensure_scene_ready();
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -316,7 +320,7 @@ impl App {
         }
 
         if let Some(Err(error)) = draw_result {
-            self.handle_surface_error(event_loop, error);
+            self.handle_surface_error(error);
         } else {
             self.request_redraw();
         }

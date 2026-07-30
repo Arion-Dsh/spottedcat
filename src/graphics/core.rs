@@ -191,9 +191,9 @@ impl Graphics {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("image_pipeline_layout"),
             bind_group_layouts: &[
-                &image_renderer.texture_bind_group_layout,
-                &image_renderer.user_globals_bind_group_layout,
-                &image_renderer.engine_globals_bind_group_layout,
+                Some(&image_renderer.texture_bind_group_layout),
+                Some(&image_renderer.user_globals_bind_group_layout),
+                Some(&image_renderer.engine_globals_bind_group_layout),
             ],
             immediate_size: 0,
         });

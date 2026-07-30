@@ -1,6 +1,6 @@
 [package]
 name = "spottedcat"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2024"
 autoexamples = false
 authors = ["Arion <arion.dsh@gmail.com>"]
@@ -27,7 +27,7 @@ name = "spot"
 path = "src/bin/spot.rs"
 
 [dependencies]
-wgpu = { version = "28", features = ["gles"] }
+wgpu = { version = "29", features = ["gles"] }
 bytemuck = { version = "1", features = ["derive"] }
 anyhow = "1"
 ab_glyph = "0.2"
